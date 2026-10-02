@@ -19,82 +19,120 @@ import java.util.Locale
 object Speech {
     private var tts: TextToSpeech? = null
     private var ready = false
-    private var pending: Pair<String, String>? = null
+    private var noRussian = false
+    private var engineName: String? = null          // пакет движка, к которому подключены (null — системный по умолчанию)
+    private val waiters = mutableListOf<(String) -> Unit>()
     private var recognizer: SpeechRecognizer? = null
 
     // Известные имена голосов Google для русского: rue/ruf — мужские, ruc/rud/dfc — женские
-    private val MALE = Regex("(?i)(rue|ruf|ruh|male|#male|муж)")
-    private val FEMALE = Regex("(?i)(ruc|rud|dfc|female|#female|жен)")
+    private val MALE = Regex("(?i)(rue|ruf|ruh|male|#male|муж|aleksandr|artemiy|mikhail|pavel|yuriy|evgeniy|vsevolod|dmitri|maxim|артём|александр)")
+    private val FEMALE = Regex("(?i)(ruc|rud|dfc|female|#female|жен|irina|anna|elena|tatiana|victoria|yulia|marina|alyona|ирина|анна|елена)")
 
-    fun speak(ctx: Context, text: String, gender: String) {
-        val engine = tts
-        if (engine == null) {
-            pending = text to gender
-            tts = TextToSpeech(ctx.applicationContext) { status ->
-                if (status != TextToSpeech.SUCCESS) {
-                    // на телефоне нет движка синтеза речи — страница включит запасной голос
-                    try { tts?.shutdown() } catch (_: Throwable) {}
-                    tts = null; ready = false; pending = null
-                    state("fail", "engine"); return@TextToSpeech
-                }
-                val t = tts ?: return@TextToSpeech
+    private class Req(val text: String, val gender: String, val pitch: Float, val rate: Float, val voice: String)
+
+    /** Подключиться к движку речи (выбранному или системному) и сообщить результат: ok | nolang | engine */
+    private fun ensure(ctx: Context, engine: String?, then: (String) -> Unit) {
+        if (tts != null && engine != engineName) reset()
+        val t0 = tts
+        if (t0 != null && ready) { then("ok"); return }
+        if (t0 != null && noRussian) { then("nolang"); return }
+        waiters += then
+        if (t0 != null) return                         // уже подключаемся
+        engineName = engine
+        val listener = TextToSpeech.OnInitListener { status ->
+            val t = tts
+            val res = if (status != TextToSpeech.SUCCESS || t == null) "engine" else {
                 var lang = t.setLanguage(Locale("ru", "RU"))
                 if (lang < TextToSpeech.LANG_AVAILABLE) lang = t.setLanguage(Locale("ru"))
-                if (lang < TextToSpeech.LANG_AVAILABLE) {
-                    // движок есть, но русского голоса нет (часто на Samsung/Xiaomi без скачанных данных)
-                    ready = false; pending = null; noRussian = true
-                    state("fail", "nolang"); return@TextToSpeech
-                }
-                t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) = state("start", null)
-                    override fun onDone(utteranceId: String?) = state("done", null)
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) = state("fail", "error")
-                    override fun onError(utteranceId: String?, errorCode: Int) = state("fail", "error$errorCode")
-                })
-                ready = true
-                pending?.let { (tx, g) -> say(tx, g) }
-                pending = null
+                if (lang < TextToSpeech.LANG_AVAILABLE) "nolang" else "ok"
             }
-            return
+            if (res == "engine") { try { tts?.shutdown() } catch (_: Throwable) {}; tts = null }
+            ready = res == "ok"; noRussian = res == "nolang"
+            if (ready) tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = state("start", null)
+                override fun onDone(utteranceId: String?) = state("done", null)
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) = state("fail", "error")
+                override fun onError(utteranceId: String?, errorCode: Int) = state("fail", "error$errorCode")
+            })
+            val w = waiters.toList(); waiters.clear(); w.forEach { it(res) }
         }
-        if (noRussian) { state("fail", "nolang"); return }
-        if (ready) say(text, gender) else pending = text to gender
+        tts = try {
+            if (engine.isNullOrBlank()) TextToSpeech(ctx.applicationContext, listener)
+            else TextToSpeech(ctx.applicationContext, listener, engine)
+        } catch (_: Throwable) { null }
+        if (tts == null) { val w = waiters.toList(); waiters.clear(); w.forEach { it("engine") } }
     }
 
-    private var noRussian = false
+    fun speak(ctx: Context, text: String, gender: String, pitch: Float = 1f, rate: Float = 1f, voice: String = "", engine: String = "") {
+        val r = Req(text, gender, pitch, rate, voice)
+        ensure(ctx, engine.ifBlank { null }) { res ->
+            if (res == "ok") say(r) else state("fail", res)
+        }
+    }
 
     private fun state(s: String, reason: String?) {
         val r = if (reason == null) "null" else JSONObject.quote(reason)
         WebHolder.js("window.onTtsState && window.onTtsState('$s', $r)")
     }
 
-    private fun say(text: String, gender: String) {
+    private fun say(r: Req) {
         val engine = tts ?: return
-        val male = gender == "male"
+        val male = r.gender == "male"
         val voices: List<Voice> = try {
             engine.voices?.filter { it.locale.language == "ru" && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) } ?: emptyList()
         } catch (_: Throwable) { emptyList() }
-        // предпочитаем голос без интернета, но подходящего пола
-        val pick = voices.filter { if (male) MALE.containsMatchIn(it.name) else FEMALE.containsMatchIn(it.name) }
-            .sortedBy { if (it.isNetworkConnectionRequired) 1 else 0 }.firstOrNull()
-        if (pick != null) { try { engine.voice = pick } catch (_: Throwable) {} ; engine.setPitch(1.0f) }
+        // голос, выбранный в настройках ассистента
+        val chosen = if (r.voice.isNotBlank()) voices.firstOrNull { it.name == r.voice } else null
+        var pitch = r.pitch
+        if (chosen != null) { try { engine.voice = chosen } catch (_: Throwable) {} }
         else {
-            // подходящего голоса нет — тот же голос, но ниже или выше
-            voices.firstOrNull()?.let { try { engine.voice = it } catch (_: Throwable) {} }
-            engine.setPitch(if (male) 0.72f else 1.12f)
+            // предпочитаем голос без интернета подходящего пола
+            val pick = voices.filter { if (male) MALE.containsMatchIn(it.name) else FEMALE.containsMatchIn(it.name) }
+                .sortedBy { if (it.isNetworkConnectionRequired) 1 else 0 }.firstOrNull()
+            if (pick != null) { try { engine.voice = pick } catch (_: Throwable) {} }
+            else {
+                // подходящего голоса нет — тот же голос, но ниже или выше
+                voices.firstOrNull()?.let { try { engine.voice = it } catch (_: Throwable) {} }
+                pitch *= if (male) 0.72f else 1.12f
+            }
         }
-        engine.setSpeechRate(1.0f)
-        val r = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "asst-" + System.nanoTime())
-        if (r != TextToSpeech.SUCCESS) state("fail", "speak")
+        engine.setPitch(pitch.coerceIn(0.3f, 2.5f))
+        engine.setSpeechRate(r.rate.coerceIn(0.4f, 2.5f))
+        val res = engine.speak(r.text, TextToSpeech.QUEUE_FLUSH, null, "asst-" + System.nanoTime())
+        if (res != TextToSpeech.SUCCESS) state("fail", "speak")
+    }
+
+    /** Список движков и русских голосов — для выбора голоса в настройках ассистента (ответ в window.onTtsVoices). */
+    fun listVoices(ctx: Context, engine: String) {
+        ensure(ctx, engine.ifBlank { null }) { res ->
+            val o = JSONObject()
+            o.put("status", res)
+            val t = tts
+            o.put("engine", engineName ?: (t?.defaultEngine ?: ""))
+            val engines = org.json.JSONArray()
+            try { t?.engines?.forEach { engines.put(JSONObject().put("name", it.name).put("label", it.label)) } } catch (_: Throwable) {}
+            o.put("engines", engines)
+            val list = org.json.JSONArray()
+            try {
+                t?.voices?.filter { it.locale.language == "ru" }?.sortedBy { it.name }?.forEach {
+                    list.put(JSONObject().put("name", it.name).put("network", it.isNetworkConnectionRequired)
+                        .put("installed", !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))
+                        .put("quality", it.quality)
+                        .put("gender", if (MALE.containsMatchIn(it.name)) "male" else if (FEMALE.containsMatchIn(it.name)) "female" else ""))
+                }
+            } catch (_: Throwable) {}
+            o.put("voices", list)
+            WebHolder.js("window.onTtsVoices && window.onTtsVoices(" + o.toString() + ")")
+        }
     }
 
     fun stop() { try { tts?.stop() } catch (_: Throwable) {} }
 
-    /** Заново подключить движок речи (например, после скачивания русского голоса). */
+    /** Заново подключить движок речи (например, после скачивания голоса). */
     fun reset() {
         try { tts?.shutdown() } catch (_: Throwable) {}
-        tts = null; ready = false; noRussian = false; pending = null
+        tts = null; ready = false; noRussian = false; engineName = null
     }
 
     /** Распознаёт одну фразу и передаёт текст странице (window.onSpeechResult). */

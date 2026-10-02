@@ -262,6 +262,7 @@ const Tg = {
         const q = e.target.value.toLowerCase();
         box.querySelectorAll(".contact-row").forEach((r) => r.classList.toggle("hidden", !r.dataset.name.includes(q)));
       } })),
+      h("button", { class: "menu-item tg-action", onclick: () => Invite.fromContacts() }, h("span", { class: "tg-ico", style: { background: "#F2A541" }, html: I.user }), "Пригласить из контактов телефона"),
       h("button", { class: "menu-item tg-action", onclick: () => showTab("invite") }, h("span", { class: "tg-ico", style: { background: "#2EAD6B" }, html: I.invite }), "Пригласить в семью"),
       h("button", { class: "menu-item tg-action", onclick: () => newGroupSheet() }, h("span", { class: "tg-ico", style: { background: "#3D8BFD" }, html: I.group }), "Создать группу"),
       h("button", { class: "menu-item tg-action", onclick: () => Assistant.open() }, h("span", { class: "tg-ico", style: { background: "var(--accent)" }, html: I.bot }), "Мой ассистент"),
@@ -269,11 +270,18 @@ const Tg = {
       h("div", { class: "contact-row me", "data-name": (S.me.name || "").toLowerCase() },
         avatarEl(S.me.id), h("div", { class: "mid" }, h("b", null, S.me.name + " (вы)"), h("small", null, S.me.status || "в сети"))));
     if (!people.length) box.append(h("p", { class: "empty-chat" }, "Пока никого нет. Пригласите семью — кнопка выше."));
+    // ближайшие дни рождения
+    const soon = [S.me, ...people].map((p) => ({ p, d: this.daysToBirthday(p.birthday) })).filter((x) => x.d != null && x.d <= 14).sort((a, b) => a.d - b.d);
+    if (soon.length) box.insertBefore(h("div", { class: "bday-banner" }, soon.map(({ p, d }) =>
+      h("div", { onclick: () => this.profileView(p.id) }, d === 0 ? "🎂 " : "🎁 ", h("b", null, p.id === S.me.id ? "У вас" : p.name),
+        d === 0 ? " — день рождения сегодня!" : ` — день рождения через ${d} ${plural(d, "день", "дня", "дней")}`))),
+      box.querySelector(".list-caption"));
     for (const p of people) {
       const on = S.online.has(p.id);
       box.append(h("div", { class: "contact-row", "data-name": p.name.toLowerCase(), onclick: () => openDm(p.id) },
-        avatarEl(p.id),
-        h("div", { class: "mid" }, h("b", null, p.name), h("small", { class: on ? "online" : "" }, (on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно") + (p.status ? " · " + p.status : ""))),
+        avatarEl(p.id, "", { onclick: (e) => { e.stopPropagation(); this.profileView(p.id); } }),
+        h("div", { class: "mid" }, h("b", null, p.name, p.family_role ? h("span", { class: "role-chip" }, p.family_role) : null),
+          h("small", { class: on ? "online" : "" }, (on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно") + (p.status ? " · " + p.status : ""))),
         h("button", { class: "icon-btn", title: "Позвонить", html: I.phone, onclick: (e) => { e.stopPropagation(); Calls.start(p.id, false); } }),
         h("button", { class: "icon-btn", title: "Видеозвонок", html: I.video, onclick: (e) => { e.stopPropagation(); Calls.start(p.id, true); } })));
     }
@@ -366,6 +374,7 @@ const Tg = {
         item("#E8664F", I.shield, "Управление участниками", () => membersAdmin()),
         item("#6C7A89", I.group, "Сбросить пароль участнику", () => adminResetSheet())) : null,
       group(
+        item("#2EAD6B", I.download, "Скачать обновления", () => Updates.sheet(), { value: Updates.latest ? "🔴 Есть новая версия" : "" }),
         item("#3D8BFD", I.info, "О приложении", () => this.aboutSheet(), { value: this.version() }),
         item("#E5484D", I.logout, "Выйти", () => this.logoutSheet(), { danger: true })),
     );
@@ -425,12 +434,7 @@ const Tg = {
       h("p", { class: "sheet-note" }, "Фото и видео хранятся на сервере семьи, на телефоне место не занимают."),
     ]);
   },
-  aboutSheet() {
-    sheet([
-      h("div", { class: "profile-card" }, h("div", { class: "avatar lg", style: { background: "var(--hdr)" } }, "🏠"), h("h3", null, `${CFG.appName || "Семья"} ${this.version()}`)),
-      h("p", { class: "sheet-note", style: { textAlign: "center" } }, "Семейный мессенджер: чаты, звонки и видеочаты, истории, ассистент."),
-    ]);
-  },
+  aboutSheet() { Updates.sheet(); },
   logoutSheet() {
     let close;
     close = sheet([
@@ -474,4 +478,283 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "2.1";
+const APP_VERSION = "2.2";
+
+// ───────────── Карточка участника «О себе» ─────────────
+Object.assign(Tg, {
+  daysToBirthday(b) {
+    if (!b) return null;
+    const [y, m, d] = String(b).split("-").map(Number); if (!m || !d) return null;
+    const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let next = new Date(now.getFullYear(), m - 1, d);
+    if (next < today) next = new Date(now.getFullYear() + 1, m - 1, d);
+    return Math.round((next - today) / 864e5);
+  },
+  fmtBirthday(b) {
+    const [y, m, d] = String(b).split("-").map(Number);
+    const date = new Date(2000, m - 1, d).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    const now = new Date();
+    let age = now.getFullYear() - y; if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) age--;
+    const days = this.daysToBirthday(b);
+    return `${date}${y > 1900 ? `, ${age} ${plural(age, "год", "года", "лет")}` : ""}${days === 0 ? " — сегодня! 🎂" : days <= 30 ? ` · через ${days} ${plural(days, "день", "дня", "дней")}` : ""}`;
+  },
+  profileView(uid) {
+    const p = S.profiles.get(uid); if (!p) return;
+    const me = uid === S.me.id;
+    const on = S.online.has(uid);
+    let close;
+    const row = (icon, label, value, onclick) => value ? h("div", { class: `info-row${onclick ? " link" : ""}`, onclick },
+      h("span", { class: "info-ico" }, icon), h("div", null, h("div", { class: "info-val" }, value), h("small", null, label))) : null;
+    const since = p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU", { month: "long", year: "numeric" }) : "";
+    const act = (icon, label, fn) => h("button", { class: "pv-act", onclick: () => { close(); fn(); } }, h("span", { html: icon }), label);
+    const info = [
+      row("👪", "Кто в семье", p.family_role),
+      row("💬", "О себе", p.bio),
+      row("🎂", "День рождения", p.birthday ? this.fmtBirthday(p.birthday) : null),
+      row("📍", "Город", p.city),
+      row("📱", "Телефон", p.phone, p.phone && !me ? () => { const u = "tel:" + p.phone.replace(/[^+\d]/g, ""); if (window.AndroidBridge?.openUrl) window.AndroidBridge.openUrl(u); else location.href = u; } : null),
+      row("📝", "Статус", p.status),
+      row("🏠", "В семье с", since),
+    ].filter(Boolean);
+    close = sheet([
+      h("div", { class: "pv-head" }, avatarEl(uid, "xl", p.avatar_path && S.urls.get(p.avatar_path) ? { onclick: () => lightbox(S.urls.get(p.avatar_path)) } : {}),
+        h("h2", null, p.name), h("small", { class: on ? "online" : "" }, me ? "это вы" : on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно")),
+      me ? h("div", { class: "pv-actions" }, act(I.pen, "Изменить", () => openProfile()))
+        : h("div", { class: "pv-actions" },
+          act(I.chat, "Написать", () => openDm(uid)),
+          act(I.phone, "Позвонить", () => Calls.start(uid, false)),
+          act(I.video, "Видео", () => Calls.start(uid, true))),
+      info.length > 2 || p.bio || p.family_role ? h("div", { class: "pv-info" }, info)
+        : h("div", { class: "pv-info" }, info, h("p", { class: "sheet-note", style: { textAlign: "center", margin: "8px" } },
+          me ? "Расскажите о себе: нажмите «Изменить» и заполните анкету." : "Пока ничего не рассказал(а) о себе.")),
+    ]);
+  },
+});
+
+// ───────────── Обновления приложения ─────────────
+// Каждый телефон сам проверяет, вышла ли новая сборка (GitHub Releases), и напоминает о ней.
+const Updates = {
+  own: null, latest: null, last: 0,
+  repo() { return CFG.updateRepo || "archi041022-ui/family-chat"; },
+  async ownBuild() {
+    if (this.own) return this.own;
+    try { const r = await fetch("build.json", { cache: "no-store" }); this.own = r.ok ? await r.json() : { build: 0 }; }
+    catch { this.own = { build: 0 }; }
+    if (!this.own.version) this.own.version = APP_VERSION;
+    return this.own;
+  },
+  start() {
+    clearInterval(this.timer);
+    setTimeout(() => this.check(false), 5000);
+    this.timer = setInterval(() => this.check(false), 6 * 3600e3);
+  },
+  maybeCheck() { this.resume(); if (Date.now() - this.last > 6 * 3600e3) this.check(false); },
+  async check(manual) {
+    this.last = Date.now();
+    const own = await this.ownBuild();
+    let found = null;
+    try {
+      if (!window.AndroidBridge) {
+        // сайт обновляется сам — достаточно перезагрузить страницу
+        const r = await fetch("build.json?t=" + Date.now(), { cache: "no-store" });
+        const j = r.ok ? await r.json() : null;
+        if (j && own.build && j.build > own.build) found = { build: j.build, version: j.version || "", web: true };
+      } else {
+        const r = await fetch(`https://api.github.com/repos/${this.repo()}/releases/latest`, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+        if (!r.ok) throw new Error(r.status);
+        const j = await r.json();
+        const build = +((j.tag_name || "").match(/(\d+)/) || [])[1] || 0;
+        const apk = (j.assets || []).find((a) => /\.apk$/i.test(a.name));
+        const ver = ((j.body || "").match(/v(\d+\.\d+(?:\.\d+)?)/) || [])[1] || "";
+        if (own.build && build > own.build && apk)
+          found = { build, version: ver, url: apk.browser_download_url, notes: (j.body || "").replace(/\n*Co-Authored-By:[\s\S]*$/i, "").replace(/\n*Claude-Session:[\s\S]*$/i, "").trim(), date: j.published_at };
+      }
+    } catch (e) {
+      if (manual) toast("Не удалось проверить обновления. Проверьте интернет.");
+      return null;
+    }
+    this.latest = found;
+    if (found) { this.announce(); this.auto(); }
+    else if (manual) toast(own.build ? "У вас последняя версия ✓" : "Проверка доступна в установленном приложении");
+    renderChatList();
+    return found;
+  },
+  announce() {
+    const f = this.latest; if (!f) return;
+    let seen = 0; try { seen = +(localStorage.getItem("updNotified") || 0); } catch { /* */ }
+    if (Prefs.get("updRemind") === false || seen >= f.build) return;
+    try { localStorage.setItem("updNotified", String(f.build)); } catch { /* */ }
+    const title = `Вышло обновление${f.version ? " " + f.version : ""}`;
+    if (window.AndroidBridge?.notify && !appVisible()) window.AndroidBridge.notify(`${CFG.appName || "Семья"}: ${title.toLowerCase()}`, "Откройте приложение и нажмите «Обновить»", null);
+    else toast(`🎉 ${title}! Нажмите на полосу вверху списка чатов`, 5000);
+  },
+  banner() {
+    const f = this.latest; if (!f || Prefs.get("updRemind") === false) return null;
+    return h("div", { class: "upd-banner", onclick: () => this.sheet() },
+      h("span", { class: "upd-ico" }, "🎉"),
+      h("div", { class: "mid" }, h("b", null, `Доступна новая версия${f.version ? " " + f.version : ""}`), h("small", null, f.web ? "Нажмите, чтобы обновить страницу" : "Нажмите, чтобы скачать и установить")),
+      h("button", { class: "btn small", onclick: (e) => { e.stopPropagation(); this.install(); } }, h("span", { html: I.download }), "Обновить"),
+      h("div", { class: "upd-progress hidden" }, h("div", { class: "track" }, h("i")), h("small", null, "")));
+  },
+  // Скачать и установить. В приложении Android — само скачивает и открывает установку.
+  install() {
+    const f = this.latest;
+    if (!f || f.web) { location.reload(); return; }
+    const b = window.AndroidBridge;
+    if (b?.downloadUpdate) {
+      if (this.progress >= 0 && this.progress < 100) { toast("Обновление уже скачивается…"); return; }
+      this.progress = 0; this.drawProgress();
+      try { localStorage.setItem("updStarted", String(f.build)); } catch { /* */ }
+      b.downloadUpdate(f.url);
+      return;
+    }
+    if (b?.openUrl) b.openUrl(f.url); else window.open(f.url, "_blank", "noopener");
+    toast("Скачивается обновление. Откройте файл и нажмите «Установить» — переписки сохранятся.", 6000);
+  },
+  onProgress(p) {
+    this.progress = p;
+    if (p === -1) { toast("Не удалось скачать обновление. Проверьте интернет и попробуйте ещё раз.", 4500); this.progress = null; }
+    if (p === 100) toast("Обновление скачано — подтвердите установку", 4000);
+    if (p === 101) { this.needPerm = true; this.progress = null; toast("Разрешите «Семье» устанавливать обновления и вернитесь в приложение", 6000); }
+    this.drawProgress();
+  },
+  drawProgress() {
+    const p = this.progress;
+    document.querySelectorAll(".upd-progress").forEach((el) => {
+      el.classList.toggle("hidden", p == null || p < 0 || p > 100);
+      const bar = el.querySelector("i"); if (bar) bar.style.width = Math.max(3, Math.min(100, p || 0)) + "%";
+      const t = el.querySelector("small"); if (t) t.textContent = p >= 100 ? "Скачано — открываю установку" : `Скачивание… ${p || 0}%`;
+    });
+  },
+  // вернулись из настроек «Установка неизвестных приложений» — продолжаем установку
+  resume() {
+    if (this.needPerm && window.AndroidBridge?.canInstallUpdates?.()) { this.needPerm = false; window.AndroidBridge.installUpdate(); }
+  },
+  // автообновление: новая версия скачивается сама, остаётся только подтвердить установку
+  auto() {
+    const f = this.latest; if (!f || Prefs.get("autoUpdate") === false) return;
+    if (f.web) {
+      if (!Calls.ui && !GroupCall.active && !($("#input")?.value || "").trim()) location.reload();
+      return;
+    }
+    if (!window.AndroidBridge?.downloadUpdate) return;
+    let started = 0; try { started = +(localStorage.getItem("updStarted") || 0); } catch { /* */ }
+    if (started >= f.build) return;          // эту версию уже скачивали — не повторяем без спроса
+    this.install();
+  },
+  async sheet() {
+    const own = await this.ownBuild();
+    const body = h("div");
+    const draw = () => {
+      body.innerHTML = "";
+      const f = this.latest;
+      const ver = own.version || APP_VERSION;
+      body.append(
+        h("div", { class: "about-head" }, h("div", { class: "about-logo" }, "🏠"),
+          h("b", null, `${CFG.appName || "Семья"} ${ver}`), h("small", null, own.build ? `сборка ${own.build}` : "семейный мессенджер")),
+        h("label", { class: "toggle-row switch" },
+          h("span", null, "Автообновление", h("small", null, window.AndroidBridge ? "Новая версия скачивается сама — останется нажать «Установить»" : "Сайт сам перезагрузится на новую версию")),
+          h("input", { type: "checkbox", checked: Prefs.get("autoUpdate") !== false, onchange: (e) => { Prefs.set("autoUpdate", e.target.checked); if (e.target.checked) this.auto(); } })),
+        h("div", { class: "section-title", style: { padding: "12px 4px 6px" } }, "Скачать обновления"),
+        h("button", { class: `upd-dl${f ? " has" : ""}`, onclick: async (e) => {
+          if (this.latest) { this.install(); return; }
+          const sm = e.currentTarget.querySelector("small"); if (sm) sm.textContent = "Проверяю…";
+          await this.check(true); draw();
+        } },
+          h("span", { class: "upd-arrow", html: I.download }),
+          h("span", { class: "mid" },
+            h("b", null, f ? `Скачать версию ${f.version || "сборки " + f.build}` : "Проверить и скачать обновления"),
+            h("small", null, f ? (f.web ? "Нажмите, чтобы обновить сайт" : "Нажмите — скачается и откроется установка") : `У вас версия ${ver}`))),
+        h("div", { class: "upd-progress hidden" }, h("div", { class: "track" }, h("i")), h("small", null, "")),
+        f?.notes ? h("div", { class: "upd-new" }, h("b", null, "Что нового"), h("p", null, f.notes)) : null,
+        h("label", { class: "toggle-row switch" },
+          h("span", null, "Напоминать об обновлениях", h("small", null, "Приложение проверяет новые версии несколько раз в день")),
+          h("input", { type: "checkbox", checked: Prefs.get("updRemind") !== false, onchange: (e) => { Prefs.set("updRemind", e.target.checked); renderChatList(); } })));
+      this.drawProgress();
+    };
+    draw();
+    sheet([h("h3", null, "О приложении"), body]);
+  },
+};
+window.onUpdateProgress = (p) => Updates.onProgress(p);
+
+// ───────────── Приветствие нового участника ─────────────
+const WELCOME_MARK = "👋 Я теперь в «Семье»!";
+const Welcome = {
+  maybeShow(user) {
+    if (window.__noWelcome) return;
+    const key = "welcomed:" + S.me.id;
+    let done = false; try { done = !!localStorage.getItem(key); localStorage.setItem(key, "1"); } catch { /* */ }
+    if (done) return;
+    const created = new Date(S.me.created_at || user?.created_at || 0).getTime();
+    if (!created || Date.now() - created > 20 * 60e3) return;      // только для только что зарегистрированных
+    this.show();
+    if ((S.members.get(FAMILY_CHAT) || []).some((m) => m.user_id === S.me.id)) setTimeout(() => postMessage({ body: WELCOME_MARK }, FAMILY_CHAT).catch(() => {}), 1200);
+  },
+  confetti(n = 70) {
+    const box = h("div", { class: "confetti" });
+    const colors = ["#E8664F", "#F2A541", "#2EAD6B", "#3D8BFD", "#9B5DE5", "#E0457B", "#00A6A6", "#FFD23F"];
+    for (let i = 0; i < n; i++) {
+      const p = h("i");
+      p.style.left = Math.random() * 100 + "%";
+      p.style.background = colors[i % colors.length];
+      p.style.animationDelay = (Math.random() * 1.2).toFixed(2) + "s";
+      p.style.animationDuration = (2.4 + Math.random() * 2).toFixed(2) + "s";
+      p.style.setProperty("--dx", (Math.random() * 160 - 80).toFixed(0) + "px");
+      p.style.setProperty("--rot", (Math.random() * 720 - 360).toFixed(0) + "deg");
+      if (i % 3 === 0) p.style.borderRadius = "50%";
+      box.append(p);
+    }
+    return box;
+  },
+  show() {
+    const first = (S.me.name || "").split(" ")[0];
+    const slides = [
+      ["💬", "Чаты и группы", "Пишите родным, отправляйте фото, видео, голосовые и кружочки."],
+      ["📹", "Звонки и видеочат", "Звоните одному человеку или собирайте всю семью в видеочате."],
+      ["🤖", "Мой ассистент", "Погода, новости, курс валют. Скажите: «Позвони маме» — и он наберёт."],
+    ];
+    let i = 0;
+    const dots = h("div", { class: "wl-dots" }, slides.map((_, k) => h("i", { class: k === 0 ? "on" : "" })));
+    const card = h("div", { class: "wl-card" });
+    const showSlide = () => {
+      const [ico, t, d] = slides[i];
+      card.innerHTML = ""; card.classList.remove("in"); void card.offsetWidth; card.classList.add("in");
+      card.append(h("div", { class: "wl-ico" }, ico), h("b", null, t), h("p", null, d));
+      dots.querySelectorAll("i").forEach((x, k) => x.classList.toggle("on", k === i));
+    };
+    const title = h("h1", { class: "wl-title" }, [...`Добро пожаловать в семью${first ? ", " + first : ""}!`].map((ch, k) =>
+      h("span", { style: { animationDelay: (0.6 + k * 0.035).toFixed(2) + "s" } }, ch === " " ? "\u00a0" : ch)));
+    const el = h("div", { class: "welcome" }, this.confetti(),
+      h("div", { class: "wl-house" }, "🏠"),
+      h("div", { class: "wl-hearts" }, ...["❤️", "💛", "💚", "💙", "💜"].map((x, k) => h("span", { style: { animationDelay: k * 0.4 + "s", left: 12 + k * 18 + "%" } }, x))),
+      title,
+      h("p", { class: "wl-sub" }, "Теперь вы с нами — на связи всей семьёй 🤗"),
+      card, dots,
+      h("button", { class: "btn wl-go", onclick: () => { clearInterval(timer); el.classList.add("out"); setTimeout(() => el.remove(), 500); } }, "Начать общение 🎉"));
+    document.body.append(el);
+    setTimeout(showSlide, 1600);
+    const timer = setInterval(() => { i = (i + 1) % slides.length; showSlide(); }, 3200);
+    navigator.vibrate?.([30, 60, 30]);
+  },
+  // карточка в общем чате: «Мама теперь с нами!»
+  card(m) {
+    const p = S.profiles.get(m.user_id);
+    const mine = m.user_id === S.me.id;
+    return h("div", { class: "welcome-card" },
+      h("div", { class: "wc-wave" }, "👋"),
+      h("b", null, `${p?.name || "Новый участник"} теперь с нами!`),
+      h("small", null, mine ? "Вы присоединились к семье" : "Новый участник семьи 🎉"),
+      mine ? null : h("button", { class: "btn small", onclick: (e) => {
+        e.stopPropagation();
+        postMessage({ body: `Привет, ${(p?.name || "").split(" ")[0] || "дорогой"}! Добро пожаловать в семью! 🤗` }, m.chat_id);
+      } }, "Поздороваться 👋"));
+  },
+  // у остальных — салют, когда приходит приветствие нового участника
+  celebrate(m) {
+    if (Date.now() - new Date(m.created_at).getTime() > 5 * 60e3) return;
+    const c = this.confetti(50); c.classList.add("burst");
+    document.body.append(c); setTimeout(() => c.remove(), 4500);
+    toast(`🎉 ${S.profiles.get(m.user_id)?.name || "Новый участник"} присоединился(-ась) к семье!`, 4000);
+  },
+};

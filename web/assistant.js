@@ -1,11 +1,36 @@
 /* Ассистент: погода, новости, курсы валют и ответы на вопросы. Голосовой ввод и озвучка мужским или женским голосом. */
 "use strict";
 
+// Голоса-персонажи ассистента: высота и скорость голоса + манера обращения
+const VOICES = [
+  { id: "female", icon: "👩", name: "Женский", desc: "Обычный женский голос", gender: "female", pitch: 1, rate: 1 },
+  { id: "male", icon: "👨", name: "Мужской", desc: "Обычный мужской голос", gender: "male", pitch: 1, rate: 1 },
+  { id: "jarvis", icon: "🤖", name: "Джарвис", desc: "Невозмутимый дворецкий, обращается «Сэр»", gender: "male", pitch: 0.86, rate: 0.95, address: "Сэр",
+    style: "вежливый невозмутимый британский дворецкий с лёгкой иронией", hello: "К вашим услугам, сэр. Все системы работают нормально." },
+  { id: "friday", icon: "💁‍♀️", name: "Пятница", desc: "Бодрая помощница, зовёт вас «Босс»", gender: "female", pitch: 1.08, rate: 1.07, address: "Босс",
+    style: "бодрая энергичная помощница", hello: "Привет, босс! Пятница на связи." },
+  { id: "robot", icon: "🦾", name: "Робот", desc: "Низкий механический голос", gender: "male", pitch: 0.55, rate: 0.9,
+    style: "робот, говорит чётко и коротко", hello: "Система активирована. Ожидаю команду." },
+  { id: "storyteller", icon: "🧙", name: "Сказочник", desc: "Неторопливый добрый голос", gender: "male", pitch: 0.8, rate: 0.85,
+    style: "добрый сказочник, говорит образно", hello: "Здравствуй, друг мой. Чем могу помочь?" },
+  { id: "granny", icon: "👵", name: "Бабушка", desc: "Тёплый заботливый голос", gender: "female", pitch: 0.88, rate: 0.86,
+    style: "заботливая бабушка, ласковая", hello: "Здравствуй, родной! Чем тебе помочь?" },
+  { id: "cartoon", icon: "🐿", name: "Мультяшка", desc: "Высокий весёлый голос", gender: "female", pitch: 1.7, rate: 1.12,
+    style: "весёлый мультяшный персонаж", hello: "Приветики! Чем помочь?" },
+];
+
 const Assistant = {
   history: [],
   busy: false,
   geo: null,          // { lat, lon, at }
-  settings: { voice: "female", speak: true, city: "", handsfree: true, voiceEngine: "auto" },
+  settings: { voice: "female", speak: true, city: "", handsfree: true, voiceEngine: "auto", sysVoice: null },
+  preset(id) { return VOICES.find((v) => v.id === (id || this.settings.voice)) || VOICES[0]; },
+  // ответ в манере выбранного персонажа (для быстрых ответов без нейросети)
+  persona(text) {
+    const p = this.preset();
+    if (!p.address || !text) return text;
+    return `${p.address}, ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+  },
 
   key(k) { return `assistant:${k}:${S.me?.id || ""}`; },
   load() {
@@ -65,7 +90,7 @@ const Assistant = {
 
   composer() {
     const ta = h("textarea", { rows: 1, placeholder: "Спросите что-нибудь…", id: "asstInput" });
-    const mic = h("button", { class: "send", title: "Сказать голосом", html: I.mic });
+    const mic = h("button", { class: "send", id: "asstMic", title: "Сказать голосом", html: I.mic });
     const wrap = h("div", { class: "composer" }, ta, mic);
     const update = () => {
       ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
@@ -92,6 +117,11 @@ const Assistant = {
       const bubble = h("div", { class: "bubble" }, h("div", { class: "text" }, linkify(m.content), h("span", { class: "meta" }, fmtTime(m.at || Date.now()))));
       if (m.card) bubble.append(this.cardEl(m));
       if (!out) bubble.append(h("button", { class: "asst-say", title: "Прочитать вслух", html: I.speaker, onclick: (e) => { e.stopPropagation(); Voice2.speak(m.content, this.settings.voice); } }));
+      if (!out && this.mini && S.current && !m.card) bubble.append(h("button", { class: "asst-insert", onclick: (e) => {
+        e.stopPropagation(); const inp = $("#input"); if (!inp) return;
+        inp.value = (inp.value ? inp.value + "\n" : "") + m.content; inp.dispatchEvent(new Event("input"));
+        this.closeMini?.(); inp.focus(); toast("Вставлено — проверьте и отправьте");
+      } }, "Вставить в чат"));
       box.append(h("div", { class: `msg ${out ? "out" : "in"} tail first-in-run` }, bubble));
     }
     if (this.busy) box.append(h("div", { class: "msg in tail" }, h("div", { class: "bubble typing" }, h("i"), h("i"), h("i"))));
@@ -114,20 +144,30 @@ const Assistant = {
     this.fromVoice = fromVoice;
     this.history.push({ role: "user", content: text, at: Date.now() });
     // звонки и сообщения выполняются прямо в приложении, без нейросети
+    // в чате: «позвони», «напиши ему …» — без имени, для собеседника открытого чата
+    if (this.ctxChat && !this.pending) {
+      const cc = this.contextCommand(text);
+      if (cc?.call) { this.callTarget(cc.call, cc.video); this.closeMini?.(); return; }
+      if (cc?.msg) {
+        if (cc.text) this.offer(cc.msg, cc.text.charAt(0).toUpperCase() + cc.text.slice(1));
+        else { this.pending = { type: "dictate", target: cc.msg }; this.say(`Что написать? ${cc.msg.kind === "chat" ? "Группа: «" + cc.msg.name + "»" : "Получатель: " + cc.msg.name}. Продиктуйте или напишите текст.`); }
+        return;
+      }
+    }
     try { if (await this.command(text)) return; } catch { /* обычный вопрос */ }
     // простое — отвечаем сразу, без интернета
     const q = this.quick(text);
-    if (q) { this.say(q); return; }
+    if (q) { this.say(this.persona(q)); return; }
     this.busy = true; this.render(); this.save(); this.setSub("думаю…");
     let reply = null;
     // погода и курсы — напрямую из открытых источников (1–2 секунды вместо 10)
-    try { reply = await this.direct(text); } catch { reply = null; }
+    try { reply = await this.direct(text); if (reply) reply = this.persona(reply); } catch { reply = null; }
     if (!reply) {
       let geo = null;
       if (this.isWeather(text) && !/\s(в|во)\s+[А-ЯЁ]/.test(text) && !this.settings.city) geo = await this.location();
       try {
         const call = S.sb.functions.invoke("assistant", {
-          body: { messages: this.history.slice(-10).map(({ role, content }) => ({ role, content })), lat: geo?.lat, lon: geo?.lon, city: this.settings.city || undefined, name: S.me?.name },
+          body: { messages: this.history.slice(-10).map(({ role, content }) => ({ role, content })), lat: geo?.lat, lon: geo?.lon, city: this.settings.city || undefined, name: this.llmName() },
         });
         const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 35000));
         const { data, error } = await Promise.race([call, timeout]);
@@ -142,12 +182,18 @@ const Assistant = {
     this.save(); this.render();
     this.voice(reply);
   },
+  llmName() {
+    const p = this.preset(), n = S.me?.name || "друг";
+    if (!p.style) return n;
+    return `${n}. Ты играешь роль персонажа «${p.name}»: ${p.style}${p.address ? `; обращайся к собеседнику «${p.address}»` : ""}`;
+  },
   setSub(t) { const el = $("#asstSub"); if (el) el.textContent = t || "с выходом в интернет"; },
   // озвучить ответ; в разговорном режиме после ответа снова слушаем
   voice(text) {
     const again = this.fromVoice && this.settings.handsfree && !this.pending?.noListen;
-    const relisten = () => { if (again && S.assistantOpen && !this.busy) { const mic = $("#chatView .composer .send"); if (mic && !$("#asstInput")?.value.trim()) this.listen(mic, true); } };
-    if (this.settings.speak && S.assistantOpen) Voice2.speak(text, this.settings.voice, relisten);
+    const visible = S.assistantOpen || this.mini;
+    const relisten = () => { if (again && visible && (S.assistantOpen || this.mini) && !this.busy) { const mic = $("#asstMic") || $("#chatView .composer .send"); if (mic && !$("#asstInput")?.value.trim()) this.listen(mic, true); } };
+    if (this.settings.speak && visible) Voice2.speak(text, this.settings.voice, relisten);
     else relisten();
   },
   listen(btn, auto = false) {
@@ -182,15 +228,19 @@ const Assistant = {
   settingsSheet() {
     let close;
     const city = h("input", { value: this.settings.city || "", placeholder: "например, Казань (пусто — по геолокации)" });
-    const g = (v, label) => h("button", { class: `seg${this.settings.voice === v ? " on" : ""}`, onclick: (e) => {
-      this.settings.voice = v; this.save();
-      e.target.parentNode.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === e.target));
-      Voice2.speak(v === "male" ? "Здравствуйте! Я буду говорить мужским голосом." : "Здравствуйте! Я буду говорить женским голосом.", v);
-    } }, label);
+    const grid = h("div", { class: "voice-grid" }, VOICES.map((v) => h("button", { class: `voice-card${this.settings.voice === v.id ? " on" : ""}`, "data-voice": v.id, onclick: (e) => {
+      this.settings.voice = v.id; this.save();
+      grid.querySelectorAll(".voice-card").forEach((b) => b.classList.toggle("on", b === e.currentTarget));
+      Voice2.speak(v.hello || (v.gender === "male" ? "Здравствуйте! Я буду говорить мужским голосом." : "Здравствуйте! Я буду говорить женским голосом."), v.id);
+    } }, h("span", { class: "vc-ico" }, v.icon), h("b", null, v.name), h("small", null, v.desc))));
     close = sheet([
       h("h3", null, "Настройки ассистента"),
-      h("div", { class: "section-title", style: { padding: "4px 4px 6px" } }, "Голос"),
-      h("div", { class: "segmented" }, g("female", "👩 Женский"), g("male", "👨 Мужской")),
+      h("div", { class: "section-title", style: { padding: "4px 4px 6px" } }, "Голос и характер"),
+      grid,
+      h("p", { class: "sheet-note" }, "Персонаж меняет высоту и скорость голоса и манеру ответов. Настоящие голоса актёров из фильмов защищены — их копировать нельзя, поэтому «Джарвис» здесь — похожий по характеру дворецкий."),
+      window.AndroidBridge?.listVoices ? h("button", { class: "menu-item", onclick: () => this.voicePicker() }, h("span", { html: I.mic }),
+        h("span", null, "Голос телефона", h("small", { class: "sub" }, this.settings.sysVoice?.name ? this.settings.sysVoice.label || this.settings.sysVoice.name : "выбирается автоматически"))) : null,
+      window.AndroidBridge?.openStore ? h("button", { class: "menu-item", onclick: () => this.downloadVoices() }, h("span", { html: I.download }), "Скачать новые голоса из интернета") : null,
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.speak, onchange: (e) => { this.settings.speak = e.target.checked; this.save(); } }), "Озвучивать ответы"),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.handsfree, onchange: (e) => { this.settings.handsfree = e.target.checked; this.save(); } }), "Разговор голосом: после ответа снова слушать"),
       h("div", { class: "section-title", style: { padding: "10px 4px 6px" } }, "Чей голос использовать"),
@@ -200,7 +250,6 @@ const Assistant = {
           e.target.parentNode.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === e.target));
         } }, l))),
       h("button", { class: "menu-item", onclick: () => { window.AndroidBridge?.resetVoice?.(); Voice2.native = null; Voice2.slow = 0; Voice2.speak("Проверка голоса. Так я буду отвечать.", this.settings.voice); } }, h("span", { html: I.speaker }), "Проверить голос"),
-      window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => { window.AndroidBridge.resetVoice?.(); Voice2.native = null; window.AndroidBridge.openSettings("ttsData"); } }, h("span", { html: I.download }), "Скачать русский голос для телефона") : null,
       h("label", { class: "field", style: { marginTop: "10px" } }, h("span", null, "Город для погоды"), city),
       h("button", { class: "btn wide", onclick: () => { this.settings.city = city.value.trim(); this.save(); close(); toast("Сохранено"); } }, "Сохранить"),
       h("button", { class: "menu-item danger", style: { marginTop: "8px" }, onclick: () => { this.history = []; this.save(); this.render(); close(); } }, h("span", { html: I.trash }), "Очистить переписку с ассистентом"),
@@ -411,16 +460,20 @@ const Voice2 = {
   slow: 0, cur: "", gender: "female", onEnd: null, audio: null, queue: [],
   clean(text) { return String(text || "").replace(/https?:\/\/\S+/g, "").replace(/[*_#>`]/g, "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").slice(0, 1500).trim(); },
   mode() { return Assistant.settings.voiceEngine || "auto"; },
-  speak(text, gender = "female", onEnd) {
+  speak(text, voiceId, onEnd) {
     const t = this.clean(text);
     this.stop();
     this.onEnd = onEnd || null;
     if (!t) { this.finish(); return; }
-    this.cur = t; this.gender = gender;
+    const pr = Assistant.preset(voiceId);
+    const gender = pr.gender;
+    this.cur = t; this.gender = gender; this.pr = pr;
     const m = this.mode();
     if (m !== "online" && window.AndroidBridge?.speak && this.native !== false) {
       this.waiting = true;
-      window.AndroidBridge.speak(t, gender);
+      const sys = Assistant.settings.sysVoice || {};
+      if (window.AndroidBridge.speak2) window.AndroidBridge.speak2(t, gender, pr.pitch || 1, pr.rate || 1, sys.name || "", sys.engine || "");
+      else window.AndroidBridge.speak(t, gender);
       clearTimeout(this.fb);
       // голос телефона должен начать говорить за несколько секунд (первый раз — дольше: движок запускается)
       this.fb = setTimeout(() => {
@@ -459,8 +512,9 @@ const Voice2 = {
       ss.cancel();
       const u = new SpeechSynthesisUtterance(t); u.lang = "ru-RU";
       if (v) u.voice = v;
-      u.pitch = v && this.isGender(v, gender) ? 1 : (gender === "male" ? 0.7 : 1.15);
-      u.rate = 1;
+      const pr = this.pr || {};
+      u.pitch = Math.max(0.1, Math.min(2, (v && this.isGender(v, gender) ? 1 : (gender === "male" ? 0.7 : 1.15)) * (pr.pitch || 1)));
+      u.rate = pr.rate || 1;
       u.onend = () => this.finish();
       u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") this.online(t); };
       ss.speak(u);
@@ -482,7 +536,10 @@ const Voice2 = {
     if (!q) { this.finish(); return; }
     const url = (CFG.ttsUrl || "https://translate.google.com/translate_tts?ie=UTF-8&tl=ru&client=tw-ob&q=") + encodeURIComponent(q);
     const a = new Audio(url);
-    if (this.gender === "male") { a.preservesPitch = false; a.mozPreservesPitch = false; a.webkitPreservesPitch = false; a.playbackRate = 0.86; }
+    // голос из интернета один (женский) — характер передаём высотой и скоростью
+    const pr = this.pr || {};
+    const k = Math.max(0.6, Math.min(1.6, (this.gender === "male" ? 0.86 : 1) * (pr.pitch || 1) * Math.sqrt(pr.rate || 1)));
+    if (Math.abs(k - 1) > 0.02) { a.preservesPitch = false; a.mozPreservesPitch = false; a.webkitPreservesPitch = false; a.playbackRate = k; }
     this.audio = a;
     a.onended = () => { if (this.audio === a) this.playNext(); };
     a.onerror = () => {
@@ -601,5 +658,103 @@ Object.assign(Assistant, {
     if (/юан|cny/.test(low)) want.push(["CNY", "юань"]);
     const list = want.length ? want : [["USD", "доллар"], ["EUR", "евро"], ["CNY", "юань"]];
     return `Курс ЦБ на ${new Date(j.Date).toLocaleDateString("ru-RU")}: ` + list.map(([k, n]) => f(k, n)).filter(Boolean).join(", ") + ".";
+  },
+});
+
+// ───────────── Ассистент прямо в чате, голоса телефона, скачивание голосов ─────────────
+Object.assign(Assistant, {
+  // Кнопка рядом с микрофоном в любой переписке: ассистент открывается поверх чата.
+  // «Позвони», «напиши ему…», «видеозвонок» без имени относятся к собеседнику открытого чата.
+  openMini() {
+    if (!this.loaded) { this.load(); this.loaded = true; }
+    const chatId = S.current;
+    const c = S.chats.find((x) => x.id === chatId);
+    this.mini = true; this.ctxChat = c || null;
+    const msgs = h("div", { class: "messages asst-mini-msgs", id: "asstMsgs" });
+    const ta = h("textarea", { rows: 1, placeholder: c ? `Спросите или скажите «напиши ${c.is_group ? "в группу" : "ему"}…»` : "Спросите что-нибудь…", id: "asstInput" });
+    const mic = h("button", { class: "send", id: "asstMic", title: "Сказать голосом", html: I.mic });
+    const update = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 110) + "px"; mic.innerHTML = ta.value.trim() ? I.send : I.mic; };
+    const go = () => { const t = ta.value.trim(); if (!t) return; ta.value = ""; update(); this.ask(t); };
+    ta.addEventListener("input", update);
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); go(); } });
+    mic.onclick = () => { if (ta.value.trim()) go(); else this.listen(mic); };
+    const close = sheet([
+      h("div", { class: "asst-mini-head" }, h("div", { class: "avatar sm assistant-avatar", html: I.bot }),
+        h("div", { class: "mid" }, h("b", null, "Мой ассистент"), h("small", { id: "asstSub" }, c ? `в чате «${chatTitle(c)}»` : "с выходом в интернет")),
+        h("button", { class: "icon-btn", title: "Открыть полностью", html: I.chat, onclick: () => { this.closeMini(); this.open(); } })),
+      msgs,
+      h("div", { class: "composer" }, ta, mic),
+    ], () => { this.mini = false; this.ctxChat = null; Voice2.stop(); });
+    this.closeMini = () => { close(); };
+    this.render(true);
+    setTimeout(() => this.listen(mic), 250);          // сразу слушаем — можно просто говорить
+  },
+
+  // команды без имени — для открытого чата
+  contextCommand(text) {
+    const c = this.ctxChat; if (!c) return null;
+    const t = text.toLowerCase().replace(/ё/g, "е").replace(/[!?.]+$/, "").trim();
+    const other = !c.is_group ? otherUser(c) : null;
+    const target = c.is_group ? { kind: "chat", id: c.id, name: chatTitle(c) } : { kind: "user", id: other, name: S.profiles.get(other)?.name || chatTitle(c) };
+    if (/^(позвони|набери|позвонить|звони)( ему| ей| им| сюда)?$/.test(t)) return { call: target, video: false };
+    if (/^(видеозвонок|видео ?звонок|позвони по видео|видеочат)( ему| ей| им)?$/.test(t)) return { call: target, video: true };
+    const m = text.match(/^(?:напиши|отправь|ответь|передай|скажи)(?:\s+(?:ему|ей|им|сюда|в чат|в этот чат|в группу))?(?:\s*[,:]?\s*(?:что|чтобы)?\s*)(.*)$/i);
+    if (m && /^(напиши|отправь|ответь|передай|скажи)(\s+(ему|ей|им|сюда|в чат|в этот чат|в группу))?(\s|$|[,:])/i.test(text)) {
+      const rest = m[1].trim();
+      // «напиши маме …» с именем — пусть разбирает обычная команда
+      if (rest && this.findTarget(rest.split(/\s+/).slice(0, 2), false) && !/^(ему|ей|им)\b/i.test(text.split(/\s+/)[1] || "")) return null;
+      return { msg: target, text: rest };
+    }
+    return null;
+  },
+
+  // выбор конкретного голоса телефона (из установленных движков: Google, Samsung, RHVoice…)
+  voicePicker(engine) {
+    let close;
+    const body = h("div", { class: "voice-list" }, h("p", { class: "empty-chat" }, "Загружаю голоса телефона…"));
+    close = sheet([h("h3", null, "Голос телефона"), body,
+      h("button", { class: "menu-item", onclick: () => { this.settings.sysVoice = null; this.save(); window.AndroidBridge?.resetVoice?.(); close(); toast("Голос выбирается автоматически"); } },
+        h("span", { html: I.close }), "Выбирать автоматически")]);
+    window.onTtsVoices = (data) => {
+      window.onTtsVoices = null;
+      body.innerHTML = "";
+      const engines = data.engines || [];
+      if (engines.length > 1) body.append(h("div", { class: "folders engine-tabs" }, engines.map((e) =>
+        h("button", { class: e.name === data.engine ? "on" : "", onclick: () => { close(); window.AndroidBridge.resetVoice?.(); this.voicePicker(e.name); } }, e.label))));
+      if (data.status === "nolang") body.append(h("p", { class: "sheet-note" }, "В этом движке нет русского языка. Выберите другой или скачайте голоса."));
+      const voices = (data.voices || []).filter((v) => v.installed !== false || v.network);
+      if (!voices.length && data.status !== "nolang") body.append(h("p", { class: "sheet-note" }, "Русских голосов не найдено. Нажмите «Скачать новые голоса»."));
+      const cur = this.settings.sysVoice || {};
+      voices.forEach((v, i) => {
+        const label = `Голос ${i + 1}${v.gender === "male" ? " · мужской" : v.gender === "female" ? " · женский" : ""}${v.network ? " · через интернет" : ""}`;
+        body.append(h("div", { class: `voice-row${cur.name === v.name && cur.engine === data.engine ? " on" : ""}` },
+          h("button", { class: "icon-btn", title: "Послушать", html: I.speaker, onclick: () => {
+            window.AndroidBridge.speak2("Здравствуйте! Так звучит этот голос.", v.gender || "female", 1, 1, v.name, data.engine);
+          } }),
+          h("div", { class: "mid" }, h("b", null, label), h("small", null, v.name)),
+          h("button", { class: "btn small", onclick: () => {
+            this.settings.sysVoice = { engine: data.engine, name: v.name, label }; this.save(); Voice2.native = null; Voice2.slow = 0;
+            close(); toast("Голос выбран"); Voice2.speak("Готово. Теперь я говорю этим голосом.", this.settings.voice);
+          } }, "Выбрать")));
+      });
+    };
+    window.AndroidBridge.listVoices(engine || this.settings.sysVoice?.engine || "");
+    setTimeout(() => { if (window.onTtsVoices) { window.onTtsVoices = null; body.innerHTML = ""; body.append(h("p", { class: "sheet-note" }, "Телефон не ответил. Попробуйте ещё раз.")); } }, 10000);
+  },
+
+  downloadVoices() {
+    const b = window.AndroidBridge;
+    sheet([
+      h("h3", null, "Скачать голоса"),
+      h("p", { class: "sheet-note" }, "Голоса ставятся как отдельное бесплатное приложение. После установки вернитесь сюда: «Голос телефона» → выберите движок и голос."),
+      h("button", { class: "menu-item voice-dl", onclick: () => b.openStore("com.github.olga_yakovleva.rhvoice.android") }, h("span", { class: "vc-ico" }, "🎙"),
+        h("span", null, "RHVoice — русские голоса", h("small", { class: "sub" }, "Бесплатно, без интернета: Александр, Артемий, Ирина, Анна, Елена и другие"))),
+      h("button", { class: "menu-item voice-dl", onclick: () => b.openStore("com.google.android.tts") }, h("span", { class: "vc-ico" }, "🗣"),
+        h("span", null, "Синтезатор речи Google", h("small", { class: "sub" }, "Несколько мужских и женских русских голосов"))),
+      h("button", { class: "menu-item voice-dl", onclick: () => { b.resetVoice?.(); Voice2.native = null; b.openSettings?.("ttsData"); } }, h("span", { class: "vc-ico" }, "⬇️"),
+        h("span", null, "Голосовые данные телефона", h("small", { class: "sub" }, "Докачать русский язык для уже установленного синтезатора"))),
+      h("button", { class: "menu-item voice-dl", onclick: () => b.openSettings?.("tts") }, h("span", { class: "vc-ico" }, "⚙️"),
+        h("span", null, "Настройки синтеза речи Android", h("small", { class: "sub" }, "Выбрать движок по умолчанию"))),
+    ]);
   },
 });

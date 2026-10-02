@@ -140,7 +140,7 @@
             if (db.users.some((x) => x.email === email)) return { data: {}, error: { message: "User already registered" } };
             const u = { id: uid(), email, password: arguments[0].password }; db.users.push(u);
             if (!db.admin) db.admin = u.id;
-            db.profiles.push({ id: u.id, name: options.data.name, avatar_path: null, last_seen: new Date().toISOString() });
+            db.profiles.push({ id: u.id, name: options.data.name, avatar_path: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString() });
             db.chat_members.push({ chat_id: FAMILY, user_id: u.id, last_read_at: new Date(0).toISOString() });
             save(db); sessionStorage.setItem("mocksess", JSON.stringify(u));
             return { data: { user: u, session: {} }, error: null };

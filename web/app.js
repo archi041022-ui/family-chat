@@ -338,6 +338,60 @@ const APP_LINKS = {
   site: CFG.siteUrl || "https://archi041022-ui.github.io/family-chat/",
   apk: CFG.apkUrl || "https://github.com/archi041022-ui/family-chat/releases/latest/download/Semya.apk",
 };
+// ───────────── Приглашение через контакты телефона ─────────────
+const Invite = {
+  async fromContacts(code) {
+    if (!code) { const r = await S.sb.rpc("get_invite_code"); code = r.data; }
+    if (!code) { toast("Нет связи с сервером"); return; }
+    if (window.AndroidBridge?.pickContact) {
+      window.onContactPicked = (c) => { window.onContactPicked = null; if (c) this.send(c, code); };
+      window.AndroidBridge.pickContact();
+      return;
+    }
+    // браузер Chrome на Android умеет выбирать контакты сам
+    if (navigator.contacts?.select) {
+      try {
+        const [c] = await navigator.contacts.select(["name", "tel"], { multiple: false });
+        if (c?.tel?.length) { this.send({ name: (c.name || [])[0] || "", phone: c.tel[0] }, code); return; }
+      } catch { /* отменили */ return; }
+    }
+    this.manual(code);
+  },
+  manual(code) {
+    let close;
+    const phone = h("input", { type: "tel", placeholder: "+7 900 000-00-00" });
+    close = sheet([h("h3", null, "Кого пригласить?"), h("p", { class: "sheet-note" }, "Этот браузер не умеет открывать контакты. Введите номер телефона:"),
+      h("label", { class: "field" }, phone),
+      h("button", { class: "btn wide", onclick: () => { if (phone.value.replace(/\D/g, "").length < 10) { toast("Введите номер полностью"); return; } close(); this.send({ name: "", phone: phone.value }, code); } }, "Дальше")]);
+  },
+  digits(phone) {
+    let d = String(phone).replace(/\D/g, "");
+    if (d.length === 11 && d.startsWith("8")) d = "7" + d.slice(1);
+    if (d.length === 10) d = "7" + d;
+    return d;
+  },
+  send(c, code) {
+    let close;
+    const first = (c.name || "").split(" ")[0];
+    const text = (first ? `${first}, привет! ` : "Привет! ") + inviteText(code).replace(/^Привет! /, "");
+    const d = this.digits(c.phone);
+    const go = (fn) => () => { close(); fn(); };
+    const open = (url) => { if (window.AndroidBridge?.openUrl) window.AndroidBridge.openUrl(url); else window.open(url, "_blank", "noopener"); };
+    close = sheet([
+      h("div", { class: "sheet-head" }, h("div", { class: "avatar sm", style: { background: colorFor(d) } }, initials(c.name || "?")),
+        h("div", null, h("b", null, c.name || "Новый контакт"), h("small", { style: { display: "block", color: "var(--muted)" } }, c.phone))),
+      h("p", { class: "sheet-note" }, "Как отправить приглашение?"),
+      h("button", { class: "menu-item", onclick: go(() => {
+        if (window.AndroidBridge?.sendSms) window.AndroidBridge.sendSms(c.phone, text);
+        else location.href = `sms:${c.phone}?body=${encodeURIComponent(text)}`;
+      }) }, h("span", { class: "tg-ico", style: { background: "#2EAD6B" }, html: I.chat }), "SMS"),
+      h("button", { class: "menu-item", onclick: go(() => open(`https://wa.me/${d}?text=${encodeURIComponent(text)}`)) }, h("span", { class: "tg-ico", style: { background: "#25D366" }, html: I.phone }), "WhatsApp"),
+      h("button", { class: "menu-item", onclick: go(() => { copyText(text, "Текст скопирован — вставьте его в Telegram"); open(`https://t.me/+${d}`); }) }, h("span", { class: "tg-ico", style: { background: "#2AABEE" }, html: I.send }), "Telegram (откроется чат, текст вставьте)"),
+      h("button", { class: "menu-item", onclick: go(() => { copyText(text, "Текст приглашения скопирован"); shareTextOut(text); }) }, h("span", { class: "tg-ico", style: { background: "#6C7A89" }, html: I.share }), "Другое приложение"),
+    ]);
+    S.lastInvite = { c, text };
+  },
+};
 const inviteLink = (code) => `${APP_LINKS.site}?invite=${encodeURIComponent(code)}`;
 function inviteText(code) {
   return `Привет! Присоединяйся к нашему семейному мессенджеру «${CFG.appName || "Семья"}» 💬\n\n` +
@@ -378,6 +432,7 @@ async function renderInvite() {
     h("div", { class: "section-title" }, "Код приглашения"),
     h("button", { class: "invite-code", title: "Скопировать", onclick: () => copyText(code, "Код скопирован") }, code, h("small", null, "нажмите, чтобы скопировать")),
     h("div", { class: "invite-actions" },
+      h("button", { class: "btn wide", onclick: () => Invite.fromContacts(code) }, h("span", { html: I.user }), "Выбрать из контактов телефона"),
       h("button", { class: "btn wide", onclick: () => shareTextOut(inviteText(code)) }, h("span", { html: I.share }), "Поделиться приглашением"),
       h("button", { class: "btn wide ghost", onclick: () => copyText(inviteText(code), "Приглашение скопировано") }, h("span", { html: I.copy }), "Скопировать текст")),
     qr ? h("div", { class: "section-title" }, "QR-код — покажите с экрана") : null,
@@ -551,6 +606,8 @@ async function enter(user) {
   Calls.init();
   window.AndroidBridge?.loggedIn?.();
   setTimeout(() => window.onSharedItems(), 300);
+  Welcome.maybeShow(user);
+  Updates.start();
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -670,6 +727,7 @@ function renderChatList() {
   const list = $("#chatItems"); if (!list) return;
   list.innerHTML = "";
   Tg.renderFolders();
+  const ub = Updates.banner(); if (ub) list.append(ub);
   const f = S.folder || "all";
   if ((f === "all" || f === "personal") && (!S.filter || "мой ассистент помощник погода новости".includes(S.filter))) list.append(Assistant.listItem());
   const totalUnread = [...S.unread.entries()].filter(([id]) => !Prefs.muted(id)).reduce((a, [, b]) => a + b, 0);
@@ -877,7 +935,8 @@ function messageEl(m, c, firstInRun, tail) {
     const fwd = Tg.forwardedFrom(m.body);
     if (fwd) bubble.insertBefore(h("div", { class: "fwd" }, "Переслано от ", h("b", null, fwd)), bubble.querySelector(".photo,video,audio,.file,.vnote,.map-card") || null);
     const clean = Tg.text(m.body);
-    if (clean && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(clean)));
+    if (m.body === WELCOME_MARK && !m.media_type) { bubble.classList.add("welcome-bubble"); bubble.append(Welcome.card(m), h("div", { class: "text" })); }
+    else if (clean && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(clean)));
     if (m.body === GC_MARK && !m.media_type && Date.now() - new Date(m.created_at) < 6 * 3600e3)
       bubble.append(h("button", { class: "btn gc-join", onclick: () => GroupCall.join(m.chat_id, true) }, "Присоединиться"));
   }
@@ -996,13 +1055,14 @@ function composer() {
   const file = h("input", { type: "file", multiple: true, class: "hidden", accept: "image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" });
   const action = h("button", { class: "send", title: "Голосовое", html: I.mic });
   const vnBtn = h("button", { class: "vn-btn", title: "Видеосообщение (кружок)", html: I.circleCam, onclick: () => VideoNote.open() });
+  const asstBtn = h("button", { class: "vn-btn asst-btn", title: "Мой ассистент", html: I.bot, onclick: () => Assistant.openMini() });
   const wrap = h("div", { class: "composer" },
-    h("button", { class: "icon-btn", title: "Фото, видео, файл", onclick: () => attachMenu(file), html: I.clip }), file, ta, vnBtn, action);
+    h("button", { class: "icon-btn", title: "Фото, видео, файл", onclick: () => attachMenu(file), html: I.clip }), file, ta, asstBtn, vnBtn, action);
   const update = () => {
     ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
     const has = ta.value.trim().length > 0;
     action.innerHTML = has ? I.send : I.mic; action.title = has ? "Отправить" : "Голосовое";
-    vnBtn.classList.toggle("hidden", has);
+    vnBtn.classList.toggle("hidden", has); asstBtn.classList.toggle("hidden", has);
   };
   ta.addEventListener("input", () => { update(); if (ta.value.trim()) Tg.sendTyping(); });
   ta.addEventListener("keydown", (e) => {
@@ -1134,6 +1194,7 @@ const VideoRec = {
 // Возвращает true, если «назад» обработано внутри приложения (значит, выходить не нужно).
 window.handleBack = function () {
   const lb = document.querySelector(".lightbox"); if (lb) { lb.remove(); return true; }
+  const wl = document.querySelector(".welcome .wl-go"); if (wl) { wl.click(); return true; }
   if (VideoRec.close) { VideoRec.close(); return true; }
   if (VideoNote.close) { VideoNote.close(); return true; }
   if (Stories.closeViewer) { Stories.closeViewer(); return true; }
@@ -1292,19 +1353,26 @@ function newGroupSheet() {
   ]);
 }
 function chatInfo(c) {
+  if (!c.is_group) { const o = otherUser(c); if (o) { Tg.profileView(o); return; } }
   const mem = (S.members.get(c.id) || []).map((m) => S.profiles.get(m.user_id)).filter(Boolean);
   let close;
   close = sheet([
     h("div", { class: "profile-card" }, chatAvatar(c, "lg"), h("h3", null, chatTitle(c))),
     c.is_group ? h("p", { style: { color: "var(--muted)", margin: "0 6px 6px" } }, `Участники (${mem.length})`) : null,
-    ...(c.is_group ? mem : []).map((p) => h("button", { class: "menu-item", onclick: () => { close(); if (p.id !== S.me.id) openDm(p.id); } },
-      avatarEl(p.id, "sm"), p.name + (p.id === S.me.id ? " (вы)" : ""))),
+    ...(c.is_group ? mem : []).map((p) => h("button", { class: "menu-item", onclick: () => { close(); Tg.profileView(p.id); } },
+      avatarEl(p.id, "sm"), h("span", null, p.name + (p.id === S.me.id ? " (вы)" : ""), p.family_role ? h("small", { class: "sub" }, p.family_role) : null))),
   ]);
 }
+const FAMILY_ROLES = ["Папа", "Мама", "Сын", "Дочь", "Дедушка", "Бабушка", "Брат", "Сестра", "Дядя", "Тётя", "Внук", "Внучка", "Муж", "Жена"];
 function openProfile() {
   let close;
   const name = h("input", { value: S.me.name });
   const status = h("input", { value: S.me.status || "", maxlength: 100, placeholder: "Например: На работе до 18:00" });
+  const role = h("input", { value: S.me.family_role || "", maxlength: 40, placeholder: "Например: Папа" });
+  const bio = h("textarea", { rows: 3, maxlength: 500, placeholder: "Пара слов о себе: увлечения, работа, любимое блюдо…" }); bio.value = S.me.bio || "";
+  const bday = h("input", { type: "date", value: S.me.birthday || "", max: new Date().toISOString().slice(0, 10) });
+  const city = h("input", { value: S.me.city || "", maxlength: 80, placeholder: "Например: Казань" });
+  const phone = h("input", { type: "tel", value: S.me.phone || "", maxlength: 30, placeholder: "+7 …" });
   const pic = h("input", { type: "file", accept: "image/*", class: "hidden" });
   const av = avatarEl(S.me.id, "xl", { onclick: () => pic.click(), title: "Сменить фото" });
   pic.onchange = async () => {
@@ -1326,13 +1394,28 @@ function openProfile() {
     h("label", { class: "field" }, h("span", null, "Статус"), status),
     h("div", { class: "status-presets" }, STATUS_PRESETS.map((t) => h("button", { type: "button", onclick: () => { status.value = t; } }, t)),
       h("button", { type: "button", onclick: () => { status.value = ""; } }, "✕ Без статуса")),
+    h("div", { class: "section-title", style: { padding: "12px 4px 6px" } }, "О себе"),
+    h("label", { class: "field" }, h("span", null, "Кто вы в семье"), role),
+    h("div", { class: "status-presets" }, FAMILY_ROLES.map((t) => h("button", { type: "button", onclick: () => { role.value = t; } }, t))),
+    h("label", { class: "field" }, h("span", null, "О себе"), bio),
+    h("label", { class: "field" }, h("span", null, "День рождения"), bday),
+    h("label", { class: "field" }, h("span", null, "Город"), city),
+    h("label", { class: "field" }, h("span", null, "Телефон (видят только члены семьи)"), phone),
     h("button", { class: "btn wide", onclick: async () => {
       const n = name.value.trim(); if (!n) return;
       const st = status.value.trim().slice(0, 100) || null;
-      const { error } = await S.sb.from("profiles").update({ name: n.slice(0, 60), status: st, status_at: st ? new Date().toISOString() : null }).eq("id", S.me.id);
-      S.me.status = st;
+      const base = { name: n.slice(0, 60), status: st, status_at: st ? new Date().toISOString() : null };
+      const info = { family_role: role.value.trim().slice(0, 40) || null, bio: bio.value.trim().slice(0, 500) || null,
+        birthday: bday.value || null, city: city.value.trim().slice(0, 80) || null, phone: phone.value.trim().slice(0, 30) || null };
+      let { error } = await S.sb.from("profiles").update({ ...base, ...info }).eq("id", S.me.id);
+      let infoSaved = !error;
+      if (error) {   // сервер ещё без полей анкеты — сохраняем хотя бы имя и статус
+        ({ error } = await S.sb.from("profiles").update(base).eq("id", S.me.id));
+        if (!error) toast("Имя и статус сохранены. Анкета заработает после обновления сервера.", 4500);
+      }
       if (error) { toast("Не удалось сохранить"); return; }
-      S.me.name = n; S.profiles.set(S.me.id, S.me); close(); toast("Сохранено"); renderChatList(); Live.broadcast("profile", {});
+      Object.assign(S.me, base, infoSaved ? info : {});
+      S.profiles.set(S.me.id, S.me); close(); if (infoSaved) toast("Сохранено"); renderChatList(); Live.broadcast("profile", {});
       if (S.tab === "settings") Tg.renderSettings();
     } }, "Сохранить"),
   ]);
@@ -1374,7 +1457,7 @@ function subscribe() {
     if (window.AndroidBridge) return; // в приложении это сообщает сам Android
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
-  window.onAppForeground = () => { Theme.apply(); resync(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
+  window.onAppForeground = () => { Theme.apply(); resync(); Updates.maybeCheck(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
   window.onAppBackground = () => { S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }
@@ -1412,6 +1495,7 @@ async function resync() {
 async function onNewMessage(m) {
   if (!S.chats.find((c) => c.id === m.chat_id)) { await loadProfiles(); await loadChats(); renderChatList(); }
   Tg.typing.get(m.chat_id)?.delete(m.user_id);
+  if (m.body === WELCOME_MARK && m.user_id !== S.me.id) Welcome.celebrate(m);
   if (Tg.isCallMsg(m) && !(S.callLog || []).some((x) => x.id === m.id)) {
     (S.callLog = S.callLog || []).unshift(m);
     Tg.updateCallsBadge(); if (S.tab === "calls") Tg.renderCalls();

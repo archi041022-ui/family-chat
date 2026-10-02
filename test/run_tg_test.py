@@ -32,6 +32,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"])
         ctx = b.new_context(viewport={"width": 390, "height": 800}, permissions=["camera", "microphone"])
+        ctx.add_init_script("window.__noWelcome = true")
         ctx.route("https://translate.google.com/**", lambda r: r.abort())
         A = ctx.new_page(); B = ctx.new_page(); C = ctx.new_page()
         for pg, nm in ((A, "A"), (B, "B"), (C, "C")):

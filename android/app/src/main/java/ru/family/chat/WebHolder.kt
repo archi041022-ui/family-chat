@@ -196,7 +196,48 @@ object WebHolder {
             android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.speak(ctx, text, gender) }
         }
 
-        @JavascriptInterface fun stopSpeaking() = Speech.stop()
+        @JavascriptInterface fun speak2(text: String, gender: String, pitch: Float, rate: Float, voice: String, engine: String) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.speak(ctx, text, gender, pitch, rate, voice, engine) }
+        }
+
+        @JavascriptInterface fun listVoices(engine: String) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.listVoices(ctx, engine) }
+        }
+
+        /** Открыть магазин приложений на странице голосового движка (например, RHVoice). */
+        @JavascriptInterface fun openStore(pkg: String) {
+            if (!pkg.matches(Regex("[a-zA-Z0-9_.]+"))) return
+            try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (_: Throwable) { openExternal(ctx, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")) }
+        }
+
+        @JavascriptInterface fun openUrl(url: String) {
+            val u = Uri.parse(url)
+            if (u.scheme == "https" || u.scheme == "http" || u.scheme == "tel") openExternal(ctx, u)
+        }
+
+        /** Выбрать контакт из телефонной книги (ответ в window.onContactPicked). Разрешение на контакты не нужно. */
+        @JavascriptInterface fun pickContact() {
+            val a = activity ?: return
+            a.runOnUiThread { a.pickContact() }
+        }
+
+        /** Открыть SMS с готовым текстом приглашения — отправляет сам пользователь. */
+        @JavascriptInterface fun sendSms(phone: String, text: String) {
+            val num = phone.filter { it.isDigit() || it == '+' }
+            try {
+                ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$num")).putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Throwable) { Sharing.shareText(ctx, text) }
+        }
+
+        @JavascriptInterface fun downloadUpdate(url: String) { android.os.Handler(android.os.Looper.getMainLooper()).post { Updater.download(ctx, url) } }
+
+        @JavascriptInterface fun installUpdate() { android.os.Handler(android.os.Looper.getMainLooper()).post { Updater.install(ctx) } }
+
+        @JavascriptInterface fun canInstallUpdates(): Boolean =
+            android.os.Build.VERSION.SDK_INT < 26 || ctx.packageManager.canRequestPackageInstalls()
+
+                @JavascriptInterface fun stopSpeaking() = Speech.stop()
 
         @JavascriptInterface fun resetVoice() { android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.reset() } }
 

@@ -236,6 +236,27 @@ class MainActivity : Activity() {
         Speech.listen(this)
     }
 
+    // ───────────── Контакты телефона (для приглашений) ─────────────
+    fun pickContact() {
+        try {
+            startActivityForResult(Intent(Intent.ACTION_PICK, android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI), REQ_CONTACT)
+        } catch (_: Throwable) { WebHolder.js("window.onContactPicked && window.onContactPicked(null)") }
+    }
+
+    private fun contactResult(data: Intent?) {
+        var name = ""; var phone = ""
+        try {
+            val uri = data?.data
+            if (uri != null) contentResolver.query(uri, arrayOf(
+                android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { c ->
+                if (c.moveToFirst()) { name = c.getString(0) ?: ""; phone = c.getString(1) ?: "" }
+            }
+        } catch (_: Throwable) {}
+        val js = if (phone.isBlank()) "null" else org.json.JSONObject().put("name", name).put("phone", phone).toString()
+        WebHolder.js("window.onContactPicked && window.onContactPicked($js)")
+    }
+
     // ───────────── Демонстрация экрана ─────────────
     fun startScreenCapture() {
         try {
@@ -273,6 +294,10 @@ class MainActivity : Activity() {
             cb?.onReceiveValue(if (resultCode == RESULT_OK && u != null) arrayOf(u) else null)
             return
         }
+        if (requestCode == REQ_CONTACT) {
+            contactResult(if (resultCode == RESULT_OK) data else null)
+            return
+        }
         if (requestCode == REQ_SCREEN) {
             if (resultCode == RESULT_OK && data != null) ChatService.screenStart(this, resultCode, data)
             else WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()")
@@ -300,5 +325,6 @@ class MainActivity : Activity() {
         private const val REQ_CAMERA = 15
         private const val REQ_LOCATION = 16
         private const val REQ_MIC = 17
+        private const val REQ_CONTACT = 18
     }
 }

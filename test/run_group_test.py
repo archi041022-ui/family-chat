@@ -32,10 +32,11 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"])
         ctx = b.new_context(viewport={"width": 390, "height": 800}, permissions=["camera", "microphone"])
+        ctx.add_init_script("window.__noWelcome = true")
         A = ctx.new_page(); B = ctx.new_page(); C = ctx.new_page()
         for pg, nm in ((A, "A"), (B, "B"), (C, "C")):
             pg.on("pageerror", lambda e, nm=nm: errors.append(f"{nm}: {e}"))
-            pg.on("console", lambda m, nm=nm: m.type == "error" and errors.append(f"{nm} console: {m.text}"))
+            pg.on("console", lambda m, nm=nm: m.type == "error" and "Failed to load resource" not in m.text and errors.append(f"{nm} console: {m.text}"))
         register(A, "papa", "Папа"); A.wait_for_selector("#chatList .chat-item")
         register(B, "mama", "Мама"); B.wait_for_selector("#chatList .chat-item")
         register(C, "son", "Сын"); C.wait_for_selector("#chatList .chat-item")

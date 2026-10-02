@@ -14,6 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Номер сборки (для проверки обновлений в приложении)
+        run: |
+          VER=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle.kts | cut -d'"' -f2)
+          echo "{\"build\": ${{ github.run_number }}, \"version\": \"$VER\"}" > web/build.json
+          cat web/build.json
+
       - name: Библиотека Supabase
         run: |
           mkdir -p web/vendor
@@ -51,4 +57,5 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: Семья — сборка ${{ github.run_number }}
+          body: ${{ github.event.head_commit.message }}
           files: Semya.apk

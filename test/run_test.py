@@ -32,6 +32,7 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"])
         ctx = b.new_context(viewport={"width": 390, "height": 800}, permissions=["camera", "microphone", "geolocation"], geolocation={"latitude": 55.7963, "longitude": 49.1088, "accuracy": 20})
+        ctx.add_init_script("window.__noWelcome = true")
         import base64
         tile = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4dOkSAATsAm3jYRpjAAAAAElFTkSuQmCC")
         ctx.route("https://tile.openstreetmap.org/**", lambda r: r.fulfill(status=200, content_type="image/png", body=tile))
@@ -185,7 +186,7 @@ try:
         A.fill("#asstInput", "Кто написал «Войну и мир»?"); A.click("#chatView .composer .send")
         A.wait_for_selector("#asstMsgs .msg.in >> text=Тестовый ответ на: Кто написал"); shot(A, "30_A_assistant")
         print("assistant: ok, sent geo:", A.evaluate("!!(window.__asstLast && 'messages' in window.__asstLast)"), A.evaluate("window.__asstCalls"))
-        A.click("button[title='Настройки']"); A.click(".segmented >> text=Мужской"); A.wait_for_timeout(200)
+        A.click("button[title='Настройки']"); A.click(".voice-card >> text=Мужской"); A.wait_for_timeout(200)
         print("voice setting:", A.evaluate("Assistant.settings.voice"))
         A.click(".sheet .btn.wide")
         # ассистент пишет сообщение под диктовку и отправляет после подтверждения
@@ -212,7 +213,7 @@ try:
         A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
         print("theme:", A.evaluate("[document.documentElement.dataset.theme, document.documentElement.dataset.mode, getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()]"))
         A.click("#chatList >> text=Семья"); A.wait_for_selector(".composer .vn-btn"); A.wait_for_timeout(300); shot(A, "36_A_themed_chat")
-        A.fill("#input", "x"); assert A.locator(".composer .vn-btn.hidden").count() == 1; A.fill("#input", "")
+        A.fill("#input", "x"); assert A.locator(".composer .vn-btn.hidden").count() == 2 and A.locator(".composer .asst-btn.hidden").count() == 1; A.fill("#input", "")
         A.click(".back-btn")
         A.click("button[title='Профиль']"); A.click("text=Оформление и цвета"); A.click(".theme-sw >> text=Коралл"); A.click(".segmented >> text=Авто"); A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
         print("circle button: ok")
