@@ -38,6 +38,8 @@ const I = {
   screen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M9 10l3-3 3 3M12 7v6"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
   invite: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0114 0M19 8v6M16 11h6"/></svg>',
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h2l2-2h6l2 2h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="4"/></svg>',
+  gallery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 16l-5-5L5 21"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -91,7 +93,8 @@ function linkify(text) {
 function sheet(content, onClose) {
   const back = h("div", { class: "sheet-back" });
   const box = h("div", { class: "sheet" }, content);
-  const close = () => { back.remove(); onClose && onClose(); };
+  const close = () => { if (!back.isConnected) return; back.remove(); onClose && onClose(); };
+  back._close = close;
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   back.append(box); document.body.append(back);
   return close;
@@ -529,12 +532,18 @@ function buildShell() {
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
   renderChatList();
   Stories.renderAll();
+  // В браузере «назад» (кнопка или свайп) сначала закрывает окна внутри мессенджера, а не уходит со страницы
   if (!window.__popBound) {
     window.__popBound = true;
+    if (!window.AndroidBridge) history.pushState({ guard: 1 }, "");
     window.addEventListener("popstate", () => {
+      if (window.AndroidBridge) return;
+      if (window.handleBack()) history.pushState({ guard: 1 }, "");
+      else toast("Нажмите «назад» ещё раз, чтобы выйти");
+    });
+    window.addEventListener("hashchange", () => {
       const id = location.hash.slice(1);
-      if (!id && S.current) closeChat(true);
-      else if (id && id !== S.current && S.chats.some((c) => c.id === id)) openChat(id);
+      if (id && id !== S.current && S.chats.some((c) => c.id === id)) openChat(id);
     });
   }
 }
@@ -594,14 +603,14 @@ async function openChat(chatId) {
   if (S.current === chatId) return;
   S.current = chatId; S.replyTo = null;
   const c = S.chats.find((x) => x.id === chatId); if (!c) return;
-  if (location.hash.slice(1) !== chatId) history.pushState(null, "", "#" + chatId);
+  if (location.hash.slice(1) !== chatId) history.replaceState(history.state, "", "#" + chatId);
   app.classList.add("in-chat");
   $("#placeholder")?.remove(); $("#chatView")?.remove();
   const other = !c.is_group ? otherUser(c) : null;
   const sub = h("small", { id: "chatSub" });
   const view = h("section", { class: "chat", id: "chatView" },
     h("div", { class: "topbar" },
-      h("button", { class: "icon-btn back-btn", onclick: () => history.back(), html: I.back }),
+      h("button", { class: "icon-btn back-btn", onclick: () => closeChat(), html: I.back }),
       chatAvatar(c, "sm"),
       h("div", { class: "title", onclick: () => chatInfo(c) }, h("b", null, chatTitle(c)), sub),
       other ? h("button", { class: "icon-btn", title: "Аудиозвонок", onclick: () => Calls.start(other, false), html: I.phone }) : null,
@@ -629,7 +638,7 @@ function closeChat(fromPop) {
   S.current = null; app.classList.remove("in-chat");
   $("#chatView")?.remove();
   if (!$("#placeholder")) app.append(h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
-  if (!fromPop && location.hash) history.back();
+  if (location.hash) history.replaceState(history.state, "", location.pathname + location.search);
   renderChatList();
 }
 function updateChatSub() {
@@ -838,7 +847,7 @@ function composer() {
   const file = h("input", { type: "file", multiple: true, class: "hidden", accept: "image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" });
   const action = h("button", { class: "send", title: "Голосовое", html: I.mic });
   const wrap = h("div", { class: "composer" },
-    h("button", { class: "icon-btn", title: "Фото, видео, файл", onclick: () => file.click(), html: I.clip }), file, ta, action);
+    h("button", { class: "icon-btn", title: "Фото, видео, файл", onclick: () => attachMenu(file), html: I.clip }), file, ta, action);
   const update = () => {
     ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
     const has = ta.value.trim().length > 0;
@@ -857,6 +866,128 @@ function composer() {
   });
   return wrap;
 }
+
+// меню скрепки: галерея, камера, запись видео, файл
+function attachMenu(fileInput) {
+  let close;
+  const pick = (accept, capture) => {
+    close();
+    fileInput.accept = accept;
+    if (capture) fileInput.setAttribute("capture", capture); else fileInput.removeAttribute("capture");
+    fileInput.click();
+  };
+  close = sheet([
+    h("h3", null, "Отправить"),
+    h("button", { class: "menu-item", onclick: () => pick("image/*,video/*") }, h("span", { html: I.gallery }), "Фото или видео из галереи"),
+    h("button", { class: "menu-item", onclick: () => pick("image/*", "environment") }, h("span", { html: I.camera }), "Сделать фото"),
+    h("button", { class: "menu-item", onclick: () => { close(); VideoRec.open(); } }, h("span", { html: I.video }), "Записать видео"),
+    h("button", { class: "menu-item", onclick: () => pick("*/*") }, h("span", { html: I.file }), "Файл или документ"),
+  ]);
+}
+
+// ───────────── Запись видео в приложении ─────────────
+const VideoRec = {
+  MAX_SEC: 180,
+  async open() {
+    if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Запись видео не поддерживается на этом устройстве"); return; }
+    if (Calls.pc || Calls.ui) { toast("Сначала завершите звонок"); return; }
+    this.facing = this.facing || "environment";
+    const chatId = S.current; if (!chatId) return;
+    const preview = h("video", { class: "vr-preview", autoplay: true, playsinline: true, muted: true });
+    preview.muted = true;
+    const time = h("div", { class: "vr-time" }, "0:00");
+    const recBtn = h("button", { class: "vr-rec", title: "Начать запись" }, h("i"));
+    const flip = h("button", { class: "icon-btn vr-flip", title: "Сменить камеру", html: I.flip });
+    const closeBtn = h("button", { class: "icon-btn vr-close", title: "Закрыть", html: I.close });
+    const hint = h("div", { class: "vr-hint" }, "Нажмите кнопку, чтобы начать запись");
+    const root = h("div", { class: "video-rec" }, preview, h("div", { class: "vr-top" }, closeBtn, time, flip), hint, h("div", { class: "vr-bottom" }, recBtn));
+    document.body.append(root);
+    let stream = null, rec = null, chunks = [], t0 = 0, tick = null, done = false;
+    const stopStream = () => { stream?.getTracks().forEach((t) => t.stop()); stream = null; };
+    const startCam = async () => {
+      stopStream();
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: this.facing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
+        preview.srcObject = stream; preview.classList.toggle("mirror", this.facing === "user");
+      } catch { toast("Нет доступа к камере или микрофону"); finish(); }
+    };
+    const finish = () => {
+      done = true; clearInterval(tick);
+      try { if (rec && rec.state !== "inactive") rec.stop(); } catch { /* */ }
+      stopStream(); root.remove();
+      VideoRec.close = null;
+    };
+    this.close = () => { if (rec && rec.state === "recording") { rec.onstop = null; } finish(); };
+    closeBtn.onclick = () => this.close();
+    flip.onclick = async () => { if (rec?.state === "recording") return; this.facing = this.facing === "user" ? "environment" : "user"; await startCam(); };
+    recBtn.onclick = () => {
+      if (!stream) return;
+      if (rec?.state === "recording") { rec.stop(); return; }
+      const types = ["video/mp4;codecs=avc1,mp4a", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+      const mime = types.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+      try { rec = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: 1_500_000, audioBitsPerSecond: 96_000 }); }
+      catch { rec = new MediaRecorder(stream); }
+      chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        clearInterval(tick);
+        if (done) return;
+        const type = (rec.mimeType || mime || "video/webm").split(";")[0];
+        const blob = new Blob(chunks, { type });
+        stopStream();
+        if ((Date.now() - t0) < 800 || !blob.size) { toast("Слишком короткое видео"); finish(); return; }
+        review(blob, type);
+      };
+      rec.start(1000); t0 = Date.now();
+      root.classList.add("is-rec"); hint.textContent = "Идёт запись — нажмите ещё раз, чтобы остановить";
+      tick = setInterval(() => {
+        const sec = (Date.now() - t0) / 1000; time.textContent = fmtDur(sec);
+        if (sec >= this.MAX_SEC) rec.stop();
+      }, 250);
+    };
+    const review = (blob, type) => {
+      root.classList.remove("is-rec"); root.classList.add("review");
+      const url = URL.createObjectURL(blob);
+      const player = h("video", { class: "vr-preview", src: url, controls: true, playsinline: true, autoplay: true });
+      preview.replaceWith(player);
+      const caption = h("input", { class: "vr-caption", placeholder: "Подпись (необязательно)", maxlength: 500 });
+      const sizeMb = (blob.size / 1048576).toFixed(1);
+      hint.textContent = `${fmtDur((Date.now() - t0) / 1000)} · ${sizeMb} МБ`;
+      const bottom = root.querySelector(".vr-bottom"); bottom.innerHTML = "";
+      bottom.append(
+        h("button", { class: "btn ghost", onclick: () => { URL.revokeObjectURL(url); finish(); VideoRec.open(); } }, "Переснять"),
+        caption,
+        h("button", { class: "send", title: "Отправить", html: I.send, onclick: async () => {
+          if (blob.size > 50 * 1048576) { toast("Видео больше 50 МБ — запишите покороче"); return; }
+          const ext = type.includes("mp4") ? "mp4" : "webm";
+          const name = `Видео ${new Date().toLocaleString("ru-RU").replace(/[/:]/g, "-")}.${ext}`;
+          const text = caption.value.trim();
+          URL.revokeObjectURL(url); finish();
+          if (S.current !== chatId) { S.current = null; await openChat(chatId); }
+          if (text) { const inp = $("#input"); if (inp) inp.value = text; }
+          toast("Отправляю видео…");
+          await sendFile(new File([blob], name, { type }));
+        } }));
+    };
+    await startCam();
+  },
+};
+
+// ───────────── Кнопка/жест «Назад» ─────────────
+// Возвращает true, если «назад» обработано внутри приложения (значит, выходить не нужно).
+window.handleBack = function () {
+  const lb = document.querySelector(".lightbox"); if (lb) { lb.remove(); return true; }
+  if (VideoRec.close) { VideoRec.close(); return true; }
+  if (Stories.closeViewer) { Stories.closeViewer(); return true; }
+  if (Calls.ui) return true;                                   // во время звонка жест ничего не закрывает
+  const sh = [...document.querySelectorAll(".sheet-back")].pop(); if (sh) { sh._close ? sh._close() : sh.remove(); return true; }
+  if (S.current) { closeChat(true); return true; }
+  if ($("#tabChats")?.classList.contains("hidden")) { showTab("chats"); return true; }
+  return false;
+};
 
 function setReply(m) {
   S.replyTo = m;

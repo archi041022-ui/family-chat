@@ -356,3 +356,29 @@ input, textarea { font: inherit; color: inherit; }
 .invite-steps { margin: 0 12px 8px 30px; padding: 0; color: var(--text); font-size: 15px; }
 .invite-steps li { margin: 6px 0; }
 #tabInvite { padding-bottom: 20px; }
+
+/* ───────── Запись видео ───────── */
+.video-rec { position: fixed; inset: 0; z-index: 66; background: #000; color: #fff; display: flex; flex-direction: column; }
+.video-rec .vr-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.video-rec.review .vr-preview { object-fit: contain; }
+.video-rec .vr-preview.mirror { transform: scaleX(-1); }
+.vr-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-top)) 10px 10px;
+  background: linear-gradient(#0009, transparent); }
+.vr-top .icon-btn { color: #fff; background: #0005; }
+.vr-time { font-variant-numeric: tabular-nums; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: #0006; }
+.video-rec.is-rec .vr-time { background: var(--danger); }
+.video-rec.is-rec .vr-flip { visibility: hidden; }
+.vr-hint { position: relative; z-index: 2; margin-top: auto; text-align: center; font-size: 14px; padding: 0 20px 10px; text-shadow: 0 1px 4px #000; }
+.vr-bottom { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 14px calc(24px + var(--safe-bottom));
+  background: linear-gradient(transparent, #000a); }
+.vr-rec { width: 78px; height: 78px; border-radius: 50%; border: 5px solid #fff; display: grid; place-items: center; }
+.vr-rec i { width: 56px; height: 56px; border-radius: 50%; background: var(--danger); transition: all .2s; }
+.video-rec.is-rec .vr-rec i { width: 30px; height: 30px; border-radius: 8px; }
+.vr-caption { flex: 1; min-width: 0; background: #fff2; border: 1px solid #fff5; color: #fff; border-radius: 22px; padding: 10px 14px; outline: none; }
+.vr-caption::placeholder { color: #fffb; }
+.vr-bottom .btn.ghost { background: #fff2; color: #fff; padding: 10px 12px; }
+.vr-bottom .send { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
+.vr-bottom .send svg { width: 22px; height: 22px; }
+.video-rec.review .vr-preview { top: calc(60px + var(--safe-top)); height: calc(100% - 200px - var(--safe-top) - var(--safe-bottom)); }
+.video-rec.review .vr-flip { visibility: hidden; }
+.video-rec.review .vr-hint { margin-top: auto; }

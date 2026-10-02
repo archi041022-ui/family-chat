@@ -212,9 +212,24 @@ const Stories = {
       mine ? h("button", { class: "icon-btn", title: "Удалить", html: I.trash, onclick: (e) => { e.stopPropagation(); remove(); } }) : null,
       h("button", { class: "icon-btn", title: "Закрыть", html: I.close, onclick: (e) => { e.stopPropagation(); end(); } }));
     const root = h("div", { class: "story-viewer" }, bars, head, stage, footer,
-      h("button", { class: "sv-prev", "aria-label": "Назад", onclick: () => go(-1) }),
-      h("button", { class: "sv-next", "aria-label": "Дальше", onclick: () => go(1) }));
+      h("button", { class: "sv-prev", "aria-label": "Назад", onclick: () => { if (!swiped()) go(-1); } }),
+      h("button", { class: "sv-next", "aria-label": "Дальше", onclick: () => { if (!swiped()) go(1); } }));
     document.body.append(root);
+    // жесты: влево/вправо — следующий/предыдущий человек, вниз — закрыть. Из приложения не выходим.
+    let tx = 0, ty = 0, lastSwipe = 0;
+    const swiped = () => Date.now() - lastSwipe < 400;
+    root.addEventListener("touchstart", (e) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+    root.addEventListener("touchend", (e) => {
+      if (e.target.closest(".sv-footer")) return;
+      const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { lastSwipe = Date.now(); jumpUser(dx < 0 ? 1 : -1); }
+      else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { lastSwipe = Date.now(); end(); }
+    }, { passive: true });
+    const jumpUser = (d) => {
+      const nq = qi + d;
+      if (nq < 0 || nq >= queue.length) { end(); return; }
+      end(false); this.viewer(queue, nq);
+    };
 
     const tick = () => {
       if (!paused) {
@@ -307,12 +322,14 @@ const Stories = {
       show();
     };
     const end = (render = true) => {
+      if (Stories.closeViewer === end) Stories.closeViewer = null;
       cancelAnimationFrame(raf); root.remove();
       document.removeEventListener("keydown", keys);
       if (render) this.renderAll();
     };
     const keys = (e) => { if (e.key === "Escape") end(); if (e.key === "ArrowRight") go(1); if (e.key === "ArrowLeft") go(-1); };
     document.addEventListener("keydown", keys);
+    Stories.closeViewer = end;
     show();
   },
 };

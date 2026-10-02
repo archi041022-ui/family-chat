@@ -66,10 +66,25 @@ class MainActivity : Activity() {
         WebHolder.js("window.onAppBackground && window.onAppBackground()")
     }
 
+    private var lastBack = 0L
+
+    /**
+     * «Назад» (кнопка или свайп от края экрана) сначала обрабатывает сам мессенджер:
+     * закрывает историю, фото, меню, чат. Из приложения не выходим — только если
+     * на главном экране провести «назад» дважды, приложение сворачивается.
+     */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        val w = web
-        if (w != null && w.canGoBack()) w.goBack() else moveTaskToBack(true)
+        val w = web ?: return
+        w.evaluateJavascript("(window.handleBack && window.handleBack()) ? 'yes' : 'no'") { r ->
+            if (r?.contains("yes") == true) return@evaluateJavascript
+            val now = System.currentTimeMillis()
+            if (now - lastBack < 2000) moveTaskToBack(true)
+            else {
+                lastBack = now
+                android.widget.Toast.makeText(this, "Проведите «назад» ещё раз, чтобы свернуть", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onDestroy() {
@@ -116,6 +131,13 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_NOTIFY) { askStartupPermissions(); return }
+        if (requestCode == REQ_CAMERA) {
+            val p = pendingCapture; pendingCapture = null
+            if (p == null) return
+            if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) openCamera(p.second)
+            else { p.first.onReceiveValue(null); fileCallback = null }
+            return
+        }
         if (requestCode != REQ_MEDIA) return
         val req = pendingPermission ?: return
         pendingPermission = null
@@ -130,9 +152,21 @@ class MainActivity : Activity() {
     }
 
     // ───────────── Выбор фото, видео, файлов ─────────────
+    private var cameraUri: Uri? = null
+    private var pendingCapture: Pair<ValueCallback<Array<Uri>>, WebChromeClient.FileChooserParams>? = null
+
     fun chooseFile(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
         fileCallback?.onReceiveValue(null)
         fileCallback = callback
+        // «Сделать фото» — сразу открываем камеру телефона
+        if (params.isCaptureEnabled) {
+            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                pendingCapture = callback to params
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
+                return true
+            }
+            return openCamera(params)
+        }
         val pick = Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
@@ -157,9 +191,33 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openCamera(params: WebChromeClient.FileChooserParams): Boolean {
+        val video = params.acceptTypes.any { it.startsWith("video") } && params.acceptTypes.none { it.startsWith("image") }
+        return try {
+            val dir = java.io.File(cacheDir, "camera").apply { mkdirs() }
+            dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000 }?.forEach { it.delete() }
+            val f = java.io.File(dir, (if (video) "Видео_" else "Фото_") + System.currentTimeMillis() + if (video) ".mp4" else ".jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", f)
+            cameraUri = uri
+            val i = Intent(if (video) android.provider.MediaStore.ACTION_VIDEO_CAPTURE else android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+                .putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri)
+                .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (video) i.putExtra(android.provider.MediaStore.EXTRA_DURATION_LIMIT, 180)
+            startActivityForResult(i, REQ_CAPTURE); true
+        } catch (_: Throwable) {
+            fileCallback?.onReceiveValue(null); fileCallback = null; false
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_CAPTURE) {
+            val cb = fileCallback; fileCallback = null
+            val u = cameraUri; cameraUri = null
+            cb?.onReceiveValue(if (resultCode == RESULT_OK && u != null) arrayOf(u) else null)
+            return
+        }
         if (requestCode == REQ_SCREEN) {
             if (resultCode == RESULT_OK && data != null) ChatService.screenStart(this, resultCode, data)
             else WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()")
@@ -181,5 +239,7 @@ class MainActivity : Activity() {
         private const val REQ_FILE = 11
         private const val REQ_NOTIFY = 12
         private const val REQ_SCREEN = 13
+        private const val REQ_CAPTURE = 14
+        private const val REQ_CAMERA = 15
     }
 }

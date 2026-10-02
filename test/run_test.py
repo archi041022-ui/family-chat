@@ -124,9 +124,32 @@ try:
         A.click(".msg.out img.photo >> nth=-1", button="right"); A.click(".sheet >> text=Поделиться")
         print("share out:", A.evaluate("window.__out"))
         A.click(".back-btn")
+        # запись видео в чате
+        A.click("#tabBtnChats"); A.click("#chatList >> text=Семья"); A.wait_for_selector("#input")
+        A.click("button[title='Фото, видео, файл']"); A.click(".sheet >> text=Записать видео")
+        A.wait_for_selector(".video-rec .vr-rec"); A.wait_for_timeout(800)
+        A.click(".vr-rec"); A.wait_for_selector(".video-rec.is-rec"); A.wait_for_timeout(2500); shot(A, "25_A_recording")
+        A.click(".vr-rec"); A.wait_for_selector(".video-rec.review"); A.wait_for_timeout(500); shot(A, "26_A_review")
+        A.fill(".vr-caption", "Видео с праздника"); A.click(".vr-bottom .send")
+        A.wait_for_selector(".msg.out video", timeout=15000)
+        B.click("#tabBtnChats"); B.click("#chatList >> text=Семья"); B.wait_for_selector(".msg.in video", timeout=15000)
+        print("video record: ok", A.evaluate("document.querySelector('.msg.out video:last-of-type')?.src.slice(0,5)"))
+        B.click(".back-btn"); A.click(".back-btn")
+        # «назад» в браузере: закрывает историю и чат, а не уходит со страницы
+        A.evaluate("() => { delete window.AndroidBridge; }")
+        A.click("#chatList >> text=Семья"); A.wait_for_selector("#input")
+        print("dbg before:", A.evaluate("[history.length, JSON.stringify(history.state), !!window.AndroidBridge, location.hash.length]"))
+        A.go_back(); A.wait_for_timeout(600)
+        print("dbg after:", A.evaluate("[history.length, JSON.stringify(history.state), !!document.querySelector('#chatView'), location.href]"))
+        assert A.locator("#chatView").count() == 0 and "index.html" in A.url, A.url
+        A.click("#tabBtnStories"); A.click("#tabStories .story-row >> nth=0"); A.wait_for_selector(".story-viewer")
+        A.go_back(); A.wait_for_timeout(400)
+        assert A.locator(".story-viewer").count() == 0 and "index.html" in A.url
+        A.click("#tabBtnChats")
+        print("back gesture: ok")
         # раздел «Пригласить»
         A.click("#tabBtnInvite"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
-        A.evaluate("() => { window.AndroidBridge.shareText = (t) => { window.__inv = t; }; }")
+        A.evaluate("() => { window.AndroidBridge = window.AndroidBridge || {}; window.AndroidBridge.shareText = (t) => { window.__inv = t; }; }")
         A.click("text=Поделиться приглашением")
         inv = A.evaluate("window.__inv") or ""
         assert "SEMYA-4825" in inv and "Semya.apk" in inv and "?invite=SEMYA-4825" in inv, inv
