@@ -37,6 +37,7 @@ const I = {
   key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/></svg>',
   screen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M9 10l3-3 3 3M12 7v6"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
+  invite: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0114 0M19 8v6M16 11h6"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -149,6 +150,8 @@ function showAuth() {
     pass.autocomplete = m === "in" ? "current-password" : "new-password"; err.textContent = "";
   };
   tIn.onclick = () => setMode("in"); tUp.onclick = () => setMode("up");
+  const inv = new URLSearchParams(location.search).get("invite");
+  if (inv) { invite.value = inv.toUpperCase(); setTimeout(() => setMode("up"), 0); }
   const form = h("form", { class: "auth" },
     h("img", { class: "logo", src: "icon-192.png", alt: "" }),
     h("h1", null, CFG.appName || "Семья"),
@@ -250,6 +253,88 @@ function pickChatAndSend(files, text) {
       if (text) await postMessage({ body: text.slice(0, 8000) });
       toast("Отправлено");
     } }, chatAvatar(c, "sm"), chatTitle(c))),
+  ]);
+}
+
+// ───────────── Приглашения и «поделиться приложением» ─────────────
+const APP_LINKS = {
+  site: CFG.siteUrl || "https://archi041022-ui.github.io/family-chat/",
+  apk: CFG.apkUrl || "https://github.com/archi041022-ui/family-chat/releases/latest/download/Semya.apk",
+};
+const inviteLink = (code) => `${APP_LINKS.site}?invite=${encodeURIComponent(code)}`;
+function inviteText(code) {
+  return `Привет! Присоединяйся к нашему семейному мессенджеру «${CFG.appName || "Семья"}» 💬\n\n` +
+    `📱 Android — скачай приложение: ${APP_LINKS.apk}\n` +
+    `🌐 Любой телефон или компьютер — открой сайт: ${inviteLink(code)}\n\n` +
+    `🔑 Код приглашения: ${code}\n\n` +
+    `Ссылку открывай в Chrome или Яндекс Браузере. Нажми «Регистрация», придумай логин и пароль.`;
+}
+async function shareTextOut(text) {
+  try {
+    if (window.AndroidBridge?.shareText) { window.AndroidBridge.shareText(text); return; }
+    if (navigator.share) { await navigator.share({ text }); return; }
+    await navigator.clipboard.writeText(text); toast("Скопировано — вставьте в любой мессенджер");
+  } catch (e) { if (e?.name !== "AbortError") { try { await navigator.clipboard.writeText(text); toast("Скопировано"); } catch { toast("Не удалось поделиться"); } } }
+}
+async function copyText(text, msg = "Скопировано") {
+  try { await navigator.clipboard.writeText(text); toast(msg); }
+  catch { const t = h("textarea", { style: { position: "fixed", opacity: 0 } }, text); document.body.append(t); t.select(); try { document.execCommand("copy"); toast(msg); } catch { toast("Не удалось скопировать"); } t.remove(); }
+}
+function qrImage(text) {
+  if (typeof window.qrcode !== "function") return null;
+  try { const q = window.qrcode(0, "M"); q.addData(text); q.make(); return h("img", { class: "qr", src: q.createDataURL(6, 2), alt: "QR-код приглашения" }); }
+  catch { return null; }
+}
+async function renderInvite() {
+  const box = $("#tabInvite"); if (!box) return;
+  box.innerHTML = "";
+  const { data: code } = await S.sb.rpc("get_invite_code");
+  if (!code) { box.append(h("p", { class: "empty-chat" }, "Не удалось получить код приглашения. Проверьте интернет.")); return; }
+  const count = S.profiles.size;
+  const qr = qrImage(inviteLink(code));
+  box.append(
+    h("div", { class: "invite-hero" },
+      h("div", { class: "invite-emoji" }, "👨‍👩‍👧‍👦"),
+      h("h2", null, "Пригласите родных"),
+      h("p", null, `Сейчас в семье ${count} ${plural(count, "человек", "человека", "человек")}. Отправьте приглашение — по нему можно скачать приложение и зарегистрироваться.`)),
+    h("div", { class: "section-title" }, "Код приглашения"),
+    h("button", { class: "invite-code", title: "Скопировать", onclick: () => copyText(code, "Код скопирован") }, code, h("small", null, "нажмите, чтобы скопировать")),
+    h("div", { class: "invite-actions" },
+      h("button", { class: "btn wide", onclick: () => shareTextOut(inviteText(code)) }, h("span", { html: I.share }), "Поделиться приглашением"),
+      h("button", { class: "btn wide ghost", onclick: () => copyText(inviteText(code), "Приглашение скопировано") }, h("span", { html: I.copy }), "Скопировать текст")),
+    qr ? h("div", { class: "section-title" }, "QR-код — покажите с экрана") : null,
+    qr ? h("div", { class: "qr-wrap" }, qr, h("small", null, "Наведите камеру телефона — откроется сайт с уже вписанным кодом")) : null,
+    h("div", { class: "section-title" }, "Поделиться приложением"),
+    h("div", { class: "invite-links" },
+      h("div", { class: "invite-link" },
+        h("div", { class: "mid" }, h("b", null, "🤖 Приложение для Android"), h("small", null, APP_LINKS.apk)),
+        h("button", { class: "icon-btn", title: "Поделиться", html: I.share, onclick: () => shareTextOut(`Приложение «${CFG.appName || "Семья"}» для Android: ${APP_LINKS.apk}\nКод приглашения: ${code}`) }),
+        h("button", { class: "icon-btn", title: "Скопировать", html: I.copy, onclick: () => copyText(APP_LINKS.apk, "Ссылка скопирована") })),
+      h("div", { class: "invite-link" },
+        h("div", { class: "mid" }, h("b", null, "🌐 Сайт — iPhone и компьютер"), h("small", null, inviteLink(code))),
+        h("button", { class: "icon-btn", title: "Поделиться", html: I.share, onclick: () => shareTextOut(`«${CFG.appName || "Семья"}» в браузере: ${inviteLink(code)}\nКод приглашения: ${code}`) }),
+        h("button", { class: "icon-btn", title: "Скопировать", html: I.copy, onclick: () => copyText(inviteLink(code), "Ссылка скопирована") }))),
+    h("div", { class: "section-title" }, "Как подключиться"),
+    h("ol", { class: "invite-steps" },
+      h("li", null, "Откройте ссылку в Chrome или Яндекс Браузере (не внутри МАКСа)."),
+      h("li", null, "На Android скачайте и установите файл, на iPhone — «Поделиться» → «На экран Домой»."),
+      h("li", null, "Нажмите «Регистрация», придумайте логин и пароль, введите код приглашения.")),
+    S.isAdmin ? h("button", { class: "menu-item", onclick: () => changeInviteCode(code) }, h("span", { html: I.key }), "Сменить код приглашения") : null,
+  );
+}
+function changeInviteCode(current) {
+  let close;
+  const inp = h("input", { value: current, autocapitalize: "characters", maxlength: 20 });
+  const err = h("p", { class: "error" });
+  close = sheet([
+    h("h3", null, "Новый код приглашения"),
+    h("p", { class: "sheet-note" }, "Старый код перестанет работать. Те, кто уже в семье, ничего не заметят."),
+    h("label", { class: "field" }, inp), err,
+    h("button", { class: "btn wide", onclick: async () => {
+      const { data } = await S.sb.rpc("set_invite_code", { code: inp.value });
+      if (data !== "OK") { err.textContent = data === "BAD_CODE" ? "От 4 до 20 букв, цифр или дефисов" : "Менять код может только администратор"; return; }
+      close(); toast("Код изменён"); renderInvite();
+    } }, "Сохранить"),
   ]);
 }
 
@@ -436,9 +521,11 @@ function buildShell() {
         h("div", { class: "chat-list", id: "chatList" }, h("div", { id: "storyStrip" }), h("div", { id: "chatItems" })),
         h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.plus })),
       h("div", { class: "tab-body hidden", id: "tabStories" }),
+      h("div", { class: "tab-body hidden", id: "tabInvite" }),
       h("nav", { class: "bottom-tabs" },
         h("button", { class: "on", id: "tabBtnChats", onclick: () => showTab("chats") }, h("span", { html: I.chat }), "Чаты", h("i", { class: "tab-badge hidden", id: "chatsBadge" })),
-        h("button", { id: "tabBtnStories", onclick: () => showTab("stories") }, h("span", { html: I.story }), "Истории", h("i", { class: "tab-badge hidden", id: "storiesBadge" })))),
+        h("button", { id: "tabBtnStories", onclick: () => showTab("stories") }, h("span", { html: I.story }), "Истории", h("i", { class: "tab-badge hidden", id: "storiesBadge" })),
+        h("button", { id: "tabBtnInvite", onclick: () => showTab("invite") }, h("span", { html: I.invite }), "Пригласить"))),
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
   renderChatList();
   Stories.renderAll();
@@ -1019,7 +1106,10 @@ function showTab(t) {
   $("#tabStories")?.classList.toggle("hidden", t !== "stories");
   $("#tabBtnChats")?.classList.toggle("on", t === "chats");
   $("#tabBtnStories")?.classList.toggle("on", t === "stories");
+  $("#tabInvite")?.classList.toggle("hidden", t !== "invite");
+  $("#tabBtnInvite")?.classList.toggle("on", t === "invite");
   if (t === "stories") Stories.refreshAndRender();
+  if (t === "invite") renderInvite();
 }
 async function resync() {
   await loadChats(); renderChatList();

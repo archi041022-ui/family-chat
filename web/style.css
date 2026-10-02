@@ -334,3 +334,25 @@ input, textarea { font: inherit; color: inherit; }
 .share-previews img { width: 84px; height: 84px; object-fit: cover; border-radius: 12px; flex: none; }
 .share-file { width: 84px; height: 84px; border-radius: 12px; background: var(--bg); flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 28px; padding: 4px; }
 .share-file small { font-size: 10px; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+/* ───────── Пригласить ───────── */
+.invite-hero { text-align: center; padding: 20px 20px 4px; }
+.invite-emoji { font-size: 48px; }
+.invite-hero h2 { margin: 6px 0 6px; }
+.invite-hero p { color: var(--muted); margin: 0; font-size: 15px; }
+.invite-code { display: flex; flex-direction: column; align-items: center; width: calc(100% - 24px); margin: 0 12px; padding: 14px; border-radius: 16px;
+  background: var(--accent-soft); color: var(--accent); font-size: 28px; font-weight: 800; letter-spacing: .08em; border: 2px dashed var(--accent); }
+.invite-code small { font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-top: 2px; }
+.invite-actions { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.invite-actions .btn span { display: inline-grid; } .invite-actions .btn svg { width: 20px; height: 20px; }
+.qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 12px; text-align: center; }
+.qr-wrap .qr { width: 200px; height: 200px; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: 14px; }
+.qr-wrap small { color: var(--muted); font-size: 13px; max-width: 280px; }
+.invite-links { padding: 0 8px; }
+.invite-link { display: flex; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; }
+.invite-link .mid { flex: 1; min-width: 0; }
+.invite-link b, .invite-link small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.invite-link small { color: var(--muted); font-size: 12px; }
+.invite-steps { margin: 0 12px 8px 30px; padding: 0; color: var(--text); font-size: 15px; }
+.invite-steps li { margin: 6px 0; }
+#tabInvite { padding-bottom: 20px; }

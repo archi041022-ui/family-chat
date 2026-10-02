@@ -8,6 +8,7 @@ OUT = "/tmp/fc-shots"
 shutil.rmtree(T, ignore_errors=True); shutil.copytree(f"{ROOT}/web", T)
 os.makedirs(f"{T}/vendor", exist_ok=True); os.makedirs(OUT, exist_ok=True)
 shutil.copy(f"{ROOT}/test/mock-supabase.js", f"{T}/vendor/supabase.js")
+open(f"{T}/vendor/qrcode.js", "w").write("window.qrcode=()=>({addData(){},make(){},createDataURL(){const c=document.createElement('canvas');c.width=c.height=33;const x=c.getContext('2d');for(let i=0;i<33;i++)for(let j=0;j<33;j++)if((i*7+j*13)%5<2)x.fillRect(i,j,1,1);return c.toDataURL();}});")
 open(f"{T}/config.js", "w").write(open(f"{ROOT}/web/config.js").read()
     .replace('supabaseUrl: ""', 'supabaseUrl: "https://mock"').replace('supabaseKey: ""', 'supabaseKey: "mock"'))
 srv = subprocess.Popen([sys.executable, "-m", "http.server", "8765", "-d", T], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -123,6 +124,18 @@ try:
         A.click(".msg.out img.photo >> nth=-1", button="right"); A.click(".sheet >> text=Поделиться")
         print("share out:", A.evaluate("window.__out"))
         A.click(".back-btn")
+        # раздел «Пригласить»
+        A.click("#tabBtnInvite"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
+        A.evaluate("() => { window.AndroidBridge.shareText = (t) => { window.__inv = t; }; }")
+        A.click("text=Поделиться приглашением")
+        inv = A.evaluate("window.__inv") or ""
+        assert "SEMYA-4825" in inv and "Semya.apk" in inv and "?invite=SEMYA-4825" in inv, inv
+        A.click("#tabBtnChats")
+        print("invite: ok")
+        # ссылка с кодом подставляет его при регистрации
+        N = ctx.new_page(); N.goto(URL + "?invite=SEMYA-4825"); N.wait_for_selector("input[placeholder='выдаёт создатель чата']")
+        assert N.input_value("input[placeholder='выдаёт создатель чата']") == "SEMYA-4825"; N.close()
+        print("invite link prefill: ok")
         # восстановление пароля: Мама задаёт кодовое слово, выходит и меняет пароль по нему
         B.click("button[title='Профиль']"); B.click("text=Кодовое слово для восстановления")
         B.fill(".sheet input", "Барсик"); B.click(".sheet .btn.wide"); B.wait_for_timeout(300)

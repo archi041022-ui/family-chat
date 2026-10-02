@@ -150,6 +150,8 @@
         async rpc(name, args) {
           const db = load(), u = me()?.id;
           db.words = db.words || {};
+          if (name === "get_invite_code") return { data: u ? (db.invite || "SEMYA-4825") : null, error: null };
+          if (name === "set_invite_code") { if (db.admin !== u) return { data: "NOT_ADMIN", error: null }; db.invite = args.code.toUpperCase(); save(db); return { data: "OK", error: null }; }
           if (name === "set_recovery_word") { db.words[u] = args.word.trim().toLowerCase(); save(db); return { data: null, error: null }; }
           if (name === "has_recovery_word") return { data: !!db.words[u], error: null };
           if (name === "is_admin") return { data: db.admin === u, error: null };
