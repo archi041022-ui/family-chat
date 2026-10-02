@@ -591,6 +591,7 @@ async function enter(user) {
   if (me.banned) { await S.sb.auth.signOut(); showAuth(); toast("Доступ закрыт администратором семьи", 5000); return; }
   S.me = me; S.sessionEmail = user.email || "";
   Prefs.apply();
+  if (Lock.enabled()) Lock.show();
   await loadProfiles();
   await loadChats();
   await Stories.load();
@@ -608,6 +609,7 @@ async function enter(user) {
   setTimeout(() => window.onSharedItems(), 300);
   Welcome.maybeShow(user);
   Updates.start();
+  Tasks.start();
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -733,6 +735,7 @@ function renderChatList() {
   const ub = Updates.banner(); if (ub) list.append(ub);
   const f = S.folder || "all";
   if ((f === "all" || f === "personal") && (!S.filter || "мой ассистент помощник погода новости".includes(S.filter))) list.append(Assistant.listItem());
+  if ((f === "all" || f === "personal") && (!S.filter || "мои задачи список дел".includes(S.filter))) list.append(Tasks.listItem());
   const totalUnread = [...S.unread.entries()].filter(([id]) => !Prefs.muted(id)).reduce((a, [, b]) => a + b, 0);
   const cb = $("#chatsBadge"); if (cb) { cb.textContent = totalUnread > 99 ? "99+" : totalUnread; cb.classList.toggle("hidden", !totalUnread); }
   const time = (c) => new Date(S.lastByChat.get(c.id)?.created_at || c.last_message_at || 0).getTime();
@@ -755,7 +758,7 @@ function renderChatList() {
       list.append(h("button", { class: "chat-item", "data-user": r.p.id, onclick: () => openDm(r.p.id) },
         avatarEl(r.p.id),
         h("div", { class: "mid" },
-          h("div", { class: "row" }, h("span", { class: "name" }, r.p.name), h("span", { class: "time" }, "")),
+          h("div", { class: "row" }, h("span", { class: "name" }, r.p.name, EStatus.badge(r.p.id)), h("span", { class: "time" }, "")),
           h("div", { class: "row" }, h("span", { class: "last" }, S.online.has(r.p.id) ? "в сети · нажмите, чтобы написать" : "Нажмите, чтобы написать")))));
       continue;
     }
@@ -778,7 +781,9 @@ function renderChatList() {
     const item = h("button", { class: `chat-item${S.current === c.id ? " on" : ""}${pinned ? " pinned" : ""}`, "data-chat": c.id, onclick: () => openChat(c.id) },
       chatAvatar(c),
       h("div", { class: "mid" },
-        h("div", { class: "row" }, h("span", { class: "name" }, title, muted ? h("span", { class: "muted-ico", html: I.bellOff }) : null), tick, h("span", { class: "time" }, last ? fmtListTime(last.created_at) : "")),
+        h("div", { class: "row" }, h("span", { class: "name" }, c.is_channel ? h("span", { class: "ch-ico" }, "📢") : null, title,
+          !c.is_group ? EStatus.badge(otherUser(c)) : null, c.protected ? h("span", { class: "prot-ico", title: "Защищённый чат" }, "🛡") : null,
+          muted ? h("span", { class: "muted-ico", html: I.bellOff }) : null), tick, h("span", { class: "time" }, last ? fmtListTime(last.created_at) : "")),
         h("div", { class: "row" },
           typing ? h("span", { class: "last typing-text" }, typing) : h("span", { class: "last" }, previewText(last)),
           unread ? h("span", { class: `badge${muted ? " muted" : ""}` }, unread > 99 ? "99+" : unread) : pinned ? h("span", { class: "pin-ico", html: I.pushpin }) : null)));
@@ -791,7 +796,7 @@ function renderChatList() {
 // ───────────── Открытый чат ─────────────
 async function openChat(chatId) {
   if (S.current === chatId) return;
-  S.current = chatId; S.replyTo = null; S.assistantOpen = false; S.editing = null;
+  S.current = chatId; S.replyTo = null; S.assistantOpen = false; S.editing = null; S.tasksOpen = false;
   const c = S.chats.find((x) => x.id === chatId); if (!c) return;
   if (location.hash.slice(1) !== chatId) history.replaceState(history.state, "", "#" + chatId);
   app.classList.add("in-chat");
@@ -802,7 +807,7 @@ async function openChat(chatId) {
     h("div", { class: "topbar" },
       h("button", { class: "icon-btn back-btn", onclick: () => closeChat(), html: I.back }),
       chatAvatar(c, "sm"),
-      h("div", { class: "title", onclick: () => chatInfo(c) }, h("b", null, chatTitle(c)), sub),
+      h("div", { class: "title", onclick: () => chatInfo(c) }, h("b", null, c.is_channel ? "📢 " : "", chatTitle(c), !c.is_group ? EStatus.badge(otherUser(c)) : null, c.protected ? h("span", { class: "prot-ico" }, " 🛡") : null), sub),
       other ? h("button", { class: "icon-btn", title: "Аудиозвонок", onclick: () => Calls.start(other, false), html: I.phone }) : null,
       other ? h("button", { class: "icon-btn", title: "Видеозвонок", onclick: () => Calls.start(other, true), html: I.video }) : null,
       c.is_group ? h("button", { class: "icon-btn", title: "Групповой звонок", onclick: () => GroupCall.start(c.id, false), html: I.phone }) : null,
@@ -811,8 +816,10 @@ async function openChat(chatId) {
     h("div", { class: "upload-bar", id: "upBar" }),
     h("div", { class: "messages", id: "msgs" }),
     h("div", { id: "replyBox" }),
-    composer());
+    Channels.canPost(c) ? composer() : Channels.readerBar(c));
   app.append(view);
+  if (c.is_channel) view.classList.add("channel");
+  Protect.apply(c);
   Tg.scrollButton(view);
   Wallpaper.apply(chatId);
   if (Select.on) Select.stop();
@@ -832,7 +839,8 @@ async function openChat(chatId) {
   $("#msgs").addEventListener("scroll", onScrollTop);
 }
 function closeChat(fromPop) {
-  S.assistantOpen = false;
+  S.assistantOpen = false; S.tasksOpen = false;
+  Protect.off();
   S.current = null; app.classList.remove("in-chat");
   $("#chatView")?.remove();
   if (!$("#placeholder")) app.append(h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
@@ -845,7 +853,10 @@ function updateChatSub() {
   const typing = Tg.typingText(S.current);
   el.classList.toggle("typing-text", !!typing);
   if (typing) { el.textContent = typing; return; }
-  if (c.is_group) {
+  if (c.is_channel) {
+    const n = (S.members.get(c.id) || []).length;
+    el.textContent = `${c.is_private ? "приватный канал" : "открытый канал"} · ${n} ${plural(n, "подписчик", "подписчика", "подписчиков")}`;
+  } else if (c.is_group) {
     const n = (S.members.get(c.id) || []).length;
     const on = (S.members.get(c.id) || []).filter((m) => S.online.has(m.user_id) && m.user_id !== S.me.id).length;
     el.textContent = `${n} ${plural(n, "участник", "участника", "участников")}${on ? `, ${on} в сети` : ""}`;
@@ -923,7 +934,7 @@ function messageEl(m, c, firstInRun, tail) {
   const p = S.profiles.get(m.user_id);
   const isCall = m.body && m.body.startsWith("📞") && !m.media_type;
   const bubble = h("div", { class: `bubble${m.media_type && !m.deleted ? " media" : ""}${m.deleted ? " deleted" : ""}` });
-  if (c.is_group && !out && firstInRun) bubble.append(h("div", { class: "who", style: { color: colorFor(m.user_id) } }, p?.name || "…"));
+  if (c.is_group && !c.is_channel && !out && firstInRun) bubble.append(h("div", { class: "who", style: { color: colorFor(m.user_id) } }, p?.name || "…", EStatus.badge(m.user_id, "sm")));
   if (m.reply_to && !m.deleted) {
     const r = (S.msgs.get(m.chat_id) || []).find((x) => x.id === m.reply_to);
     bubble.append(h("div", { class: "reply", onclick: () => jumpTo(m.reply_to) },
@@ -935,10 +946,10 @@ function messageEl(m, c, firstInRun, tail) {
     const url = m.media_path && S.urls.get(m.media_path);
     if (m.media_type === "image") bubble.append(h("img", { class: "photo", src: url || "", loading: "lazy", alt: "Фото", onclick: () => lightbox(url) }));
     else if (m.media_type === "video") bubble.append(h("video", { src: url || "", controls: true, preload: "metadata", playsinline: true }));
-    else if (m.media_type === "audio") bubble.append(h("audio", { src: url || "", controls: true, preload: "metadata" }));
+    else if (m.media_type === "audio") bubble.append(h("audio", { src: url || "", controls: true, preload: "metadata", controlsList: "nodownload" }), Voice2Text.el(m));
     else if (m.media_type === "file") bubble.append(h("a", { class: "file", href: url || "#", target: "_blank", rel: "noopener", download: m.media_name || "" },
       h("span", { class: "icon-btn", html: I.file }), h("span", null, m.media_name || "Файл")));
-    else if (m.media_type === "video_note") { bubble.classList.add("vnote-bubble"); bubble.append(videoNoteEl(url)); }
+    else if (m.media_type === "video_note") { bubble.classList.add("vnote-bubble"); bubble.append(videoNoteEl(url), Voice2Text.el(m)); }
     else if (m.media_type === "location") { const g = parseGeo(m.body); if (g) bubble.append(mapCard(g.lat, g.lon, g.acc)); }
     const fwd = Tg.forwardedFrom(m.body);
     if (fwd) bubble.insertBefore(h("div", { class: "fwd" }, "Переслано от ", h("b", null, fwd)), bubble.querySelector(".photo,video,audio,.file,.vnote,.map-card") || null);
@@ -946,11 +957,19 @@ function messageEl(m, c, firstInRun, tail) {
     const big = !m.media_type && !fwd && !m.reply_to ? Emoji.only(clean) : null;
     if (m.body === WELCOME_MARK && !m.media_type) { bubble.classList.add("welcome-bubble"); bubble.append(Welcome.card(m), h("div", { class: "text" })); }
     else if (big) { bubble.classList.add("emoji-bubble"); bubble.append(Emoji.bigEl(big), h("div", { class: "text" })); }
-    else if (clean && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(clean)));
+    else if (clean && m.media_type !== "location") {
+      bubble.append(h("div", { class: "text" }, linkify(clean)));
+      const orig = Tg.original(m.body);
+      if (orig) bubble.append(h("div", { class: "tr-orig" }, "🌐 ", orig));
+      else if (!out && !m.pending && Tr.chat(c.id).in !== false && Tr.foreign(clean)) Tr.attach(bubble, m);
+    }
     if (m.body === GC_MARK && !m.media_type && Date.now() - new Date(m.created_at) < 6 * 3600e3)
       bubble.append(h("button", { class: "btn gc-join", onclick: () => GroupCall.join(m.chat_id, true) }, "Присоединиться"));
   }
-  const meta = h("span", { class: "meta" }, Tg.edited(m.body) ? h("i", { class: "edited" }, "изменено ") : null, fmtTime(m.created_at));
+  const fxKind = Effects.of(m);
+  const meta = h("span", { class: "meta" }, fxKind ? h("button", { class: "fx-mark", title: "Повторить эффект", onclick: (e) => { e.stopPropagation(); Effects.play(fxKind); } }, "✨") : null,
+    Tg.edited(m.body) ? h("i", { class: "edited" }, "изменено ") : null, fmtTime(m.created_at));
+  if (fxKind) Effects.maybePlay(m);
   if (out && !m.deleted) {
     const others = (S.members.get(m.chat_id) || []).filter((x) => x.user_id !== S.me.id);
     const read = others.some((x) => new Date(x.last_read_at) >= new Date(m.created_at));
@@ -973,6 +992,7 @@ function messageEl(m, c, firstInRun, tail) {
     c.is_group && !out ? avatarEl(m.user_id, "sm") : null, bubble);
   row.addEventListener("click", (e) => { if (Select.on) { e.preventDefault(); e.stopPropagation(); Select.toggle(m); } }, true);
   if (!m.pending) { attachGestures(bubble, m); Tg.swipeReply(bubble, m); }
+  if (Protect.on(c)) bubble.querySelectorAll("img,video,audio,a.file").forEach((x) => { x.addEventListener("contextmenu", (e) => e.preventDefault()); if (x.tagName === "VIDEO") { x.setAttribute("controlsList", "nodownload"); x.disablePictureInPicture = true; } if (x.tagName === "A") x.removeAttribute("download"); });
   return row;
 }
 
@@ -1000,16 +1020,24 @@ function messageMenu(m) {
   const mine = (S.reacts.get(m.id) || []).filter((r) => r.user_id === S.me.id).map((r) => r.emoji);
   let close;
   const items = [];
+  const chat = S.chats.find((x) => x.id === m.chat_id);
+  const prot = Protect.on(chat);
   if (!m.deleted) {
     items.push(h("div", { class: "emoji-row" }, EMOJI.map((e) => h("button", { class: mine.includes(e) ? "mine" : "", onclick: () => { close(); toggleReaction(m, e); } }, e))));
     items.push(h("button", { class: "menu-item", onclick: () => { close(); setReply(m); } }, h("span", { html: I.reply }), "Ответить"));
-    if (m.body) items.push(h("button", { class: "menu-item", onclick: async () => { close(); try { await navigator.clipboard.writeText(Tg.text(m.body)); toast("Скопировано"); } catch { toast("Не удалось скопировать"); } } }, h("span", { html: I.copy }), "Копировать текст"));
+    if (m.body && !prot) items.push(h("button", { class: "menu-item", onclick: async () => { close(); try { await navigator.clipboard.writeText(Tg.text(m.body)); toast("Скопировано"); } catch { toast("Не удалось скопировать"); } } }, h("span", { html: I.copy }), "Копировать текст"));
+    if (m.body && Tg.text(m.body) && !Tg.isCallMsg(m) && m.media_type !== "location") items.push(h("button", { class: "menu-item", onclick: async () => {
+      close();
+      try { const r = await Tr.translate(Tg.text(m.body)); sheet([h("h3", null, `🌐 Перевод (${Tr.langName(r.from)} → ${Tr.langName(Tr.target())})`), h("p", { class: "tr-sheet" }, r.text)]); }
+      catch { toast("Перевод недоступен — нет связи"); }
+    } }, h("span", null, "🌐"), "Перевести"));
     if (m.user_id === S.me.id && m.body && (!m.media_type || ["image", "video", "file"].includes(m.media_type)) && !Tg.isCallMsg(m) && m.body !== WELCOME_MARK && !String(m.id).startsWith("tmp-"))
       items.push(h("button", { class: "menu-item", onclick: () => { close(); Tg.startEdit(m); } }, h("span", { html: I.pen }), "Изменить"));
-    if (!String(m.id).startsWith("tmp-") && (m.body || m.media_path) && m.media_type !== "location")
+    if (!prot && !String(m.id).startsWith("tmp-") && (m.body || m.media_path) && m.media_type !== "location")
       items.push(h("button", { class: "menu-item", onclick: () => { close(); Tg.forward(m); } }, h("span", { html: I.forward }), "Переслать"));
-    if (m.body || (m.media_path && S.urls.get(m.media_path))) items.push(h("button", { class: "menu-item", onclick: () => { close(); shareOut(m); } }, h("span", { html: I.share }), "Поделиться"));
-    if (m.media_path && S.urls.get(m.media_path)) items.push(h("a", { class: "menu-item", href: S.urls.get(m.media_path), target: "_blank", rel: "noopener", download: m.media_name || "", onclick: () => close() }, h("span", { html: I.download }), "Сохранить файл"));
+    if (!prot && (m.body || (m.media_path && S.urls.get(m.media_path)))) items.push(h("button", { class: "menu-item", onclick: () => { close(); shareOut(m); } }, h("span", { html: I.share }), "Поделиться"));
+    if (prot) items.push(h("div", { class: "sheet-note prot-note" }, "🛡 Защищённый чат: копирование, пересылка и сохранение запрещены"));
+    if (!prot && m.media_path && S.urls.get(m.media_path)) items.push(h("a", { class: "menu-item", href: S.urls.get(m.media_path), target: "_blank", rel: "noopener", download: m.media_name || "", onclick: () => close() }, h("span", { html: I.download }), "Сохранить файл"));
     if (!String(m.id).startsWith("tmp-")) items.push(h("button", { class: "menu-item", onclick: () => { close(); Select.start(m); } }, h("span", { html: I.ticks }), "Выбрать несколько"));
     if (m.user_id === S.me.id) items.push(h("button", { class: "menu-item danger", onclick: () => { close(); deleteMessage(m); } }, h("span", { html: I.trash }), "Удалить у всех"));
     items.push(h("button", { class: "menu-item danger", onclick: () => { close(); Select.remove([m], false); } }, h("span", { html: I.trash }), "Удалить у меня"));
@@ -1051,7 +1079,7 @@ function jumpTo(id) {
 }
 function lightbox(url) {
   if (!url) return;
-  const lb = h("div", { class: "lightbox", onclick: () => lb.remove() },
+  const lb = h("div", { class: "lightbox", onclick: () => lb.remove(), oncontextmenu: (e) => { if (Protect.on(S.chats.find((c) => c.id === S.current))) e.preventDefault(); } },
     h("img", { src: url, alt: "" }), h("button", { class: "icon-btn close", html: I.close }));
   document.body.append(lb);
 }
@@ -1085,7 +1113,13 @@ function composer() {
     if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); sendText(ta, update); }
     if (e.key === "Escape" && S.editing) Tg.cancelEdit();
   });
-  action.addEventListener("click", () => { if (ta.value.trim()) sendText(ta, update); else Voice.start(wrap); });
+  let pressT = null, longFired = false;
+  const startPress = () => { longFired = false; clearTimeout(pressT); if (!ta.value.trim() || S.editing) return; pressT = setTimeout(() => { longFired = true; navigator.vibrate?.(15); Effects.picker((k) => sendText(ta, update, k)); }, 500); };
+  const endPress = () => clearTimeout(pressT);
+  action.addEventListener("touchstart", startPress, { passive: true }); action.addEventListener("touchend", endPress); action.addEventListener("touchmove", endPress, { passive: true });
+  action.addEventListener("mousedown", startPress); action.addEventListener("mouseup", endPress); action.addEventListener("mouseleave", endPress);
+  action.addEventListener("contextmenu", (e) => { e.preventDefault(); if (ta.value.trim() && !S.editing) { longFired = true; Effects.picker((k) => sendText(ta, update, k)); } });
+  action.addEventListener("click", () => { if (longFired) { longFired = false; return; } if (ta.value.trim()) sendText(ta, update); else Voice.start(wrap); });
   file.addEventListener("change", async () => { const files = [...file.files]; file.value = ""; for (const f of files) await sendFile(f); });
   // вставка картинки из буфера
   ta.addEventListener("paste", (e) => {
@@ -1234,12 +1268,16 @@ function setReply(m) {
 }
 function clearReply() { S.replyTo = null; const b = $("#replyBox"); if (b) b.innerHTML = ""; }
 
-async function sendText(ta, update) {
-  const body = ta.value.trim(); if (!body) return;
+async function sendText(ta, update, effect) {
+  let body = ta.value.trim(); if (!body) return;
   ta.value = ""; update();
   if (S.editing) { await Tg.saveEdit(body); return; }
   if (Prefs.get("inAppSound")) beep([1046], 0.06);
-  await postMessage({ body });
+  const chatId = S.current;
+  if (Tr.chat(chatId).out) body = await Tr.outgoing(chatId, body);
+  if (effect) { body += "\u2062fx:" + effect; Effects.play(effect); }
+  const sent = await postMessage({ body }, chatId);
+  if (sent && effect) Effects.markPlayed(sent.id);
 }
 
 async function postMessage(fields, chatId = S.current) {
@@ -1343,6 +1381,8 @@ function newChatSheet() {
   close = sheet([
     h("h3", null, "Новый чат"),
     h("button", { class: "menu-item", onclick: () => { close(); newGroupSheet(); } }, h("span", { html: I.group }), "Создать группу"),
+    h("button", { class: "menu-item", onclick: () => { close(); Channels.create(); } }, h("span", null, "📢"), "Создать канал"),
+    h("button", { class: "menu-item", onclick: () => { close(); Channels.discover(); } }, h("span", { html: I.search }), "Найти каналы"),
     ...people.map((p) => h("button", { class: "menu-item", onclick: async () => { close(); await openDm(p.id); } }, avatarEl(p.id, "sm"), p.name)),
     people.length ? null : h("p", { class: "empty-chat" }, "Пока никто больше не зарегистрировался. Поделитесь ссылкой и кодом приглашения."),
   ]);
@@ -1457,6 +1497,9 @@ function subscribe() {
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "stories" }, (p) => Stories.onNew(p.new))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "stories" }, (p) => Stories.onDeleted(p.old))
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (p) => onProfileChange(p.new))
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ new: p.new, eventType: "INSERT" }))
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ new: p.new, eventType: "UPDATE" }))
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ old: p.old, eventType: "DELETE" }))
     .subscribe((status) => {
       const el = $("#conn"); if (el) el.textContent = status === "SUBSCRIBED" ? "в сети" : "подключение…";
       if (status === "SUBSCRIBED" && S.resync) { S.resync = false; resync(); }
@@ -1485,8 +1528,8 @@ function subscribe() {
     if (window.AndroidBridge) return; // в приложении это сообщает сам Android
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
-  window.onAppForeground = () => { Theme.apply(); resync(); Updates.maybeCheck(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
-  window.onAppBackground = () => { S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
+  window.onAppForeground = () => { Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
+  window.onAppBackground = () => { Lock.onBg(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }
 function onProfileChange(np) {
@@ -1633,6 +1676,7 @@ window.__keepAlive = (urgent) => {
     else if (typeof rt.sendHeartbeat === "function") rt.sendHeartbeat();
   } catch { /* */ }
   if (urgent) setTimeout(() => Calls.tryAutoAnswer(), 500);
+  try { if (typeof Tasks !== "undefined") Tasks.tick(); } catch { /* */ }
 };
 
 // ───────────── Звонки (WebRTC) ─────────────

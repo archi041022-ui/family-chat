@@ -36,7 +36,8 @@ const Tg = {
   typing: new Map(),          // chatId -> Map(userId -> время)
 
   // текст сообщения без служебных знаков
-  text(body) { return body ? String(body).replace(EDIT_MARK, "").replace(FWD_RE, "") : body; },
+  text(body) { return body ? String(body).replace(/\u2062fx:[a-z]+/, "").replace(EDIT_MARK, "").replace(FWD_RE, "").split("\u2064")[0] : body; },
+  original(body) { const i = body ? String(body).indexOf("\u2064") : -1; return i >= 0 ? String(body).slice(i + 1).replace(/\u2062fx:[a-z]+/, "").replace(EDIT_MARK, "") : null; },
   edited(body) { return !!body && String(body).endsWith(EDIT_MARK); },
   forwardedFrom(body) { const m = body && String(body).match(FWD_RE); return m ? m[1] : null; },
 
@@ -115,6 +116,8 @@ const Tg = {
         h("span", { html: I.pushpin }), pinned ? "Открепить чат" : "Закрепить чат"),
       h("button", { class: "menu-item", onclick: () => { close(); this.mediaOfChat(c); } }, h("span", { html: I.gallery || I.clip }), "Фото, видео и файлы"),
       h("button", { class: "menu-item", onclick: () => { close(); Wallpaper.sheet(c.id); } }, h("span", { html: I.palette }), "Фон чата"),
+      h("button", { class: "menu-item", onclick: () => { close(); Tr.sheet(c); } }, h("span", null, "🌐"), h("span", null, "Перевод сообщений", h("small", { class: "sub" }, Tr.chat(c.id).out ? `мои → ${Tr.langName(Tr.chat(c.id).out)}` : "входящие — автоматически"))),
+      Protect.canChange(c) ? h("button", { class: "menu-item", onclick: () => { close(); Protect.toggle(c); } }, h("span", null, "🛡"), c.protected ? "Снять защиту содержимого" : "Защитить от копирования и снимков") : null,
       h("button", { class: "menu-item", onclick: () => { close(); Select.start(null); toast("Нажимайте на сообщения, чтобы выбрать"); } }, h("span", { html: I.ticks }), "Выбрать сообщения"),
       h("button", { class: "menu-item danger", onclick: () => { close(); Select.clearHistory(c); } }, h("span", { html: I.trash }), "Очистить историю"),
       h("button", { class: "menu-item", onclick: () => { close(); chatInfo(c); } }, h("span", { html: I.info }), c.is_group ? "Информация о группе" : "Профиль"),
@@ -213,6 +216,7 @@ const Tg = {
 
   // ── пересылка
   forward(m) {
+    if (Protect.on(S.chats.find((c) => c.id === m.chat_id))) { toast("🛡 Пересылка из защищённого чата запрещена"); return; }
     let close;
     const name = S.profiles.get(m.user_id)?.name || "участника";
     const fwdName = this.forwardedFrom(m.body) || name;
@@ -283,7 +287,7 @@ const Tg = {
       const on = S.online.has(p.id);
       box.append(h("div", { class: "contact-row", "data-name": p.name.toLowerCase(), onclick: () => openDm(p.id) },
         avatarEl(p.id, "", { onclick: (e) => { e.stopPropagation(); this.profileView(p.id); } }),
-        h("div", { class: "mid" }, h("b", null, p.name, p.family_role ? h("span", { class: "role-chip" }, p.family_role) : null),
+        h("div", { class: "mid" }, h("b", null, p.name, EStatus.badge(p.id), p.family_role ? h("span", { class: "role-chip" }, p.family_role) : null),
           h("small", { class: on ? "online" : "" }, (on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно") + (p.status ? " · " + p.status : ""))),
         h("button", { class: "icon-btn", title: "Позвонить", html: I.phone, onclick: (e) => { e.stopPropagation(); Calls.start(p.id, false); } }),
         h("button", { class: "icon-btn", title: "Видеозвонок", html: I.video, onclick: (e) => { e.stopPropagation(); Calls.start(p.id, true); } })));
@@ -358,14 +362,16 @@ const Tg = {
     box.append(
       h("div", { class: "set-profile", onclick: () => openProfile() },
         avatarEl(S.me.id, "lg"),
-        h("div", { class: "mid" }, h("b", null, S.me.name), h("small", null, (login ? "@" + login + " · " : "") + (S.me.status || "в сети"))),
+        h("div", { class: "mid" }, h("b", null, S.me.name, EStatus.badge(S.me.id)), h("small", null, (login ? "@" + login + " · " : "") + (S.me.status || "в сети"))),
         h("span", { class: "chev", html: I.pen })),
       group(
         item("#3D8BFD", I.user, "Изменить профиль", () => openProfile()),
-        item("#F2A541", I.pushpin, "Статус", () => openProfile(), { value: S.me.status || "нет" })),
+        item("#F2A541", I.pushpin, "Статус", () => openProfile(), { value: S.me.status || "нет" }),
+        item("#9B5DE5", I.palette, "Эмодзи-статус", () => EStatus.sheet(), { value: EStatus.of(S.me.id) || "нет" })),
       group(
         item("#E0457B", I.bell, "Уведомления и звуки", () => this.notifSheet()),
         item("#2EAD6B", I.phone, "Звонки", () => this.callsSheet()),
+        item("#2EAD6B", I.lock, "Вход по отпечатку", () => Lock.sheet(), { value: Lock.enabled() ? "вкл" : "выкл" }),
         item("#6C7A89", I.lock, "Сменить пароль", () => changePasswordSheet()),
         item("#00A6A6", I.key, "Кодовое слово для восстановления", () => recoveryWordSheet()),
         item("#9B5DE5", I.palette, "Оформление и цвета", () => Theme.sheet()),
@@ -374,6 +380,7 @@ const Tg = {
         item("#3D8BFD", I.data, "Данные и память", () => this.dataSheet())),
       group(
         item("#E8664F", I.bot, "Мой ассистент", () => { if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; } Assistant.settingsSheet(); }),
+        item("#00A6A6", I.ticks, "Мои задачи", () => Tasks.open(), { value: Tasks.active().length ? String(Tasks.active().length) : "" }),
         item("#2EAD6B", I.invite, "Пригласить в семью", () => showTab("invite"))),
       S.isAdmin ? group(
         item("#E8664F", I.shield, "Управление участниками", () => membersAdmin()),
@@ -433,6 +440,9 @@ const Tg = {
   dataSheet() {
     sheet([
       h("h3", null, "Данные и память"),
+      h("label", { class: "toggle-row" }, h("span", null, "Расшифровывать голосовые сами", h("small", null, "Входящие голосовые и кружки превращаются в текст прямо на телефоне")),
+        h("input", { type: "checkbox", checked: Prefs.get("sttAuto") !== false, onchange: (e) => Prefs.set("sttAuto", e.target.checked) })),
+      h("button", { class: "menu-item", onclick: async () => { try { await caches.delete("stt-v1"); STT.model = null; STT.loading = null; toast("Модель распознавания речи удалена (≈45 МБ)"); } catch { /* */ } } }, h("span", { html: I.trash }), "Удалить модель распознавания речи"),
       h("button", { class: "menu-item", onclick: () => { S.msgs.clear(); toast("Кэш сообщений очищен — переписки загрузятся заново"); } }, h("span", { html: I.trash }), "Очистить кэш сообщений"),
       h("button", { class: "menu-item", onclick: () => {
         if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; }
@@ -485,7 +495,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "2.3";
+const APP_VERSION = "2.4";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {
@@ -525,7 +535,7 @@ Object.assign(Tg, {
     ].filter(Boolean);
     close = sheet([
       h("div", { class: "pv-head" }, avatarEl(uid, "xl", p.avatar_path && S.urls.get(p.avatar_path) ? { onclick: () => lightbox(S.urls.get(p.avatar_path)) } : {}),
-        h("h2", null, p.name), h("small", { class: on ? "online" : "" }, me ? "это вы" : on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно")),
+        h("h2", null, p.name, EStatus.badge(uid, "lg")), h("small", { class: on ? "online" : "" }, me ? "это вы" : on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно")),
       me ? h("div", { class: "pv-actions" }, act(I.pen, "Изменить", () => openProfile()))
         : h("div", { class: "pv-actions" },
           act(I.chat, "Написать", () => openDm(uid)),

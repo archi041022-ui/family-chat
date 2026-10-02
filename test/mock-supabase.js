@@ -53,6 +53,8 @@
         const r = { ...this.row };
         if (this.t === "messages") {
           if (!isMember(db, r.chat_id, u)) return { data: null, error: { message: "rls" } };
+          const ch = db.chats.find((x) => x.id === r.chat_id);
+          if (ch?.is_channel && ch.created_by !== u && db.admin !== u) return { data: null, error: { message: "rls" } };
           Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), deleted: false, body: r.body ?? null,
             media_path: r.media_path ?? null, media_type: r.media_type ?? null, media_name: r.media_name ?? null, reply_to: r.reply_to ?? null });
           const c = db.chats.find((x) => x.id === r.chat_id); c.last_message_at = r.created_at;
@@ -62,6 +64,8 @@
           r.user_id = u; r.chat_id = m.chat_id;
           if (db.reactions.some((x) => x.message_id === r.message_id && x.user_id === u && x.emoji === r.emoji)) return { data: null, error: { code: "23505" } };
         }
+        if (this.t === "tasks") Object.assign(r, { id: uid(), owner_id: u, created_at: new Date().toISOString(), done: false, done_at: null,
+          remind: r.remind !== false, chat_id: r.chat_id ?? null, assignee_id: r.assignee_id ?? null, due_at: r.due_at ?? null, note: r.note ?? null });
         if (this.t === "stories") Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 864e5).toISOString(), body: r.body ?? null, media_path: r.media_path ?? null, media_type: r.media_type ?? null, bg: r.bg ?? null });
         if (this.t === "story_views") {
           if (db.story_views.some((x) => x.story_id === r.story_id && x.viewer_id === u)) return { data: null, error: { code: "23505" } };
@@ -217,6 +221,29 @@
             const c = db.chats.find((x) => x.id === args.cid);
             if (args.cid === FAMILY || !c || c.created_by !== u) return { data: "NOT_OWNER", error: null };
             db.chats = db.chats.filter((x) => x !== c); db.chat_members = db.chat_members.filter((m) => m.chat_id !== args.cid); save(db); return { data: "OK", error: null };
+          }
+          if (name === "create_channel") {
+            const c = { id: uid(), is_group: true, is_channel: true, is_private: args.private !== false, protected: false, title: args.title, description: args.description || null, created_by: u, last_message_at: new Date().toISOString() };
+            db.chats.push(c);
+            for (const x of [u, ...(args.members || [])]) if (!isMember(db, c.id, x)) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
+            save(db); return { data: c.id, error: null };
+          }
+          if (name === "public_channels") {
+            return { data: db.chats.filter((c) => c.is_channel && !c.is_private && !isMember(db, c.id, u)).map((c) => ({ id: c.id, title: c.title, description: c.description, avatar_path: c.avatar_path || null, members: db.chat_members.filter((m) => m.chat_id === c.id).length })), error: null };
+          }
+          if (name === "channel_join") {
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (!c || !c.is_channel || c.is_private) return { data: "PRIVATE", error: null };
+            if (!isMember(db, c.id, u)) db.chat_members.push({ chat_id: c.id, user_id: u, last_read_at: new Date(0).toISOString() });
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "chat_settings") {
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (!c || !isMember(db, c.id, u)) return { data: "NO_CHAT", error: null };
+            if (c.is_group && c.created_by !== u && db.admin !== u) return { data: "NOT_OWNER", error: null };
+            if (c.is_channel && args.private !== null && args.private !== undefined) c.is_private = args.private;
+            if (args.protect !== null && args.protect !== undefined) c.protected = args.protect;
+            save(db); return { data: "OK", error: null };
           }
           if (name === "create_group") {
             const c = { id: uid(), is_group: true, title: args.title, created_by: u, last_message_at: new Date().toISOString() }; db.chats.push(c);

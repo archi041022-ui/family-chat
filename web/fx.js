@@ -358,8 +358,8 @@ const Select = {
       b = h("div", { class: "sel-bar", id: "selBar" },
         h("button", { class: "icon-btn", title: "Отменить", html: I.close, onclick: () => this.stop() }),
         h("b", { class: "sel-count" }, label),
-        h("button", { class: "icon-btn", title: "Копировать", html: I.copy, onclick: () => this.copy() }),
-        h("button", { class: "icon-btn", title: "Переслать", html: I.forward, onclick: () => this.forward() }),
+        Protect.on(S.chats.find((c) => c.id === S.current)) ? null : h("button", { class: "icon-btn", title: "Копировать", html: I.copy, onclick: () => this.copy() }),
+        Protect.on(S.chats.find((c) => c.id === S.current)) ? null : h("button", { class: "icon-btn", title: "Переслать", html: I.forward, onclick: () => this.forward() }),
         h("button", { class: "icon-btn danger", title: "Удалить", html: I.trash, onclick: () => this.askDelete() }));
       view.querySelector(".topbar")?.after(b);
     } else b.querySelector(".sel-count").textContent = label;
@@ -476,14 +476,23 @@ const Groups = {
     const family = c.id === FAMILY_CHAT;
     close = sheet([
       h("div", { class: "pv-head" }, chatAvatar(c, "xl"), h("h2", null, chatTitle(c)),
-        h("small", null, `${family ? "Вся семья" : "🔒 Приватная группа"} · ${mem.length} ${plural(mem.length, "участник", "участника", "участников")}`)),
+        h("small", null, c.is_channel ? `${c.is_private ? "🔒 Приватный канал" : "🌐 Открытый канал"} · ${mem.length} ${plural(mem.length, "подписчик", "подписчика", "подписчиков")}`
+          : `${family ? "Вся семья" : "🔒 Приватная группа"} · ${mem.length} ${plural(mem.length, "участник", "участника", "участников")}`)),
       c.description ? h("div", { class: "pv-info" }, h("div", { class: "info-row" }, h("span", { class: "info-ico" }, "📝"), h("div", null, h("div", { class: "info-val" }, c.description), h("small", null, "Описание")))) : null,
       h("div", { class: "pv-actions" },
         h("button", { class: "pv-act", onclick: () => { close(); GroupCall.start(c.id, true); } }, h("span", { html: I.video }), "Видеочат"),
         h("button", { class: "pv-act", onclick: () => { close(); Tg.mediaOfChat(c); } }, h("span", { html: I.gallery || I.clip }), "Медиа"),
         h("button", { class: "pv-act", onclick: () => { close(); Wallpaper.sheet(c.id); } }, h("span", { html: I.palette }), "Фон")),
       owner && !family ? h("button", { class: "menu-item", onclick: () => { close(); this.edit(c); } }, h("span", { html: I.pen }), "Изменить название, описание, фото") : null,
-      owner ? h("button", { class: "menu-item", onclick: () => { close(); this.addMembers(c); } }, h("span", { html: I.invite }), "Добавить участников") : null,
+      owner ? h("button", { class: "menu-item", onclick: () => { close(); this.addMembers(c); } }, h("span", { html: I.invite }), c.is_channel ? "Добавить подписчиков" : "Добавить участников") : null,
+      owner && c.is_channel ? h("label", { class: "toggle-row" }, h("span", null, "Открытый канал", h("small", null, "Любой член семьи найдёт его и подпишется сам")),
+        h("input", { type: "checkbox", checked: !c.is_private, onchange: async (e) => {
+          const { data } = await S.sb.rpc("chat_settings", { cid: c.id, private: !e.target.checked, protect: null });
+          if (data !== "OK") { e.target.checked = !e.target.checked; toast("Не получилось"); return; }
+          c.is_private = !e.target.checked; toast(c.is_private ? "Канал стал приватным" : "Канал стал открытым"); this.refresh(c.id);
+        } })) : null,
+      Protect.canChange(c) ? h("label", { class: "toggle-row" }, h("span", null, "🛡 Защита содержимого", h("small", null, "Запрет копирования, пересылки, сохранения и снимков экрана")),
+        h("input", { type: "checkbox", checked: !!c.protected, onchange: () => { close(); Protect.toggle(c); } })) : null,
       h("div", { class: "section-title", style: { padding: "8px 4px 4px" } }, "Участники"),
       ...mem.map((p) => h("div", { class: "member-row" },
         h("button", { class: "menu-item", onclick: () => { close(); Tg.profileView(p.id); } }, avatarEl(p.id, "sm"),
@@ -493,8 +502,8 @@ const Groups = {
           if (data !== "OK") { toast("Не получилось"); return; }
           close(); toast(`${p.name} больше не в группе`); await this.refresh(c.id); const fresh = S.chats.find((x) => x.id === c.id); if (fresh) this.info(fresh);
         } }) : null)),
-      family ? null : h("button", { class: "menu-item danger", style: { marginTop: "8px" }, onclick: () => { close(); this.leave(c); } }, h("span", { html: I.logout }), "Выйти из группы"),
-      c.created_by === S.me.id && !family ? h("button", { class: "menu-item danger", onclick: () => { close(); this.remove(c); } }, h("span", { html: I.trash }), "Удалить группу") : null,
+      family ? null : h("button", { class: "menu-item danger", style: { marginTop: "8px" }, onclick: () => { close(); this.leave(c); } }, h("span", { html: I.logout }), c.is_channel ? "Покинуть канал" : "Выйти из группы"),
+      c.created_by === S.me.id && !family ? h("button", { class: "menu-item danger", onclick: () => { close(); this.remove(c); } }, h("span", { html: I.trash }), c.is_channel ? "Удалить канал" : "Удалить группу") : null,
     ]);
   },
   edit(c) {

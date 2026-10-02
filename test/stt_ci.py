@@ -16,6 +16,7 @@ try:
         print("STT result:", r)
         words = ["привет", "мама", "дела", "семья", "как"]
         assert any(w in r["text"].lower() for w in words), r
+        print(f"::notice title=Расшифровка голосовых::«{r['text']}» за {r['ms']} мс")
         print("STT OK")
         b.close()
 finally:
