@@ -70,6 +70,18 @@ try:
         B.wait_for_function("document.querySelector('.call .status') && /\\d+:\\d\\d/.test(document.querySelector('.call .status').textContent)", timeout=15000)
         A.wait_for_timeout(1500); shot(A, "09_A_in_call"); shot(B, "10_B_in_call")
         has_video = A.evaluate("Calls.hasRemoteVideo()")
+        # демонстрация экрана (путь Android: кадры приходят от приложения)
+        B.evaluate("""() => { window.AndroidBridge = { startScreenShare() {
+            const c = document.createElement('canvas'); c.width = 360; c.height = 640; const x = c.getContext('2d'); let n = 0;
+            window.__fake = setInterval(() => { x.fillStyle = n++ % 2 ? '#2EAD6B' : '#3D8BFD'; x.fillRect(0,0,360,640); x.fillStyle='#fff'; x.font='40px sans-serif'; x.fillText('Экран ' + n, 60, 320);
+              window.onScreenFrame && window.onScreenFrame(c.toDataURL('image/jpeg', .6)); }, 120); return true; },
+          stopScreenShare() { clearInterval(window.__fake); } }; }""")
+        B.click(".scr-btn"); B.wait_for_selector(".share-banner")
+        A.wait_for_selector(".call.remote-screen", timeout=8000); A.wait_for_timeout(2500); shot(A, "20_A_sees_screen"); shot(B, "21_B_sharing")
+        rv = A.evaluate("(() => { const v = document.querySelector('.call video.remote'); return [v.videoWidth, v.videoHeight]; })()")
+        print("screen share frames at A:", rv)
+        B.click(".share-banner button"); A.wait_for_selector(".call:not(.remote-screen)", timeout=8000)
+        print("screen share stop: ok")
         B.click(".cbtn.red"); A.wait_for_selector(".call", state="detached", timeout=5000)
         B.wait_for_selector(".msg .text >> text=📞 Видеозвонок"); shot(B, "11_B_call_log")
         # статус

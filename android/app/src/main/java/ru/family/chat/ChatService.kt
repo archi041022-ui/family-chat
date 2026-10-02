@@ -20,6 +20,8 @@ class ChatService : Service() {
     private var lock: PowerManager.WakeLock? = null
     private var inCall = false
     private var video = false
+    private var callTypesOk = false      // микрофон/камера уже разрешены для этого звонка
+    private var screen: ScreenCapture? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -38,9 +40,23 @@ class ChatService : Service() {
             ACTION_CALL -> {
                 inCall = intent.getBooleanExtra("active", false)
                 video = intent.getBooleanExtra("video", false)
+                if (!inCall) { callTypesOk = false; stopScreen() }
                 goForeground()
                 if (inCall) acquire() else release()
             }
+            ACTION_SCREEN_START -> {
+                val code = intent.getIntExtra("code", 0)
+                @Suppress("DEPRECATION")
+                val data: Intent? = intent.getParcelableExtra("data")
+                if (data == null) { WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()"); return START_STICKY }
+                sharing = true
+                goForeground()                          // тип mediaProjection — до начала захвата
+                screen?.stop()
+                screen = ScreenCapture(this, code, data) { stopScreen() }.also {
+                    if (!it.start()) { stopScreen() }
+                }
+            }
+            ACTION_SCREEN_STOP -> stopScreen()
         }
         return START_STICKY
     }
@@ -50,15 +66,26 @@ class ChatService : Service() {
         if (Build.VERSION.SDK_INT >= 34) {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             // во время звонка микрофон и камера продолжают работать, даже если свернуть приложение
-            if (inCall && WebHolder.foreground) {
+            if (inCall && (WebHolder.foreground || callTypesOk)) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 if (video) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
-            try { startForeground(Notifier.ID_SERVICE, n, type) }
-            catch (_: Throwable) { startForeground(Notifier.ID_SERVICE, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE) }
+            if (sharing) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            try {
+                startForeground(Notifier.ID_SERVICE, n, type)
+                if (inCall && type and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE != 0) callTypesOk = true
+            } catch (_: Throwable) {
+                // без камеры (например, видео выключено) — пробуем микрофон и экран
+                val fallback = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    (if (callTypesOk) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0) or
+                    (if (sharing) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
+                try { startForeground(Notifier.ID_SERVICE, n, fallback) }
+                catch (_: Throwable) { startForeground(Notifier.ID_SERVICE, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE) }
+            }
         } else if (Build.VERSION.SDK_INT >= 29) {
             var type = 0
             if (inCall) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or (if (video) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
+            if (sharing) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             try { startForeground(Notifier.ID_SERVICE, n, type) } catch (_: Throwable) { startForeground(Notifier.ID_SERVICE, n) }
         } else {
             startForeground(Notifier.ID_SERVICE, n)
@@ -73,7 +100,15 @@ class ChatService : Service() {
 
     private fun release() { lock?.let { if (it.isHeld) it.release() }; lock = null }
 
+    private fun stopScreen() {
+        val had = screen != null || sharing
+        screen?.stop(); screen = null
+        if (sharing) { sharing = false; goForeground() }
+        if (had) WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()")
+    }
+
     override fun onDestroy() {
+        screen?.stop(); screen = null
         release()
         running = false
         super.onDestroy()
@@ -82,6 +117,9 @@ class ChatService : Service() {
     companion object {
         const val ACTION_STOP = "ru.family.chat.STOP"
         const val ACTION_CALL = "ru.family.chat.CALL"
+        const val ACTION_SCREEN_START = "ru.family.chat.SCREEN_START"
+        const val ACTION_SCREEN_STOP = "ru.family.chat.SCREEN_STOP"
+        @Volatile var sharing = false
         @Volatile var running = false
 
         fun start(ctx: Context) {
@@ -95,6 +133,18 @@ class ChatService : Service() {
         fun stop(ctx: Context) {
             running = false
             try { ctx.startService(Intent(ctx, ChatService::class.java).setAction(ACTION_STOP)) } catch (_: Throwable) {}
+        }
+
+        fun screenStart(ctx: Context, code: Int, data: Intent) {
+            try {
+                val i = Intent(ctx, ChatService::class.java).setAction(ACTION_SCREEN_START)
+                    .putExtra("code", code).putExtra("data", data)
+                if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+            } catch (_: Throwable) { WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()") }
+        }
+
+        fun screenStop(ctx: Context) {
+            try { ctx.startService(Intent(ctx, ChatService::class.java).setAction(ACTION_SCREEN_STOP)) } catch (_: Throwable) {}
         }
 
         fun callState(ctx: Context, active: Boolean, video: Boolean) {

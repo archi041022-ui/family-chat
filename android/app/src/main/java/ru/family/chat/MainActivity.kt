@@ -144,9 +144,24 @@ class MainActivity : Activity() {
         }
     }
 
+    // ───────────── Демонстрация экрана ─────────────
+    fun startScreenCapture() {
+        try {
+            val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as android.media.projection.MediaProjectionManager
+            startActivityForResult(mpm.createScreenCaptureIntent(), REQ_SCREEN)
+        } catch (_: Throwable) {
+            WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()")
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_SCREEN) {
+            if (resultCode == RESULT_OK && data != null) ChatService.screenStart(this, resultCode, data)
+            else WebHolder.js("window.onScreenShareStopped && onScreenShareStopped()")
+            return
+        }
         if (requestCode != REQ_FILE) return
         val cb = fileCallback ?: return
         fileCallback = null
@@ -162,5 +177,6 @@ class MainActivity : Activity() {
         private const val REQ_MEDIA = 10
         private const val REQ_FILE = 11
         private const val REQ_NOTIFY = 12
+        private const val REQ_SCREEN = 13
     }
 }

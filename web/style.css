@@ -318,3 +318,12 @@ input, textarea { font: inherit; color: inherit; }
 /* экран входа прокручивается, если не помещается (маленький экран, открыта клавиатура) */
 .app.auth-mode { display: block; overflow-y: auto; padding: calc(16px + var(--safe-top)) 0 calc(24px + var(--safe-bottom)); }
 .app.auth-mode .auth { margin: 0 auto; }
+
+/* ───────── Демонстрация экрана ───────── */
+.call.remote-screen video.remote { object-fit: contain; background: #000; }
+.call.sharing video.local { display: none; }
+.share-banner { position: absolute; left: 50%; top: calc(64px + var(--safe-top)); transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 12px;
+  background: #E5484Dee; color: #fff; padding: 8px 8px 8px 16px; border-radius: 999px; font-size: 14px; white-space: nowrap; }
+.share-banner button { background: #fff; color: #E5484D; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
+.call .controls { gap: 14px; }
+.call .cbtn { width: 58px; height: 58px; }

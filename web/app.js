@@ -35,6 +35,7 @@ const I = {
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
   key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/></svg>',
+  screen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M9 10l3-3 3 3M12 7v6"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -1115,6 +1116,10 @@ const Calls = {
       case "busy": toast("Абонент занят"); this.hangup(false, "busy"); break;
       case "hangup": this.hangup(false, "remote"); break;
       case "video": this.ui?.classList.toggle("has-video", !!p.on && this.hasRemoteVideo()); break;
+      case "screen":
+        this.ui?.classList.toggle("remote-screen", !!p.on);
+        if (p.on) toast(`${S.profiles.get(this.peer)?.name || "Собеседник"} показывает экран`);
+        break;
     }
   },
 
@@ -1151,6 +1156,7 @@ const Calls = {
     }
   },
   reset() {
+    if (this.screen) this.stopScreen(true);
     if (this.ui || this.pc) { window.AndroidBridge?.callState?.(false, false); window.AndroidBridge?.cancelCall?.(); }
     clearTimeout(this.ringTimer); clearInterval(this.tick); this.stopRing();
     this.pc?.close(); this.pc = null;
@@ -1182,12 +1188,15 @@ const Calls = {
     const camBtn = h("button", { class: "cbtn", html: this.video ? I.video : I.videoOff });
     camBtn.onclick = () => this.toggleCamera(camBtn);
     const flipBtn = h("button", { class: "cbtn", html: I.flip, onclick: () => this.flip() });
+    const scrBtn = h("button", { class: "cbtn scr-btn", html: I.screen, onclick: () => (this.screen ? this.stopScreen() : this.startScreen()) });
+    const canShare = !!(window.AndroidBridge?.startScreenShare || navigator.mediaDevices?.getDisplayMedia);
     this.ui = h("div", { class: `call${this.role === "caller" ? " ringing" : ""}` }, remoteV, localV,
       h("div", { class: "who" }, avatarEl(this.peer, "xl"), h("b", null, p?.name || ""), h("span", { class: "status" }, status)),
       h("div", { class: "controls" },
         h("div", { class: "cbtn-wrap" }, micBtn, "Микрофон"),
         h("div", { class: "cbtn-wrap" }, camBtn, "Камера"),
         h("div", { class: "cbtn-wrap" }, flipBtn, "Повернуть"),
+        canShare ? h("div", { class: "cbtn-wrap" }, scrBtn, "Экран") : null,
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.hangup(true, "local") }), "Завершить")));
     document.body.append(this.ui);
     this.attach();
@@ -1223,6 +1232,64 @@ const Calls = {
       }
       this.video = true; btn.innerHTML = I.video; btn.classList.remove("off"); this.send(this.peer, { kind: "video", on: true }); this.attach();
     } catch { toast("Камера недоступна"); }
+  },
+  // ── демонстрация экрана
+  async videoSend(track) {
+    const sender = this.pc.getSenders().find((x) => x.track?.kind === "video") ||
+      this.pc.getTransceivers().find((t) => t.receiver.track?.kind === "video" && t.sender && !t.sender.track && t.direction !== "recvonly")?.sender;
+    if (sender) { await sender.replaceTrack(track); return; }
+    this.pc.addTrack(track, this.local);
+    const offer = await this.pc.createOffer(); await this.pc.setLocalDescription(offer);
+    await this.send(this.peer, { kind: "reoffer", sdp: offer.sdp });
+  },
+  async startScreen() {
+    if (!this.pc || !this.connected) { toast("Дождитесь соединения"); return; }
+    let track;
+    try {
+      if (window.AndroidBridge?.startScreenShare) {
+        // Android: кадры экрана приходят из приложения и рисуются на холсте
+        const cv = document.createElement("canvas"); cv.width = 720; cv.height = 1280;
+        const ctx = cv.getContext("2d"); ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cv.width, cv.height);
+        const stream = cv.captureStream(0); track = stream.getVideoTracks()[0];
+        const img = new Image();
+        img.onload = () => {
+          if (cv.width !== img.naturalWidth || cv.height !== img.naturalHeight) { cv.width = img.naturalWidth; cv.height = img.naturalHeight; }
+          ctx.drawImage(img, 0, 0); track.requestFrame?.();
+        };
+        window.onScreenFrame = (data) => { img.src = data; };
+        window.onScreenShareStopped = () => { if (this.screen) this.stopScreen(); };
+        if (!window.AndroidBridge.startScreenShare()) throw new Error("denied");
+      } else {
+        const ds = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+        track = ds.getVideoTracks()[0];
+        track.onended = () => { if (this.screen) this.stopScreen(); };
+      }
+    } catch { toast("Демонстрация экрана недоступна"); return; }
+    const cam = this.local?.getVideoTracks()[0] || null;
+    this.screen = { track, cam, camWasOn: !!cam?.enabled };
+    try { await this.videoSend(track); } catch { this.stopScreen(true); toast("Не удалось начать показ экрана"); return; }
+    this.send(this.peer, { kind: "video", on: true });
+    this.send(this.peer, { kind: "screen", on: true });
+    this.ui?.classList.add("sharing");
+    const b = this.ui?.querySelector(".scr-btn"); if (b) b.classList.add("off");
+    this.ui?.append(h("div", { class: "share-banner" }, "Вы показываете свой экран",
+      h("button", { onclick: () => this.stopScreen() }, "Остановить")));
+  },
+  async stopScreen(silent) {
+    const sc = this.screen; if (!sc) return;
+    this.screen = null;
+    window.AndroidBridge?.stopScreenShare?.();
+    window.onScreenFrame = null; window.onScreenShareStopped = null;
+    try { sc.track.stop(); } catch { /* */ }
+    if (!silent && this.pc) {
+      try { await this.videoSend(sc.cam && sc.cam.readyState === "live" ? sc.cam : null); } catch { /* */ }
+      this.send(this.peer, { kind: "screen", on: false });
+      this.send(this.peer, { kind: "video", on: !!(sc.cam && sc.camWasOn) });
+    }
+    this.ui?.classList.remove("sharing");
+    this.ui?.querySelector(".share-banner")?.remove();
+    const b = this.ui?.querySelector(".scr-btn"); if (b) b.classList.remove("off");
+    this.attach();
   },
   async flip() {
     const vt = this.local?.getVideoTracks()[0]; if (!vt) return;

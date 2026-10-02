@@ -131,6 +131,14 @@ object WebHolder {
             ChatService.stop(ctx)
         }
 
+        @JavascriptInterface fun startScreenShare(): Boolean {
+            val a = activity ?: return false
+            a.runOnUiThread { a.startScreenCapture() }
+            return true
+        }
+
+        @JavascriptInterface fun stopScreenShare() = ChatService.screenStop(ctx)
+
         @JavascriptInterface fun callState(active: Boolean, video: Boolean) = ChatService.callState(ctx, active, video)
     }
 }
