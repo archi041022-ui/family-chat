@@ -131,6 +131,17 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_NOTIFY) { askStartupPermissions(); return }
+        if (requestCode == REQ_LOCATION) {
+            val p = geoPending; geoPending = null
+            val ok = grantResults.any { it == PackageManager.PERMISSION_GRANTED }
+            p?.second?.invoke(p.first, ok, false)
+            return
+        }
+        if (requestCode == REQ_MIC) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) Speech.listen(this)
+            else WebHolder.js("window.onSpeechResult && window.onSpeechResult(null, 'permission')")
+            return
+        }
         if (requestCode == REQ_CAMERA) {
             val p = pendingCapture; pendingCapture = null
             if (p == null) return
@@ -179,6 +190,26 @@ class MainActivity : Activity() {
         } catch (_: Throwable) {
             fileCallback = null; false
         }
+    }
+
+    // ───────────── Геолокация и голосовой ввод ─────────────
+    private var geoPending: Pair<String, android.webkit.GeolocationPermissions.Callback>? = null
+
+    fun askLocation(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
+        val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fine || coarse) { callback.invoke(origin, true, false); return }
+        geoPending?.let { it.second.invoke(it.first, false, false) }
+        geoPending = origin to callback
+        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
+    }
+
+    fun startListening() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+            return
+        }
+        Speech.listen(this)
     }
 
     // ───────────── Демонстрация экрана ─────────────
@@ -241,5 +272,7 @@ class MainActivity : Activity() {
         private const val REQ_SCREEN = 13
         private const val REQ_CAPTURE = 14
         private const val REQ_CAMERA = 15
+        private const val REQ_LOCATION = 16
+        private const val REQ_MIC = 17
     }
 }

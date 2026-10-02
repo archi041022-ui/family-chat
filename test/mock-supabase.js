@@ -129,6 +129,7 @@
           async getSession() { const s = me(); return { data: { session: s ? { user: s } : null } }; },
           async signInWithPassword({ email, password }) {
             const u = load().users.find((x) => x.email === email);
+            if (u && load().profiles.find((x) => x.id === u.id)?.banned) return { data: {}, error: { message: "User is banned" } };
             if (!u || (u.password && u.password !== password)) return { data: {}, error: { message: "Invalid login credentials" } };
             sessionStorage.setItem("mocksess", JSON.stringify(u)); return { data: { user: u, session: {} }, error: null };
           },
@@ -150,6 +151,17 @@
         async rpc(name, args) {
           const db = load(), u = me()?.id;
           db.words = db.words || {};
+          if (name === "admin_set_ban") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            const pr = db.profiles.find((x) => x.id === args.target); if (!pr) return { data: "NO_USER", error: null };
+            pr.banned = args.ban; save(db); emit("profiles", "UPDATE", pr); return { data: "OK", error: null };
+          }
+          if (name === "admin_delete_user") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            db.users = db.users.filter((x) => x.id !== args.target); db.profiles = db.profiles.filter((x) => x.id !== args.target);
+            db.messages = db.messages.filter((x) => x.user_id !== args.target); db.chat_members = db.chat_members.filter((x) => x.user_id !== args.target);
+            save(db); return { data: "OK", error: null };
+          }
           if (name === "get_invite_code") return { data: u ? (db.invite || "SEMYA-4825") : null, error: null };
           if (name === "set_invite_code") { if (db.admin !== u) return { data: "NOT_ADMIN", error: null }; db.invite = args.code.toUpperCase(); save(db); return { data: "OK", error: null }; }
           if (name === "set_recovery_word") { db.words[u] = args.word.trim().toLowerCase(); save(db); return { data: null, error: null }; }
@@ -189,6 +201,12 @@
           async createSignedUrls(paths) { const db = load(); return { data: paths.map((p) => ({ path: p, signedUrl: db.files[p] })) }; },
         }) },
         channel: (name) => new Channel(name),
+        functions: { async invoke(fn, { body }) {
+          await new Promise((r) => setTimeout(r, 300));
+          const last = body.messages.at(-1).content;
+          window.__asstCalls = (window.__asstCalls || 0) + 1; window.__asstLast = body;
+          return { data: { reply: /погод/i.test(last) ? `Погода сейчас: +7°C, небольшой дождь${body.lat ? " (по геолокации)" : ""}.` : "Тестовый ответ на: " + last }, error: null };
+        } },
       };
     },
   };

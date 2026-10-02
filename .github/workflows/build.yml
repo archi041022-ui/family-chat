@@ -2,7 +2,7 @@ name: Сборка мессенджера
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, "check-*" ]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +21,7 @@ jobs:
           curl -fsSL -o web/vendor/qrcode.js https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js
 
       - name: Сайт (GitHub Pages)
+        if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -45,6 +46,7 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk ../Semya.apk
 
       - name: Публикация APK
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

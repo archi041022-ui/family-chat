@@ -40,6 +40,13 @@ const I = {
   invite: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0114 0M19 8v6M16 11h6"/></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8a2 2 0 012-2h2l2-2h6l2 2h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="4"/></svg>',
   gallery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 16l-5-5L5 21"/></svg>',
+  circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>',
+  speaker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
+  mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 5M22 9l-5 5"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
+  bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -190,6 +197,7 @@ function showAuth() {
       err.textContent =
         /INVALID_INVITE|Database error saving new user/i.test(m) ? "Неверный код приглашения" :
         /Invalid login credentials/i.test(m) ? "Неверный логин или пароль" :
+        /banned/i.test(m) ? "Доступ закрыт администратором семьи" :
         /already registered|already exists/i.test(m) ? "Такой логин уже занят" :
         /Email not confirmed/i.test(m) ? "Почта не подтверждена. Создателю: отключите «Confirm email» в Supabase." :
         /fetch|network/i.test(m) ? "Нет связи с сервером" : m;
@@ -457,7 +465,8 @@ async function adminResetFor(p) {
 async function enter(user) {
   app.className = "app"; app.innerHTML = "";
   const { data: me } = await S.sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  if (!me) { await S.sb.auth.signOut(); showAuth(); toast("Профиль не найден"); return; }
+  if (!me) { await S.sb.auth.signOut(); showAuth(); toast("Аккаунт не найден — возможно, его удалил администратор семьи", 5000); return; }
+  if (me.banned) { await S.sb.auth.signOut(); showAuth(); toast("Доступ закрыт администратором семьи", 5000); return; }
   S.me = me;
   await loadProfiles();
   await loadChats();
@@ -572,13 +581,15 @@ function previewText(m) {
   if (!m) return "Нет сообщений";
   if (m.deleted) return "Сообщение удалено";
   const who = m.user_id === S.me.id ? "Вы: " : "";
-  const kind = { image: "📷 Фото", video: "🎬 Видео", audio: "🎤 Голосовое", file: "📎 Файл" }[m.media_type];
+  if (m.media_type === "location") return who + "📍 Геолокация";
+  const kind = { image: "📷 Фото", video: "🎬 Видео", audio: "🎤 Голосовое", file: "📎 Файл", video_note: "⭕ Видеосообщение" }[m.media_type];
   return who + (kind ? kind + (m.body ? " · " + m.body : "") : (m.body || ""));
 }
 
 function renderChatList() {
   const list = $("#chatItems"); if (!list) return;
   list.innerHTML = "";
+  if (!S.filter || "ассистент помощник погода новости".includes(S.filter)) list.append(Assistant.listItem());
   const totalUnread = [...S.unread.values()].reduce((a, b) => a + b, 0);
   const cb = $("#chatsBadge"); if (cb) { cb.textContent = totalUnread > 99 ? "99+" : totalUnread; cb.classList.toggle("hidden", !totalUnread); }
   const sorted = [...S.chats].sort((a, b) => {
@@ -595,13 +606,13 @@ function renderChatList() {
         h("div", { class: "row" }, h("span", { class: "name" }, title), h("span", { class: "time" }, last ? fmtListTime(last.created_at) : "")),
         h("div", { class: "row" }, h("span", { class: "last" }, previewText(last)), unread ? h("span", { class: "badge" }, unread > 99 ? "99+" : unread) : null))));
   }
-  if (!list.children.length) list.append(h("p", { class: "empty-chat" }, S.filter ? "Ничего не найдено" : "Пока нет чатов"));
+  if (list.children.length <= 1 && S.filter) list.append(h("p", { class: "empty-chat" }, "Ничего не найдено"));
 }
 
 // ───────────── Открытый чат ─────────────
 async function openChat(chatId) {
   if (S.current === chatId) return;
-  S.current = chatId; S.replyTo = null;
+  S.current = chatId; S.replyTo = null; S.assistantOpen = false;
   const c = S.chats.find((x) => x.id === chatId); if (!c) return;
   if (location.hash.slice(1) !== chatId) history.replaceState(history.state, "", "#" + chatId);
   app.classList.add("in-chat");
@@ -635,6 +646,7 @@ async function openChat(chatId) {
   $("#msgs").addEventListener("scroll", onScrollTop);
 }
 function closeChat(fromPop) {
+  S.assistantOpen = false;
   S.current = null; app.classList.remove("in-chat");
   $("#chatView")?.remove();
   if (!$("#placeholder")) app.append(h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
@@ -734,7 +746,9 @@ function messageEl(m, c, firstInRun, tail) {
     else if (m.media_type === "audio") bubble.append(h("audio", { src: url || "", controls: true, preload: "metadata" }));
     else if (m.media_type === "file") bubble.append(h("a", { class: "file", href: url || "#", target: "_blank", rel: "noopener", download: m.media_name || "" },
       h("span", { class: "icon-btn", html: I.file }), h("span", null, m.media_name || "Файл")));
-    if (m.body) bubble.append(h("div", { class: "text" }, linkify(m.body)));
+    else if (m.media_type === "video_note") { bubble.classList.add("vnote-bubble"); bubble.append(videoNoteEl(url)); }
+    else if (m.media_type === "location") { const g = parseGeo(m.body); if (g) bubble.append(mapCard(g.lat, g.lon, g.acc)); }
+    if (m.body && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(m.body)));
   }
   const meta = h("span", { class: "meta" }, fmtTime(m.created_at));
   if (out && !m.deleted) {
@@ -881,6 +895,8 @@ function attachMenu(fileInput) {
     h("button", { class: "menu-item", onclick: () => pick("image/*,video/*") }, h("span", { html: I.gallery }), "Фото или видео из галереи"),
     h("button", { class: "menu-item", onclick: () => pick("image/*", "environment") }, h("span", { html: I.camera }), "Сделать фото"),
     h("button", { class: "menu-item", onclick: () => { close(); VideoRec.open(); } }, h("span", { html: I.video }), "Записать видео"),
+    h("button", { class: "menu-item", onclick: () => { close(); VideoNote.open(); } }, h("span", { html: I.circle }), "Видеосообщение (кружок)"),
+    h("button", { class: "menu-item", onclick: () => { close(); sendLocation(); } }, h("span", { html: I.pin }), "Моя геолокация"),
     h("button", { class: "menu-item", onclick: () => pick("*/*") }, h("span", { html: I.file }), "Файл или документ"),
   ]);
 }
@@ -981,10 +997,11 @@ const VideoRec = {
 window.handleBack = function () {
   const lb = document.querySelector(".lightbox"); if (lb) { lb.remove(); return true; }
   if (VideoRec.close) { VideoRec.close(); return true; }
+  if (VideoNote.close) { VideoNote.close(); return true; }
   if (Stories.closeViewer) { Stories.closeViewer(); return true; }
   if (Calls.ui) return true;                                   // во время звонка жест ничего не закрывает
   const sh = [...document.querySelectorAll(".sheet-back")].pop(); if (sh) { sh._close ? sh._close() : sh.remove(); return true; }
-  if (S.current) { closeChat(true); return true; }
+  if (S.current || S.assistantOpen) { closeChat(true); return true; }
   if ($("#tabChats")?.classList.contains("hidden")) { showTab("chats"); return true; }
   return false;
 };
@@ -1030,10 +1047,10 @@ async function postMessage(fields, chatId = S.current) {
   return data;
 }
 
-async function sendFile(f) {
+async function sendFile(f, opts = {}) {
   const chatId = S.current; if (!chatId) return;
   if (f.size > 50 * 1024 * 1024) { toast("Файл больше 50 МБ — слишком большой"); return; }
-  let type = f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "file";
+  let type = opts.asType || (f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "file");
   let blob = f, ext = (f.name.split(".").pop() || "bin").toLowerCase();
   if (type === "image" && !/gif|svg/.test(f.type)) {
     try { blob = await compressImage(f); ext = "jpg"; } catch { /* отправим как есть */ }
@@ -1046,8 +1063,9 @@ async function sendFile(f) {
   if (error) { toast("Не удалось загрузить файл: " + (error.message || "")); return; }
   await signUrls([path]);
   const caption = $("#input")?.value.trim();
-  if (caption && type !== "file") { $("#input").value = ""; $("#input").dispatchEvent(new Event("input")); }
-  await postMessage({ media_path: path, media_type: type, media_name: f.name.slice(0, 120), body: caption && type !== "file" ? caption : null });
+  const withCaption = caption && (type === "image" || type === "video");
+  if (withCaption) { $("#input").value = ""; $("#input").dispatchEvent(new Event("input")); }
+  await postMessage({ media_path: path, media_type: type, media_name: f.name.slice(0, 120), body: withCaption ? caption : null });
 }
 
 function compressImage(file, max = 1600, quality = 0.85) {
@@ -1101,7 +1119,7 @@ const Voice = {
 // ───────────── Новые чаты, профиль ─────────────
 function newChatSheet() {
   let close;
-  const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id && !p.banned).sort((a, b) => a.name.localeCompare(b.name, "ru"));
   close = sheet([
     h("h3", null, "Новый чат"),
     h("button", { class: "menu-item", onclick: () => { close(); newGroupSheet(); } }, h("span", { html: I.group }), "Создать группу"),
@@ -1178,6 +1196,7 @@ function openProfile() {
     } }, "Сохранить"),
     h("button", { class: "menu-item", style: { marginTop: "8px" }, onclick: () => { close(); changePasswordSheet(); } }, h("span", { html: I.lock }), "Сменить пароль"),
     h("button", { class: "menu-item", onclick: () => { close(); recoveryWordSheet(); } }, h("span", { html: I.key }), "Кодовое слово для восстановления"),
+    S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); membersAdmin(); } }, h("span", { html: I.shield }), "Управление участниками") : null,
     S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); adminResetSheet(); } }, h("span", { html: I.group }), "Сбросить пароль участнику") : null,
     h("button", { class: "menu-item danger", onclick: async () => {
       await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
@@ -1225,6 +1244,10 @@ function subscribe() {
 
 }
 function onProfileChange(np) {
+  if (np.id === S.me?.id && np.banned) {
+    S.sb.auth.signOut().finally(() => { window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload(); });
+    return;
+  }
   const old = S.profiles.get(np.id) || {};
   S.profiles.set(np.id, { ...old, ...np });
   if (np.id === S.me.id) Object.assign(S.me, np);

@@ -8,6 +8,7 @@ OUT = "/tmp/fc-shots"
 shutil.rmtree(T, ignore_errors=True); shutil.copytree(f"{ROOT}/web", T)
 os.makedirs(f"{T}/vendor", exist_ok=True); os.makedirs(OUT, exist_ok=True)
 shutil.copy(f"{ROOT}/test/mock-supabase.js", f"{T}/vendor/supabase.js")
+# плитки карты в тесте не грузим из интернета
 open(f"{T}/vendor/qrcode.js", "w").write("window.qrcode=()=>({addData(){},make(){},createDataURL(){const c=document.createElement('canvas');c.width=c.height=33;const x=c.getContext('2d');for(let i=0;i<33;i++)for(let j=0;j<33;j++)if((i*7+j*13)%5<2)x.fillRect(i,j,1,1);return c.toDataURL();}});")
 open(f"{T}/config.js", "w").write(open(f"{ROOT}/web/config.js").read()
     .replace('supabaseUrl: ""', 'supabaseUrl: "https://mock"').replace('supabaseKey: ""', 'supabaseKey: "mock"'))
@@ -30,7 +31,10 @@ def register(page, login, name, invite="SEMYA-4825"):
 try:
     with sync_playwright() as p:
         b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required"])
-        ctx = b.new_context(viewport={"width": 390, "height": 800}, permissions=["camera", "microphone"])
+        ctx = b.new_context(viewport={"width": 390, "height": 800}, permissions=["camera", "microphone", "geolocation"], geolocation={"latitude": 55.7963, "longitude": 49.1088, "accuracy": 20})
+        import base64
+        tile = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4dOkSAATsAm3jYRpjAAAAAElFTkSuQmCC")
+        ctx.route("https://tile.openstreetmap.org/**", lambda r: r.fulfill(status=200, content_type="image/png", body=tile))
         A = ctx.new_page(); B = ctx.new_page()
         for pg, nm in ((A, "A"), (B, "B")):
             pg.on("pageerror", lambda e, nm=nm: errors.append(f"{nm}: {e}"))
@@ -147,6 +151,45 @@ try:
         assert A.locator(".story-viewer").count() == 0 and "index.html" in A.url
         A.click("#tabBtnChats")
         print("back gesture: ok")
+        # видео-кружок
+        A.click("#chatList >> text=Семья"); A.wait_for_selector("#input")
+        A.click("button[title='Фото, видео, файл']"); A.click(".sheet >> text=Видеосообщение (кружок)")
+        A.wait_for_selector(".vnote-rec .vr-rec"); A.wait_for_timeout(700)
+        A.click(".vnote-rec .vr-rec"); A.wait_for_selector(".vnote-rec.is-rec"); A.wait_for_timeout(2200); shot(A, "27_A_vnote_rec")
+        A.click(".vnote-rec .vr-rec"); A.wait_for_selector(".msg.out .vnote", timeout=15000)
+        B.click("#chatList >> text=Семья"); B.wait_for_selector(".msg.in .vnote", timeout=15000); B.wait_for_timeout(800)
+        B.click(".msg.in .vnote >> nth=-1"); B.wait_for_timeout(600); shot(B, "28_B_vnote")
+        print("video note: ok, playing:", B.evaluate("document.querySelectorAll('.vnote.playing').length"))
+        # геолокация
+        A.click("button[title='Фото, видео, файл']"); A.click(".sheet >> text=Моя геолокация")
+        A.wait_for_selector(".sheet .map-card"); A.click(".sheet .btn.wide")
+        A.wait_for_timeout(1500); shot(A, "29a_A_after_loc"); print("A last msg:", A.evaluate("JSON.stringify((S.msgs.get(S.current)||[]).slice(-1).map(m=>[m.media_type,m.body,m.pending]))"))
+        B.wait_for_selector(".msg.in .map-card", timeout=10000); B.wait_for_timeout(500); shot(B, "29_B_location")
+        print("location:", B.inner_text(".msg.in .map-card >> nth=-1").split("\n")[1])
+        B.click(".back-btn"); A.click(".back-btn")
+        # ассистент
+        A.click(".assistant-item"); A.wait_for_selector(".asst-chips")
+        A.click(".asst-chips >> text=Погода сейчас"); A.wait_for_selector("#asstMsgs .msg.in >> text=Погода сейчас: +7")
+        A.fill("#asstInput", "Кто написал «Войну и мир»?"); A.click("#chatView .composer .send")
+        A.wait_for_selector("#asstMsgs .msg.in >> text=Тестовый ответ на: Кто написал"); shot(A, "30_A_assistant")
+        print("assistant: ok, sent geo:", A.evaluate("!!(window.__asstLast && 'messages' in window.__asstLast)"), A.evaluate("window.__asstCalls"))
+        A.click("button[title='Настройки']"); A.click(".segmented >> text=Мужской"); A.wait_for_timeout(200)
+        print("voice setting:", A.evaluate("Assistant.settings.voice"))
+        A.click(".sheet .btn.wide"); A.evaluate("() => window.handleBack()")
+        assert A.locator("#chatView").count() == 0
+        # управление участниками: блокировка и удаление
+        A.click("button[title='Профиль']"); A.click("text=Управление участниками")
+        A.wait_for_selector(".admin-row >> text=Мама"); shot(A, "31_A_admin")
+        A.click(".admin-row:has-text('Мама') button"); A.click(".sheet >> text=Добавить в чёрный список")
+        A.click(".confirm-row .btn.danger"); A.wait_for_timeout(800)
+        B.wait_for_selector("text=Только для своих", timeout=8000)
+        B.fill("input[autocomplete=username]", "mama"); B.fill("input[type=password]", "secret123"); B.click("button[type=submit]")
+        B.wait_for_selector("text=Доступ закрыт администратором семьи"); shot(B, "32_B_banned")
+        print("ban: ok")
+        A.click("button[title='Профиль']"); A.click("text=Управление участниками")
+        A.click(".admin-row:has-text('Мама') button"); A.click(".sheet >> text=Убрать из чёрного списка"); A.wait_for_timeout(500)
+        B.click("button[type=submit]"); B.wait_for_selector("#chatItems .chat-item")
+        print("unban: ok")
         # раздел «Пригласить»
         A.click("#tabBtnInvite"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
         A.evaluate("() => { window.AndroidBridge = window.AndroidBridge || {}; window.AndroidBridge.shareText = (t) => { window.__inv = t; }; }")

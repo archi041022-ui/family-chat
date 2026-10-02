@@ -53,6 +53,7 @@ object WebHolder {
             allowFileAccess = false
             allowContentAccess = true
             setSupportMultipleWindows(false)
+            setGeolocationEnabled(true)
         }
         w.addJavascriptInterface(Bridge(app), "AndroidBridge")
         w.webViewClient = object : WebViewClient() {
@@ -69,6 +70,11 @@ object WebHolder {
             override fun onPermissionRequest(request: PermissionRequest) {
                 val a = activity
                 if (a == null) request.deny() else a.runOnUiThread { a.askMediaPermissions(request) }
+            }
+
+            override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
+                val a = activity
+                if (a == null) callback.invoke(origin, false, false) else a.runOnUiThread { a.askLocation(origin, callback) }
             }
 
             override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
@@ -133,6 +139,18 @@ object WebHolder {
         }
 
         @JavascriptInterface fun takeShared(): String = Sharing.take()
+
+        @JavascriptInterface fun speak(text: String, gender: String) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.speak(ctx, text, gender) }
+        }
+
+        @JavascriptInterface fun stopSpeaking() = Speech.stop()
+
+        @JavascriptInterface fun listen() {
+            val a = activity
+            if (a == null) { WebHolder.js("window.onSpeechResult && window.onSpeechResult(null, 'error')"); return }
+            a.runOnUiThread { a.startListening() }
+        }
 
         @JavascriptInterface fun shareFile(url: String, mime: String, name: String, text: String?) =
             Sharing.shareFile(ctx, url, mime, name, text)
