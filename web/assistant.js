@@ -5,7 +5,7 @@ const Assistant = {
   history: [],
   busy: false,
   geo: null,          // { lat, lon, at }
-  settings: { voice: "female", speak: true, city: "" },
+  settings: { voice: "female", speak: true, city: "", handsfree: true, voiceEngine: "auto" },
 
   key(k) { return `assistant:${k}:${S.me?.id || ""}`; },
   load() {
@@ -18,13 +18,16 @@ const Assistant = {
     try { localStorage.setItem(this.key("s"), JSON.stringify(this.settings)); } catch { /* */ }
   },
 
-  // пункт над списком чатов
+  // личный ассистент — закреплён первым в списке чатов у каждого участника; переписка видна только ему
   listItem() {
-    return h("button", { class: `chat-item assistant-item${S.assistantOpen ? " on" : ""}`, onclick: () => this.open() },
+    if (!this.loaded) { this.load(); this.loaded = true; }
+    const last = [...this.history].reverse().find((m) => m.content);
+    const prev = last ? (last.role === "user" ? "Вы: " : "") + String(last.content).replace(/\s+/g, " ") : `Личный помощник${S.me?.name ? " для " + S.me.name.split(" ")[0] : ""}: погода, новости, звонки`;
+    return h("button", { class: `chat-item assistant-item pinned${S.assistantOpen ? " on" : ""}`, onclick: () => this.open() },
       h("div", { class: "avatar assistant-avatar", html: I.bot }),
       h("div", { class: "mid" },
-        h("div", { class: "row" }, h("span", { class: "name" }, "Ассистент")),
-        h("div", { class: "row" }, h("span", { class: "last" }, "Погода, новости, курсы валют — просто спросите"))));
+        h("div", { class: "row" }, h("span", { class: "name" }, "Мой ассистент"), h("span", { class: "time" }, last?.at ? fmtListTime(last.at) : "")),
+        h("div", { class: "row" }, h("span", { class: "last" }, prev), h("span", { class: "pin-ico", html: I.pushpin }))));
   },
 
   open() {
@@ -43,7 +46,7 @@ const Assistant = {
       h("div", { class: "topbar" },
         h("button", { class: "icon-btn back-btn", onclick: () => closeChat(), html: I.back }),
         h("div", { class: "avatar sm assistant-avatar", html: I.bot }),
-        h("div", { class: "title" }, h("b", null, "Ассистент"), h("small", { id: "asstSub" }, "с выходом в интернет")),
+        h("div", { class: "title" }, h("b", null, "Мой ассистент"), h("small", { id: "asstSub" }, "с выходом в интернет")),
         speakBtn,
         h("button", { class: "icon-btn", title: "Настройки", html: I.gear, onclick: () => this.settingsSheet() })),
       h("div", { class: "messages", id: "asstMsgs" }),
@@ -105,42 +108,62 @@ const Assistant = {
     return this.geo;
   },
 
-  async ask(text) {
+  async ask(text, fromVoice = false) {
     if (this.busy) return;
     Voice2.stop();
+    this.fromVoice = fromVoice;
     this.history.push({ role: "user", content: text, at: Date.now() });
-    // звонки и сообщения выполняются прямо в приложении, без интернета-нейросети
+    // звонки и сообщения выполняются прямо в приложении, без нейросети
     try { if (await this.command(text)) return; } catch { /* обычный вопрос */ }
-    this.busy = true; this.render(); this.save();
-    let geo = null;
-    if (/погод|температур|градус|дожд|снег|ветер|прогноз|холодно|тепло|зонт|одеться/i.test(text) && !/\s(в|во)\s+[А-ЯЁ]/.test(text) && !this.settings.city) geo = await this.location();
-    let reply;
-    try {
-      const { data, error } = await S.sb.functions.invoke("assistant", {
-        body: { messages: this.history.slice(-10).map(({ role, content }) => ({ role, content })), lat: geo?.lat, lon: geo?.lon, city: this.settings.city || undefined, name: S.me?.name },
-      });
-      if (error) throw error;
-      reply = data?.reply || "Не получилось ответить, попробуйте ещё раз.";
-    } catch {
-      reply = "Нет связи с ассистентом. Проверьте интернет и попробуйте ещё раз.";
+    // простое — отвечаем сразу, без интернета
+    const q = this.quick(text);
+    if (q) { this.say(q); return; }
+    this.busy = true; this.render(); this.save(); this.setSub("думаю…");
+    let reply = null;
+    // погода и курсы — напрямую из открытых источников (1–2 секунды вместо 10)
+    try { reply = await this.direct(text); } catch { reply = null; }
+    if (!reply) {
+      let geo = null;
+      if (this.isWeather(text) && !/\s(в|во)\s+[А-ЯЁ]/.test(text) && !this.settings.city) geo = await this.location();
+      try {
+        const call = S.sb.functions.invoke("assistant", {
+          body: { messages: this.history.slice(-10).map(({ role, content }) => ({ role, content })), lat: geo?.lat, lon: geo?.lon, city: this.settings.city || undefined, name: S.me?.name },
+        });
+        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 35000));
+        const { data, error } = await Promise.race([call, timeout]);
+        if (error) throw error;
+        reply = data?.reply || "Не получилось ответить, попробуйте ещё раз.";
+      } catch (e) {
+        reply = String(e?.message) === "timeout" ? "Сервер долго не отвечает. Спросите ещё раз чуть позже." : "Нет связи с ассистентом. Проверьте интернет и попробуйте ещё раз.";
+      }
     }
-    this.busy = false;
+    this.busy = false; this.setSub();
     this.history.push({ role: "assistant", content: reply, at: Date.now() });
     this.save(); this.render();
-    if (this.settings.speak && S.assistantOpen) Voice2.speak(reply, this.settings.voice);
+    this.voice(reply);
   },
-
-  listen(btn) {
+  setSub(t) { const el = $("#asstSub"); if (el) el.textContent = t || "с выходом в интернет"; },
+  // озвучить ответ; в разговорном режиме после ответа снова слушаем
+  voice(text) {
+    const again = this.fromVoice && this.settings.handsfree && !this.pending?.noListen;
+    const relisten = () => { if (again && S.assistantOpen && !this.busy) { const mic = $("#chatView .composer .send"); if (mic && !$("#asstInput")?.value.trim()) this.listen(mic, true); } };
+    if (this.settings.speak && S.assistantOpen) Voice2.speak(text, this.settings.voice, relisten);
+    else relisten();
+  },
+  listen(btn, auto = false) {
     Voice2.stop();
+    if (this.listening) return;
+    this.listening = true;
     const done = (text) => {
-      btn.classList.remove("listening"); $("#asstSub") && ($("#asstSub").textContent = "с выходом в интернет");
-      if (text) this.ask(text);
+      this.listening = false;
+      btn.classList.remove("listening"); this.setSub();
+      if (text) this.ask(text, true);
     };
     btn.classList.add("listening"); $("#asstSub") && ($("#asstSub").textContent = "слушаю…");
     if (window.AndroidBridge?.listen) {
       window.onSpeechResult = (text, err) => {
         window.onSpeechResult = null;
-        if (!text && err) toast(err === "no_match" ? "Не расслышал, попробуйте ещё раз" : err === "permission" ? "Нет доступа к микрофону" : "Распознавание речи недоступно");
+        if (!text && err && !(auto && err === "no_match")) toast(err === "no_match" ? "Не расслышал, попробуйте ещё раз" : err === "permission" ? "Нет доступа к микрофону" : "Распознавание речи недоступно");
         done(text);
       };
       window.AndroidBridge.listen();
@@ -169,6 +192,15 @@ const Assistant = {
       h("div", { class: "section-title", style: { padding: "4px 4px 6px" } }, "Голос"),
       h("div", { class: "segmented" }, g("female", "👩 Женский"), g("male", "👨 Мужской")),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.speak, onchange: (e) => { this.settings.speak = e.target.checked; this.save(); } }), "Озвучивать ответы"),
+      h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.handsfree, onchange: (e) => { this.settings.handsfree = e.target.checked; this.save(); } }), "Разговор голосом: после ответа снова слушать"),
+      h("div", { class: "section-title", style: { padding: "10px 4px 6px" } }, "Чей голос использовать"),
+      h("div", { class: "segmented" }, ...[["auto", "Авто"], ["device", "Телефона"], ["online", "Интернет"]].map(([v, l]) =>
+        h("button", { class: `seg${(this.settings.voiceEngine || "auto") === v ? " on" : ""}`, onclick: (e) => {
+          this.settings.voiceEngine = v; this.save(); Voice2.native = null; Voice2.slow = 0;
+          e.target.parentNode.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === e.target));
+        } }, l))),
+      h("button", { class: "menu-item", onclick: () => { window.AndroidBridge?.resetVoice?.(); Voice2.native = null; Voice2.slow = 0; Voice2.speak("Проверка голоса. Так я буду отвечать.", this.settings.voice); } }, h("span", { html: I.speaker }), "Проверить голос"),
+      window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => { window.AndroidBridge.resetVoice?.(); Voice2.native = null; window.AndroidBridge.openSettings("ttsData"); } }, h("span", { html: I.download }), "Скачать русский голос для телефона") : null,
       h("label", { class: "field", style: { marginTop: "10px" } }, h("span", null, "Город для погоды"), city),
       h("button", { class: "btn wide", onclick: () => { this.settings.city = city.value.trim(); this.save(); close(); toast("Сохранено"); } }, "Сохранить"),
       h("button", { class: "menu-item danger", style: { marginTop: "8px" }, onclick: () => { this.history = []; this.save(); this.render(); close(); } }, h("span", { html: I.trash }), "Очистить переписку с ассистентом"),
@@ -183,7 +215,7 @@ Object.assign(Assistant, {
   say(text, extra = {}) {
     const m = { role: "assistant", content: text, at: Date.now(), ...extra };
     this.history.push(m); this.save(); this.render();
-    if (this.settings.speak && S.assistantOpen) Voice2.speak(text, this.settings.voice);
+    this.voice(text);
     return m;
   },
 
@@ -373,21 +405,98 @@ Object.assign(Assistant, {
 
 // ───────────── Озвучка ─────────────
 const Voice2 = {
-  speak(text, gender = "female") {
-    const t = String(text || "").replace(/https?:\/\/\S+/g, "").replace(/[*_#>`]/g, "").slice(0, 1500);
-    if (!t.trim()) return;
-    if (window.AndroidBridge?.speak) { window.AndroidBridge.speak(t, gender); return; }
-    const ss = window.speechSynthesis; if (!ss) return;
-    ss.cancel();
-    const u = new SpeechSynthesisUtterance(t); u.lang = "ru-RU";
-    const v = this.pickVoice(gender);
-    if (v) u.voice = v;
-    // если у устройства нет голоса нужного пола — меняем высоту
-    u.pitch = v && this.isGender(v, gender) ? 1 : (gender === "male" ? 0.7 : 1.15);
-    u.rate = 1;
-    ss.speak(u);
+  // Порядок: голос телефона (Android) → голос браузера → голос из интернета.
+  // Если голос телефона не отвечает или в нём нет русского языка — сразу переходим к запасному.
+  native: null,          // null — ещё не знаем, true — работает, false — не работает на этом устройстве
+  slow: 0, cur: "", gender: "female", onEnd: null, audio: null, queue: [],
+  clean(text) { return String(text || "").replace(/https?:\/\/\S+/g, "").replace(/[*_#>`]/g, "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").slice(0, 1500).trim(); },
+  mode() { return Assistant.settings.voiceEngine || "auto"; },
+  speak(text, gender = "female", onEnd) {
+    const t = this.clean(text);
+    this.stop();
+    this.onEnd = onEnd || null;
+    if (!t) { this.finish(); return; }
+    this.cur = t; this.gender = gender;
+    const m = this.mode();
+    if (m !== "online" && window.AndroidBridge?.speak && this.native !== false) {
+      this.waiting = true;
+      window.AndroidBridge.speak(t, gender);
+      clearTimeout(this.fb);
+      // голос телефона должен начать говорить за несколько секунд (первый раз — дольше: движок запускается)
+      this.fb = setTimeout(() => {
+        if (!this.waiting) return;
+        this.waiting = false;
+        if (++this.slow >= 2) this.native = false;
+        try { window.AndroidBridge.stopSpeaking(); } catch { /* */ }
+        if (m === "auto") this.online(t); else this.finish();
+      }, this.native ? 3000 : 6500);
+      return;
+    }
+    if (m !== "online" && this.browserVoice(t, gender)) return;
+    if (m === "device" && !window.AndroidBridge?.speak) { this.online(t); return; }
+    this.online(t);
   },
+  // события от Android: start / done / fail
+  onState(state, reason) {
+    if (state === "start") { this.waiting = false; clearTimeout(this.fb); this.native = true; this.slow = 0; return; }
+    if (state === "done") { this.finish(); return; }
+    if (state === "fail") {
+      const was = this.waiting; this.waiting = false; clearTimeout(this.fb);
+      if (reason === "engine" || reason === "nolang") {
+        this.native = false;
+        if (reason === "nolang" && !this.hinted) { this.hinted = true; this.reason = reason;
+          toast("В телефоне нет русского голоса — говорю голосом из интернета. Скачать голос: Ассистент → Настройки", 5000); }
+      }
+      if ((was || reason === "engine" || reason === "nolang") && this.cur && this.mode() !== "device") this.online(this.cur);
+      else this.finish();
+    }
+  },
+  browserVoice(t, gender) {
+    const ss = window.speechSynthesis; if (!ss || window.AndroidBridge) return false;
+    const v = this.pickVoice(gender);
+    if (!v && !(ss.getVoices() || []).length) return false;
+    try {
+      ss.cancel();
+      const u = new SpeechSynthesisUtterance(t); u.lang = "ru-RU";
+      if (v) u.voice = v;
+      u.pitch = v && this.isGender(v, gender) ? 1 : (gender === "male" ? 0.7 : 1.15);
+      u.rate = 1;
+      u.onend = () => this.finish();
+      u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") this.online(t); };
+      ss.speak(u);
+      return true;
+    } catch { return false; }
+  },
+  // голос из интернета: короткими фразами до 180 символов
+  online(t) {
+    const parts = [];
+    for (const sent of t.replace(/\n+/g, ". ").split(/(?<=[.!?;:])\s+/)) {
+      let x = sent.trim();
+      while (x.length > 180) { const cut = x.lastIndexOf(" ", 180) > 60 ? x.lastIndexOf(" ", 180) : 180; parts.push(x.slice(0, cut)); x = x.slice(cut).trim(); }
+      if (x) parts.push(x);
+    }
+    this.queue = parts; this.playNext();
+  },
+  playNext() {
+    const q = this.queue.shift();
+    if (!q) { this.finish(); return; }
+    const url = (CFG.ttsUrl || "https://translate.google.com/translate_tts?ie=UTF-8&tl=ru&client=tw-ob&q=") + encodeURIComponent(q);
+    const a = new Audio(url);
+    if (this.gender === "male") { a.preservesPitch = false; a.mozPreservesPitch = false; a.webkitPreservesPitch = false; a.playbackRate = 0.86; }
+    this.audio = a;
+    a.onended = () => { if (this.audio === a) this.playNext(); };
+    a.onerror = () => {
+      if (this.audio !== a) return;
+      this.queue = []; this.audio = null;
+      if (!this.netWarned) { this.netWarned = true; toast("Не получилось озвучить ответ: нет связи с сервером голоса", 4000); }
+      this.finish();
+    };
+    a.play().catch(() => { if (this.audio === a) a.onerror(); });
+  },
+  finish() { const f = this.onEnd; this.onEnd = null; if (f) setTimeout(f, 250); },
   stop() {
+    this.waiting = false; clearTimeout(this.fb); this.queue = []; this.onEnd = null;
+    if (this.audio) { try { this.audio.pause(); } catch { /* */ } this.audio = null; }
     if (window.AndroidBridge?.stopSpeaking) window.AndroidBridge.stopSpeaking();
     try { window.speechSynthesis?.cancel(); } catch { /* */ }
   },
@@ -402,4 +511,95 @@ const Voice2 = {
     return vs.find((v) => this.isGender(v, g)) || vs[0] || null;
   },
 };
+window.onTtsState = (st, reason) => Voice2.onState(st, reason);
 try { window.speechSynthesis?.getVoices(); window.speechSynthesis && (window.speechSynthesis.onvoiceschanged = () => {}); } catch { /* */ }
+
+// ───────────── Быстрые ответы без нейросети ─────────────
+Object.assign(Assistant, {
+  isWeather(t) { return /погод|температур|градус|дожд|снег|ветер|прогноз|холодно|тепло|зонт|одеться/i.test(t); },
+
+  quick(text) {
+    const t = text.toLowerCase().replace(/ё/g, "е").replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
+    const name = S.me?.name ? S.me.name.split(" ")[0] : "";
+    const now = new Date();
+    if (/^(привет|здравствуй|здравствуйте|добрый (день|вечер)|доброе утро|доброй ночи|хай|салам)( ассистент| джарвис)?$/.test(t))
+      return `Здравствуйте${name ? ", " + name : ""}! Чем помочь? Могу подсказать погоду, новости, курс валют, позвонить или написать кому-то из семьи.`;
+    if (/(который|сколько) (сейчас )?(час|времени)|^время$|точное время|сколько время/.test(t))
+      return `Сейчас ${now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}.`;
+    if (/(какое|какая) (сегодня )?(число|дата)|какой (сегодня )?день( недели)?|сегодня какое число|какой сегодня день/.test(t))
+      return `Сегодня ${now.toLocaleDateString("ru-RU", { weekday: "long" })}, ${now.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })} ${now.getFullYear()} года.`;
+    if (/^(спасибо|благодарю|спс|супер спасибо|большое спасибо)/.test(t)) return "Пожалуйста! Обращайтесь.";
+    if (/^(как (у тебя )?дела|как ты|как жизнь)$/.test(t)) return "Всё отлично, готов помогать! Спросите о погоде, новостях или попросите позвонить кому-нибудь.";
+    if (/^(что ты умеешь|кто ты|что умеешь|помощь|помоги|что ты можешь)$/.test(t))
+      return "Я умею: рассказать погоду и прогноз, свежие новости, курс доллара и евро, ответить на вопросы. А ещё — позвонить («Позвони маме»), начать видеочат («Видеочат с семьёй») и отправить сообщение под диктовку («Напиши папе, что я задержусь»).";
+    // арифметика: «сколько будет 25 умножить на 4», «посчитай 120/3»
+    const m = t.match(/^(?:сколько будет|посчитай|вычисли|реши)?\s*(-?\d+(?:[.,]\d+)?)\s*(\+|плюс|-|минус|\*|×|x|х|умножить на|умноженное на|\/|:|разделить на|делить на|поделить на)\s*(-?\d+(?:[.,]\d+)?)$/);
+    if (m && (/^(сколько будет|посчитай|вычисли|реши)/.test(t) || /[+\-*/×:]/.test(m[2]))) {
+      const a = parseFloat(m[1].replace(",", ".")), b = parseFloat(m[3].replace(",", "."));
+      const op = m[2];
+      let r;
+      if (/\+|плюс/.test(op)) r = a + b;
+      else if (/^-$|минус/.test(op)) r = a - b;
+      else if (/\*|×|x|х|умнож/.test(op)) r = a * b;
+      else { if (b === 0) return "На ноль делить нельзя."; r = a / b; }
+      return `${m[1]} ${op} ${m[3]} = ${String(Math.round(r * 1e6) / 1e6).replace(".", ",")}`;
+    }
+    return null;
+  },
+
+  async getJSON(url, ms = 6000) {
+    const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), ms);
+    try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error(r.status); return await r.json(); }
+    finally { clearTimeout(tm); }
+  },
+
+  // Погода и курсы — сразу из открытых источников, без ожидания нейросети
+  async direct(text) {
+    const low = text.toLowerCase();
+    if (text.length > 90) return null;
+    if (this.isWeather(text) && !/новост|курс/.test(low)) return this.weatherNow(text);
+    if (/(курс|доллар|евро|юан|валют)/.test(low) && !/новост|погод/.test(low)) return this.rates(low);
+    return null;
+  },
+
+  async weatherNow(text) {
+    const WMO = { 0: "ясно", 1: "в основном ясно", 2: "переменная облачность", 3: "пасмурно", 45: "туман", 48: "изморозь", 51: "лёгкая морось", 53: "морось", 55: "сильная морось",
+      61: "небольшой дождь", 63: "дождь", 65: "сильный дождь", 66: "ледяной дождь", 67: "ледяной дождь", 71: "небольшой снег", 73: "снег", 75: "сильный снег", 77: "снежная крупа",
+      80: "ливень", 81: "ливни", 82: "сильные ливни", 85: "снегопад", 86: "сильный снегопад", 95: "гроза", 96: "гроза с градом", 99: "сильная гроза с градом" };
+    const cm = text.match(/(?:^|[\s,])(?:в|во)\s+([А-ЯЁA-Z][а-яёa-z-]+(?:[\s-]+[А-ЯЁ][а-яё-]+)?)/);
+    let city = cm ? cm[1] : (this.settings.city || null), lat, lon, place = "";
+    if (city) {
+      for (const q of [city, city.replace(/(е|и|у|ю|ом|ой)$/i, "")]) {
+        const g = await this.getJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=ru`).catch(() => null);
+        if (g?.results?.length) { lat = g.results[0].latitude; lon = g.results[0].longitude; place = g.results[0].name; break; }
+      }
+      if (lat == null) return null;
+    } else {
+      const geo = await this.location();
+      if (!geo) return null;
+      lat = geo.lat; lon = geo.lon;
+    }
+    const w = await this.getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=3&wind_speed_unit=ms`);
+    const c = w.current, d = w.daily;
+    const deg = (x) => `${Math.round(x) > 0 ? "+" : ""}${Math.round(x)}°`;
+    const day = (i, n) => `${n} ${WMO[d.weather_code[i]] || ""}, от ${deg(d.temperature_2m_min[i])} до ${deg(d.temperature_2m_max[i])}${d.precipitation_probability_max[i] >= 40 ? `, осадки ${d.precipitation_probability_max[i]}%` : ""}.`;
+    const where = place ? ` в городе ${place}` : "";
+    if (/послезавтра/i.test(text)) return day(2, `Послезавтра${where}:`);
+    if (/завтра/i.test(text)) return day(1, `Завтра${where}:`);
+    const umb = d.precipitation_probability_max[0] >= 50 ? " Возьмите зонт." : "";
+    return `Сейчас${where} ${deg(c.temperature_2m)}, ощущается как ${deg(c.apparent_temperature)}, ${WMO[c.weather_code] || ""}, ветер ${Math.round(c.wind_speed_10m)} м/с. ${day(0, "Сегодня")}${umb}`;
+  },
+
+  async rates(low) {
+    const j = await this.getJSON("https://www.cbr-xml-daily.ru/daily_json.js");
+    const v = j.Valute;
+    const f = (k, n) => v[k] ? `${n} ${v[k].Value.toFixed(2).replace(".", ",")} ₽ (${v[k].Value >= v[k].Previous ? "+" : "−"}${Math.abs(v[k].Value - v[k].Previous).toFixed(2).replace(".", ",")})` : "";
+    const want = [];
+    if (/доллар|usd/.test(low)) want.push(["USD", "доллар"]);
+    if (/евро|eur/.test(low)) want.push(["EUR", "евро"]);
+    if (/юан|cny/.test(low)) want.push(["CNY", "юань"]);
+    const list = want.length ? want : [["USD", "доллар"], ["EUR", "евро"], ["CNY", "юань"]];
+    return `Курс ЦБ на ${new Date(j.Date).toLocaleDateString("ru-RU")}: ` + list.map(([k, n]) => f(k, n)).filter(Boolean).join(", ") + ".";
+  },
+});

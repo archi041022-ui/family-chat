@@ -35,10 +35,18 @@ try:
         import base64
         tile = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4dOkSAATsAm3jYRpjAAAAAElFTkSuQmCC")
         ctx.route("https://tile.openstreetmap.org/**", lambda r: r.fulfill(status=200, content_type="image/png", body=tile))
+        import json as _j
+        ctx.route("https://geocoding-api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=_j.dumps({"results": [{"name": "Казань", "latitude": 55.79, "longitude": 49.12}]})))
+        ctx.route("https://api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=_j.dumps({
+            "current": {"temperature_2m": 12.3, "apparent_temperature": 10.1, "weather_code": 3, "wind_speed_10m": 4.2},
+            "daily": {"weather_code": [3, 61, 0], "temperature_2m_max": [14, 11, 9], "temperature_2m_min": [6, 5, 2], "precipitation_probability_max": [20, 70, 10]}})))
+        ctx.route("https://www.cbr-xml-daily.ru/**", lambda r: r.fulfill(status=200, content_type="application/json", body=_j.dumps({
+            "Date": "2026-10-02T11:30:00+03:00", "Valute": {"USD": {"Value": 83.25, "Previous": 83.1}, "EUR": {"Value": 97.4, "Previous": 97.9}, "CNY": {"Value": 11.6, "Previous": 11.6}}})))
+        ctx.route("https://translate.google.com/**", lambda r: r.abort())
         A = ctx.new_page(); B = ctx.new_page()
         for pg, nm in ((A, "A"), (B, "B")):
             pg.on("pageerror", lambda e, nm=nm: errors.append(f"{nm}: {e}"))
-            pg.on("console", lambda m, nm=nm: m.type == "error" and errors.append(f"{nm} console: {m.text}"))
+            pg.on("console", lambda m, nm=nm: m.type == "error" and "Failed to load resource" not in m.text and errors.append(f"{nm} console: {m.text}"))
 
         # неверный код
         register(A, "papa", "Папа", invite="nope")
@@ -91,8 +99,8 @@ try:
         B.wait_for_selector(".msg .text >> text=📞 Видеозвонок"); shot(B, "11_B_call_log")
         # статус
         A.goto(URL); B.goto(URL); A.wait_for_selector("#chatItems .chat-item"); B.wait_for_selector("#chatItems .chat-item")
-        A.click("button[title='Профиль']")
-        A.click(".status-presets >> text=💼 На работе"); A.click(".sheet .btn.wide")
+        A.click("button[title='Профиль']"); A.click("#tabSettings >> text=Изменить профиль")
+        A.click(".status-presets >> text=💼 На работе"); A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
         B.click("#tabBtnStories"); B.wait_for_selector("#tabStories >> text=💼 На работе"); shot(B, "13_B_statuses")
         # текстовая история
         A.click("#tabBtnStories"); A.click(".add-story"); A.click("text=Текст на цветном фоне")
@@ -169,7 +177,11 @@ try:
         B.click(".back-btn"); A.click(".back-btn")
         # ассистент
         A.click(".assistant-item"); A.wait_for_selector(".asst-chips")
-        A.click(".asst-chips >> text=Погода сейчас"); A.wait_for_selector("#asstMsgs .msg.in >> text=Погода сейчас: +7")
+        A.click(".asst-chips >> text=Погода сейчас"); A.wait_for_selector("#asstMsgs .msg.in >> text=Сейчас +12°")
+        A.fill("#asstInput", "Какая погода завтра в Казани?"); A.click("#chatView .composer .send"); A.wait_for_selector("#asstMsgs .msg.in >> text=Завтра в городе Казань")
+        A.fill("#asstInput", "курс доллара"); A.click("#chatView .composer .send"); A.wait_for_selector("#asstMsgs .msg.in >> text=Курс ЦБ на")
+        A.fill("#asstInput", "который час"); A.click("#chatView .composer .send"); A.wait_for_selector("#asstMsgs .msg.in:last-child >> text=Сейчас")
+        print("assistant fast answers: ok")
         A.fill("#asstInput", "Кто написал «Войну и мир»?"); A.click("#chatView .composer .send")
         A.wait_for_selector("#asstMsgs .msg.in >> text=Тестовый ответ на: Кто написал"); shot(A, "30_A_assistant")
         print("assistant: ok, sent geo:", A.evaluate("!!(window.__asstLast && 'messages' in window.__asstLast)"), A.evaluate("window.__asstCalls"))
@@ -197,12 +209,12 @@ try:
         # оформление: смена цвета темы и тёмной темы
         A.click("button[title='Профиль']"); A.click("text=Оформление и цвета")
         A.click(".theme-sw >> text=Океан"); A.click(".segmented >> text=Тёмная"); A.wait_for_timeout(300); shot(A, "35_A_theme_sheet")
-        A.click(".sheet .btn.wide")
+        A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
         print("theme:", A.evaluate("[document.documentElement.dataset.theme, document.documentElement.dataset.mode, getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()]"))
         A.click("#chatList >> text=Семья"); A.wait_for_selector(".composer .vn-btn"); A.wait_for_timeout(300); shot(A, "36_A_themed_chat")
         A.fill("#input", "x"); assert A.locator(".composer .vn-btn.hidden").count() == 1; A.fill("#input", "")
         A.click(".back-btn")
-        A.click("button[title='Профиль']"); A.click("text=Оформление и цвета"); A.click(".theme-sw >> text=Коралл"); A.click(".segmented >> text=Авто"); A.click(".sheet .btn.wide")
+        A.click("button[title='Профиль']"); A.click("text=Оформление и цвета"); A.click(".theme-sw >> text=Коралл"); A.click(".segmented >> text=Авто"); A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
         print("circle button: ok")
         # управление участниками: блокировка и удаление
         A.click("button[title='Профиль']"); A.click("text=Управление участниками")
@@ -218,7 +230,7 @@ try:
         B.click("button[type=submit]"); B.wait_for_selector("#chatItems .chat-item")
         print("unban: ok")
         # раздел «Пригласить»
-        A.click("#tabBtnInvite"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
+        A.click("button[title='Профиль']"); A.click("#tabSettings >> text=Пригласить в семью"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
         A.evaluate("() => { window.AndroidBridge = window.AndroidBridge || {}; window.AndroidBridge.shareText = (t) => { window.__inv = t; }; }")
         A.click("text=Поделиться приглашением")
         inv = A.evaluate("window.__inv") or ""
@@ -232,7 +244,7 @@ try:
         # восстановление пароля: Мама задаёт кодовое слово, выходит и меняет пароль по нему
         B.click("button[title='Профиль']"); B.click("text=Кодовое слово для восстановления")
         B.fill(".sheet input", "Барсик"); B.click(".sheet .btn.wide"); B.wait_for_timeout(300)
-        B.click("button[title='Профиль']"); B.click(".sheet .menu-item.danger"); B.wait_for_selector("text=Забыли пароль?")
+        B.click("button[title='Профиль']"); B.click("#tabSettings .tg-set.danger"); B.click(".sheet .menu-item.danger"); B.wait_for_selector("text=Забыли пароль?")
         B.click("text=Забыли пароль?")
         f = B.locator(".sheet input")
         f.nth(0).fill("mama"); f.nth(1).fill("мурзик"); f.nth(2).fill("newpass1"); f.nth(3).fill("newpass1")

@@ -93,6 +93,7 @@ const GroupCall = {
     if (!this.active || this.chatId !== chatId) { this.local.getTracks().forEach((t) => t.stop()); return; }
     window.AndroidBridge?.callState?.(true, !!this.video);
     this.showUi();
+    await Ice.get();
     if (!this.handler) { this.handler = (p) => this.onRoom(p); }
     this.room(chatId).handlers.add(this.handler);
     await this.room(chatId).ch;
@@ -188,7 +189,7 @@ const GroupCall = {
     this.updateTile(peer);
   },
   addPeer(id, p, fromOffer) {
-    const pc = new RTCPeerConnection({ iceServers: CFG.iceServers || [{ urls: "stun:stun.l.google.com:19302" }] });
+    const pc = new RTCPeerConnection({ iceServers: Ice.now() });
     const peer = { id, pc, stream: new MediaStream(), ice: this.early.get(id) || [], seen: Date.now(), name: p?.name || S.profiles.get(id)?.name || "",
       camOn: p && "video" in p ? !!p.video : true, mic: true, offerer: S.me.id < id, restarts: 0, connected: false, q: Promise.resolve() };
     this.early.delete(id);
@@ -400,20 +401,23 @@ const GroupCall = {
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn green", html: p.video ? I.video : I.phone, onclick: () => this.join(p.chatId, !!p.video) }), "Войти")));
     document.body.append(this.inviteUi);
     Calls.ringtone();
-    window.AndroidBridge?.incomingCall?.(`${title}: видеочат`);
+    this.pendingInvite = p;
+    if (window.AndroidBridge?.incomingCall2) window.AndroidBridge.incomingCall2(`${title}: ${p.name || ""} зовёт`, !!p.video);
+    else window.AndroidBridge?.incomingCall?.(`${title}: видеочат`);
+    Calls.tryAutoAnswer();
     clearTimeout(this.inviteTimer);
     this.inviteTimer = setTimeout(() => this.closeInvite(), 40000);
   },
   closeInvite() {
     clearTimeout(this.inviteTimer);
     if (!this.inviteUi) return;
-    this.inviteUi.remove(); this.inviteUi = null;
+    this.inviteUi.remove(); this.inviteUi = null; this.pendingInvite = null;
     Calls.stopRing(); window.AndroidBridge?.cancelCall?.();
   },
 };
 
 // подключаемся к звонкам один-на-один: приглашения и «занято»
-(function hookCalls() {
+addEventListener("DOMContentLoaded", function hookCalls() {
   const prevSignal = Calls.onSignal;
   Calls.onSignal = async function (p) {
     if (p.to !== S.me.id) return;
@@ -428,4 +432,4 @@ const GroupCall = {
   };
   setInterval(() => GroupCall.renderBanner(), 3000);
   addEventListener("resize", () => { if (GroupCall.active) GroupCall.renderTiles(); });
-})();
+});

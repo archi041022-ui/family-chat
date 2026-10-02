@@ -32,11 +32,38 @@ class ChatService : Service() {
         goForeground()
         // WebView должен создаваться в главном потоке
         Handler(Looper.getMainLooper()).post { WebHolder.obtain(this) }
+        applyReliable()
+        handler.postDelayed(keepAlive, KEEPALIVE_MS)
+    }
+
+    // Проверка связи с сервером каждые 20 секунд: если соединение уснуло — мессенджер переподключается,
+    // поэтому входящие звонки доходят и при выключенном экране.
+    private val handler = Handler(Looper.getMainLooper())
+    private val keepAlive = object : Runnable {
+        override fun run() {
+            WebHolder.js("window.__keepAlive && window.__keepAlive()")
+            handler.postDelayed(this, KEEPALIVE_MS)
+        }
+    }
+    private var onlineLock: PowerManager.WakeLock? = null
+
+    /** «Надёжные звонки»: процессор не засыпает полностью, соединение не рвётся (немного больше расход батареи). */
+    private fun applyReliable() {
+        val on = getSharedPreferences("family", MODE_PRIVATE).getBoolean("reliable", true)
+        if (on && onlineLock?.isHeld != true) {
+            onlineLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "family:online")
+                .apply { setReferenceCounted(false); acquire() }
+        } else if (!on) { onlineLock?.let { if (it.isHeld) it.release() }; onlineLock = null }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY }
+            ACTION_DECLINE -> {
+                Notifier.cancelCall(this)
+                WebHolder.js("window.declineIncoming && window.declineIncoming()")
+            }
+            ACTION_RELIABLE -> applyReliable()
             ACTION_CALL -> {
                 inCall = intent.getBooleanExtra("active", false)
                 video = intent.getBooleanExtra("video", false)
@@ -110,6 +137,8 @@ class ChatService : Service() {
     override fun onDestroy() {
         screen?.stop(); screen = null
         release()
+        handler.removeCallbacks(keepAlive)
+        onlineLock?.let { if (it.isHeld) it.release() }; onlineLock = null
         running = false
         super.onDestroy()
     }
@@ -119,6 +148,14 @@ class ChatService : Service() {
         const val ACTION_CALL = "ru.family.chat.CALL"
         const val ACTION_SCREEN_START = "ru.family.chat.SCREEN_START"
         const val ACTION_SCREEN_STOP = "ru.family.chat.SCREEN_STOP"
+        const val ACTION_DECLINE = "ru.family.chat.DECLINE"
+        const val ACTION_RELIABLE = "ru.family.chat.RELIABLE"
+        private const val KEEPALIVE_MS = 20_000L
+
+        fun reliableChanged(ctx: Context) {
+            if (!running) return
+            try { ctx.startService(Intent(ctx, ChatService::class.java).setAction(ACTION_RELIABLE)) } catch (_: Throwable) {}
+        }
         @Volatile var sharing = false
         @Volatile var running = false
 

@@ -124,7 +124,52 @@ object WebHolder {
         @JavascriptInterface fun notify(title: String, text: String, chatId: String?) =
             Notifier.message(ctx, title, text, chatId)
 
-        @JavascriptInterface fun incomingCall(name: String) = Notifier.incomingCall(ctx, name)
+        @JavascriptInterface fun incomingCall(name: String) = Notifier.incomingCall(ctx, name, false)
+
+        @JavascriptInterface fun incomingCall2(name: String, video: Boolean) = Notifier.incomingCall(ctx, name, video)
+
+        /** Состояние разрешений, от которых зависят звонки — для экрана «Настройки → Звонки». */
+        @JavascriptInterface fun callHealth(): String {
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            val notif = android.os.Build.VERSION.SDK_INT < 33 ||
+                ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val o = org.json.JSONObject()
+            o.put("notifications", notif)
+            o.put("fullScreen", Notifier.canFullScreen(ctx))
+            o.put("battery", pm.isIgnoringBatteryOptimizations(ctx.packageName))
+            o.put("reliable", ctx.getSharedPreferences("family", Context.MODE_PRIVATE).getBoolean("reliable", true))
+            o.put("service", ChatService.running)
+            return o.toString()
+        }
+
+        @JavascriptInterface fun setReliable(on: Boolean) {
+            ctx.getSharedPreferences("family", Context.MODE_PRIVATE).edit().putBoolean("reliable", on).apply()
+            ChatService.reliableChanged(ctx)
+        }
+
+        /** Открывает нужный экран системных настроек: notifications | fullScreen | battery | app */
+        @SuppressLint("BatteryLife")
+        @JavascriptInterface fun openSettings(what: String) {
+            val pkg = Uri.parse("package:" + ctx.packageName)
+            val i = when (what) {
+                "notifications" -> Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                "fullScreen" -> if (android.os.Build.VERSION.SDK_INT >= 34)
+                    Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkg)
+                    else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+                "battery" -> Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg)
+                "tts" -> Intent("com.android.settings.TTS_SETTINGS")
+                "ttsData" -> Intent(android.speech.tts.TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
+                else -> Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+            }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try { ctx.startActivity(i) } catch (_: Throwable) {
+                try { ctx.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {}
+            }
+        }
+
+        @JavascriptInterface fun appVersion(): String = try {
+            ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: ""
+        } catch (_: Throwable) { "" }
 
         @JavascriptInterface fun cancelCall() = Notifier.cancelCall(ctx)
 
@@ -152,6 +197,8 @@ object WebHolder {
         }
 
         @JavascriptInterface fun stopSpeaking() = Speech.stop()
+
+        @JavascriptInterface fun resetVoice() { android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.reset() } }
 
         @JavascriptInterface fun listen() {
             val a = activity

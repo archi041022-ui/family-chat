@@ -7,6 +7,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import org.json.JSONObject
 import java.util.Locale
@@ -30,13 +31,42 @@ object Speech {
         if (engine == null) {
             pending = text to gender
             tts = TextToSpeech(ctx.applicationContext) { status ->
-                ready = status == TextToSpeech.SUCCESS
-                if (ready) { tts?.language = Locale("ru", "RU"); pending?.let { (t, g) -> say(t, g) } }
+                if (status != TextToSpeech.SUCCESS) {
+                    // на телефоне нет движка синтеза речи — страница включит запасной голос
+                    try { tts?.shutdown() } catch (_: Throwable) {}
+                    tts = null; ready = false; pending = null
+                    state("fail", "engine"); return@TextToSpeech
+                }
+                val t = tts ?: return@TextToSpeech
+                var lang = t.setLanguage(Locale("ru", "RU"))
+                if (lang < TextToSpeech.LANG_AVAILABLE) lang = t.setLanguage(Locale("ru"))
+                if (lang < TextToSpeech.LANG_AVAILABLE) {
+                    // движок есть, но русского голоса нет (часто на Samsung/Xiaomi без скачанных данных)
+                    ready = false; pending = null; noRussian = true
+                    state("fail", "nolang"); return@TextToSpeech
+                }
+                t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) = state("start", null)
+                    override fun onDone(utteranceId: String?) = state("done", null)
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) = state("fail", "error")
+                    override fun onError(utteranceId: String?, errorCode: Int) = state("fail", "error$errorCode")
+                })
+                ready = true
+                pending?.let { (tx, g) -> say(tx, g) }
                 pending = null
             }
             return
         }
+        if (noRussian) { state("fail", "nolang"); return }
         if (ready) say(text, gender) else pending = text to gender
+    }
+
+    private var noRussian = false
+
+    private fun state(s: String, reason: String?) {
+        val r = if (reason == null) "null" else JSONObject.quote(reason)
+        WebHolder.js("window.onTtsState && window.onTtsState('$s', $r)")
     }
 
     private fun say(text: String, gender: String) {
@@ -55,10 +85,17 @@ object Speech {
             engine.setPitch(if (male) 0.72f else 1.12f)
         }
         engine.setSpeechRate(1.0f)
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "asst-" + System.nanoTime())
+        val r = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "asst-" + System.nanoTime())
+        if (r != TextToSpeech.SUCCESS) state("fail", "speak")
     }
 
     fun stop() { try { tts?.stop() } catch (_: Throwable) {} }
+
+    /** Заново подключить движок речи (например, после скачивания русского голоса). */
+    fun reset() {
+        try { tts?.shutdown() } catch (_: Throwable) {}
+        tts = null; ready = false; noRussian = false; pending = null
+    }
 
     /** Распознаёт одну фразу и передаёт текст странице (window.onSpeechResult). */
     fun listen(activity: MainActivity) {

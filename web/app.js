@@ -30,6 +30,21 @@ const I = {
   logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>',
+  calls: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 013 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>',
+  bellOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13.7 21a2 2 0 01-3.4 0M18.6 13A17 17 0 0118 8M6.3 6.3A6 6 0 006 8c0 7-3 9-3 9h14M18 8a6 6 0 00-9.3-5M2 2l20 20"/></svg>',
+  pushpin: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 3l5 5-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
+  forward: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5l7 7-7 7M21 12H9a6 6 0 00-6 6v1"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  tick: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5l3.5 3.5L15 4.5"/></svg>',
+  ticks: '<svg viewBox="0 0 22 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 9.5L5 13l8.5-8.5M10 12l1 1 8.5-8.5"/></svg>',
+  callIn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7L7 17M7 9v8h8"/></svg>',
+  callOut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+  data: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.6 7.1L4 20.5l1.4-5A8 8 0 1121 12z"/></svg>',
   story: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="4 2.2"/><circle cx="12" cy="12" r="4.5"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -154,6 +169,13 @@ const Theme = {
       h("div", { class: "section-title", style: { padding: "0 4px 8px" } }, "Цвет"), grid,
       h("div", { class: "section-title", style: { padding: "0 4px 8px" } }, "Тема"),
       h("div", { class: "segmented" }, seg("auto", "Авто"), seg("light", "☀️ Светлая"), seg("dark", "🌙 Тёмная")),
+      h("div", { class: "section-title", style: { padding: "0 4px 8px" } }, "Размер текста в чатах"),
+      h("div", { class: "segmented fs-seg" }, ...[[14, "Мелкий"], [16, "Обычный"], [18, "Крупный"], [20, "Очень крупный"]].map(([v, l]) =>
+        h("button", { class: `seg${(Prefs.get("fontSize") || 16) === v ? " on" : ""}`, onclick: (e) => {
+          Prefs.set("fontSize", v); Prefs.apply();
+          e.currentTarget.parentNode.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === e.currentTarget));
+        } }, l))),
+      h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: Prefs.get("pattern"), onchange: (e) => { Prefs.set("pattern", e.target.checked); Prefs.apply(); } }), "Узор на фоне чатов"),
       h("button", { class: "btn wide", onclick: () => close() }, "Готово"),
     ]);
   },
@@ -343,6 +365,7 @@ function qrImage(text) {
 async function renderInvite() {
   const box = $("#tabInvite"); if (!box) return;
   box.innerHTML = "";
+  box.append(h("button", { class: "tg-back", onclick: () => showTab("settings") }, h("span", { html: I.back }), "Настройки"));
   const { data: code } = await S.sb.rpc("get_invite_code");
   if (!code) { box.append(h("p", { class: "empty-chat" }, "Не удалось получить код приглашения. Проверьте интернет.")); return; }
   const count = S.profiles.size;
@@ -511,7 +534,8 @@ async function enter(user) {
   const { data: me } = await S.sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
   if (!me) { await S.sb.auth.signOut(); showAuth(); toast("Аккаунт не найден — возможно, его удалил администратор семьи", 5000); return; }
   if (me.banned) { await S.sb.auth.signOut(); showAuth(); toast("Доступ закрыт администратором семьи", 5000); return; }
-  S.me = me;
+  S.me = me; S.sessionEmail = user.email || "";
+  Prefs.apply();
   await loadProfiles();
   await loadChats();
   await Stories.load();
@@ -547,6 +571,8 @@ async function loadChats() {
   S.members.clear();
   for (const m of mem || []) { if (!S.members.has(m.chat_id)) S.members.set(m.chat_id, []); S.members.get(m.chat_id).push(m); }
   S.lastByChat.clear(); S.unread.clear();
+  S.callLog = (recent || []).filter((m) => Tg.isCallMsg(m) && !m.deleted);
+  setTimeout(() => Tg.updateCallsBadge(), 0);
   for (const m of recent || []) {
     if (!S.lastByChat.has(m.chat_id)) S.lastByChat.set(m.chat_id, m);
     const mine = myMember(m.chat_id);
@@ -566,22 +592,31 @@ async function signUrls(paths) {
 // ───────────── Каркас ─────────────
 function buildShell() {
   app.innerHTML = "";
+  const tab = (id, icon, label, badge) => h("button", { id: `tabBtn${id}`, class: id === "Chats" ? "on" : "", onclick: () => showTab(id.toLowerCase()) },
+    h("span", { html: icon }), label, badge ? h("i", { class: "tab-badge hidden", id: badge }) : null);
   app.append(
     h("aside", { class: "side", id: "side" },
       h("div", { class: "topbar" },
-        avatarEl(S.me.id, "sm", { onclick: openProfile, style: { cursor: "pointer" } }),
-        h("div", { class: "title" }, h("b", null, CFG.appName || "Семья"), h("small", { id: "conn" }, "в сети")),
-        h("button", { class: "icon-btn", title: "Профиль", onclick: openProfile, html: I.pen })),
+        avatarEl(S.me.id, "sm", { onclick: () => showTab("settings"), style: { cursor: "pointer" }, title: "Настройки" }),
+        h("div", { class: "title" }, h("b", { id: "sideTitle" }, CFG.appName || "Семья"), h("small", { id: "conn" }, "в сети")),
+        h("button", { class: "icon-btn", title: "Поиск", onclick: () => { showTab("chats"); const i = $("#chatSearch"); i?.focus(); }, html: I.search }),
+        h("button", { class: "icon-btn", title: "Профиль", onclick: () => showTab("settings"), html: I.pen })),
       h("div", { class: "tab-body", id: "tabChats" },
-        h("div", { class: "search" }, h("input", { placeholder: "Поиск", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } })),
+        h("div", { class: "search" }, h("input", { id: "chatSearch", placeholder: "Поиск", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } })),
+        h("div", { class: "folders", id: "folders" }),
         h("div", { class: "chat-list", id: "chatList" }, h("div", { id: "storyStrip" }), h("div", { id: "chatItems" })),
-        h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.plus })),
+        h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.pen })),
+      h("div", { class: "tab-body hidden", id: "tabContacts" }),
+      h("div", { class: "tab-body hidden", id: "tabCalls" }),
       h("div", { class: "tab-body hidden", id: "tabStories" }),
+      h("div", { class: "tab-body hidden", id: "tabSettings" }),
       h("div", { class: "tab-body hidden", id: "tabInvite" }),
       h("nav", { class: "bottom-tabs" },
-        h("button", { class: "on", id: "tabBtnChats", onclick: () => showTab("chats") }, h("span", { html: I.chat }), "Чаты", h("i", { class: "tab-badge hidden", id: "chatsBadge" })),
-        h("button", { id: "tabBtnStories", onclick: () => showTab("stories") }, h("span", { html: I.story }), "Истории", h("i", { class: "tab-badge hidden", id: "storiesBadge" })),
-        h("button", { id: "tabBtnInvite", onclick: () => showTab("invite") }, h("span", { html: I.invite }), "Пригласить"))),
+        tab("Chats", I.chat, "Чаты", "chatsBadge"),
+        tab("Contacts", I.user, "Контакты"),
+        tab("Calls", I.calls, "Звонки", "callsBadge"),
+        tab("Stories", I.story, "Истории", "storiesBadge"),
+        tab("Settings", I.gear, "Настройки"))),
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
   renderChatList();
   Stories.renderAll();
@@ -627,36 +662,75 @@ function previewText(m) {
   const who = m.user_id === S.me.id ? "Вы: " : "";
   if (m.media_type === "location") return who + "📍 Геолокация";
   const kind = { image: "📷 Фото", video: "🎬 Видео", audio: "🎤 Голосовое", file: "📎 Файл", video_note: "⭕ Видеосообщение" }[m.media_type];
-  return who + (kind ? kind + (m.body ? " · " + m.body : "") : (m.body || ""));
+  const body = Tg.text(m.body);
+  return who + (kind ? kind + (body ? " · " + body : "") : (body || ""));
 }
 
 function renderChatList() {
   const list = $("#chatItems"); if (!list) return;
   list.innerHTML = "";
-  if (!S.filter || "ассистент помощник погода новости".includes(S.filter)) list.append(Assistant.listItem());
-  const totalUnread = [...S.unread.values()].reduce((a, b) => a + b, 0);
+  Tg.renderFolders();
+  const f = S.folder || "all";
+  if ((f === "all" || f === "personal") && (!S.filter || "мой ассистент помощник погода новости".includes(S.filter))) list.append(Assistant.listItem());
+  const totalUnread = [...S.unread.entries()].filter(([id]) => !Prefs.muted(id)).reduce((a, [, b]) => a + b, 0);
   const cb = $("#chatsBadge"); if (cb) { cb.textContent = totalUnread > 99 ? "99+" : totalUnread; cb.classList.toggle("hidden", !totalUnread); }
-  const sorted = [...S.chats].sort((a, b) => {
-    const ta = S.lastByChat.get(a.id)?.created_at || a.last_message_at, tb = S.lastByChat.get(b.id)?.created_at || b.last_message_at;
-    return new Date(tb) - new Date(ta);
+  const time = (c) => new Date(S.lastByChat.get(c.id)?.created_at || c.last_message_at || 0).getTime();
+  // все члены семьи всегда в списке: у кого ещё нет переписки — показываем «Нажмите, чтобы написать»
+  const withDm = new Set(S.chats.filter((c) => !c.is_group).map(otherUser));
+  const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id && !p.banned && !withDm.has(p.id));
+  const rows = [...S.chats.filter((c) => { const o = !c.is_group && otherUser(c); return !(o && S.profiles.get(o)?.banned); }).map((c) => ({ c, t: time(c) })),
+    ...people.map((p) => ({ p, t: 0 }))];
+  rows.sort((a, b) => {
+    const pa = a.c && Prefs.pinned(a.c.id) ? 1 : 0, pb = b.c && Prefs.pinned(b.c.id) ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    if (a.t !== b.t) return b.t - a.t;
+    const na = a.c ? chatTitle(a.c) : a.p.name, nb = b.c ? chatTitle(b.c) : b.p.name;
+    return na.localeCompare(nb, "ru");
   });
-  for (const c of sorted) {
+  for (const r of rows) {
+    if (r.p) {
+      if (f === "groups" || f === "unread") continue;
+      if (S.filter && !r.p.name.toLowerCase().includes(S.filter)) continue;
+      list.append(h("button", { class: "chat-item", "data-user": r.p.id, onclick: () => openDm(r.p.id) },
+        avatarEl(r.p.id),
+        h("div", { class: "mid" },
+          h("div", { class: "row" }, h("span", { class: "name" }, r.p.name), h("span", { class: "time" }, "")),
+          h("div", { class: "row" }, h("span", { class: "last" }, S.online.has(r.p.id) ? "в сети · нажмите, чтобы написать" : "Нажмите, чтобы написать")))));
+      continue;
+    }
+    const c = r.c;
     const title = chatTitle(c);
+    const unread = S.unread.get(c.id) || 0;
+    if (f === "personal" && c.is_group) continue;
+    if (f === "groups" && !c.is_group) continue;
+    if (f === "unread" && !unread) continue;
     if (S.filter && !title.toLowerCase().includes(S.filter)) continue;
-    const last = S.lastByChat.get(c.id), unread = S.unread.get(c.id) || 0;
-    list.append(h("button", { class: `chat-item${S.current === c.id ? " on" : ""}`, onclick: () => openChat(c.id) },
+    const last = S.lastByChat.get(c.id);
+    const typing = Tg.typingText(c.id);
+    const muted = Prefs.muted(c.id), pinned = Prefs.pinned(c.id);
+    let tick = null;
+    if (last && last.user_id === S.me.id && !last.deleted) {
+      const others = (S.members.get(c.id) || []).filter((x) => x.user_id !== S.me.id);
+      const read = others.some((x) => new Date(x.last_read_at) >= new Date(last.created_at));
+      tick = h("span", { class: `list-tick${read ? " read" : ""}`, html: read ? I.ticks : I.tick });
+    }
+    const item = h("button", { class: `chat-item${S.current === c.id ? " on" : ""}${pinned ? " pinned" : ""}`, "data-chat": c.id, onclick: () => openChat(c.id) },
       chatAvatar(c),
       h("div", { class: "mid" },
-        h("div", { class: "row" }, h("span", { class: "name" }, title), h("span", { class: "time" }, last ? fmtListTime(last.created_at) : "")),
-        h("div", { class: "row" }, h("span", { class: "last" }, previewText(last)), unread ? h("span", { class: "badge" }, unread > 99 ? "99+" : unread) : null))));
+        h("div", { class: "row" }, h("span", { class: "name" }, title, muted ? h("span", { class: "muted-ico", html: I.bellOff }) : null), tick, h("span", { class: "time" }, last ? fmtListTime(last.created_at) : "")),
+        h("div", { class: "row" },
+          typing ? h("span", { class: "last typing-text" }, typing) : h("span", { class: "last" }, previewText(last)),
+          unread ? h("span", { class: `badge${muted ? " muted" : ""}` }, unread > 99 ? "99+" : unread) : pinned ? h("span", { class: "pin-ico", html: I.pushpin }) : null)));
+    Tg.chatRowGestures(item, c);
+    list.append(item);
   }
-  if (list.children.length <= 1 && S.filter) list.append(h("p", { class: "empty-chat" }, "Ничего не найдено"));
+  if (list.children.length <= (f === "all" || f === "personal" ? 1 : 0)) list.append(h("p", { class: "empty-chat" }, S.filter ? "Ничего не найдено" : f === "unread" ? "Все сообщения прочитаны 👍" : "Здесь пока пусто"));
 }
 
 // ───────────── Открытый чат ─────────────
 async function openChat(chatId) {
   if (S.current === chatId) return;
-  S.current = chatId; S.replyTo = null; S.assistantOpen = false;
+  S.current = chatId; S.replyTo = null; S.assistantOpen = false; S.editing = null;
   const c = S.chats.find((x) => x.id === chatId); if (!c) return;
   if (location.hash.slice(1) !== chatId) history.replaceState(history.state, "", "#" + chatId);
   app.classList.add("in-chat");
@@ -671,12 +745,14 @@ async function openChat(chatId) {
       other ? h("button", { class: "icon-btn", title: "Аудиозвонок", onclick: () => Calls.start(other, false), html: I.phone }) : null,
       other ? h("button", { class: "icon-btn", title: "Видеозвонок", onclick: () => Calls.start(other, true), html: I.video }) : null,
       c.is_group ? h("button", { class: "icon-btn", title: "Групповой звонок", onclick: () => GroupCall.start(c.id, false), html: I.phone }) : null,
-      c.is_group ? h("button", { class: "icon-btn", title: "Видеочат", onclick: () => GroupCall.start(c.id, true), html: I.video }) : null),
+      c.is_group ? h("button", { class: "icon-btn", title: "Видеочат", onclick: () => GroupCall.start(c.id, true), html: I.video }) : null,
+      h("button", { class: "icon-btn", title: "Ещё", onclick: () => Tg.openChatMenu(c), html: I.more })),
     h("div", { class: "upload-bar", id: "upBar" }),
     h("div", { class: "messages", id: "msgs" }),
     h("div", { id: "replyBox" }),
     composer());
   app.append(view);
+  Tg.scrollButton(view);
   updateChatSub();
   renderChatList();
   if (c.is_group) GroupCall.watch(c.id);
@@ -703,6 +779,9 @@ function closeChat(fromPop) {
 function updateChatSub() {
   const el = $("#chatSub"); if (!el || !S.current) return;
   const c = S.chats.find((x) => x.id === S.current);
+  const typing = Tg.typingText(S.current);
+  el.classList.toggle("typing-text", !!typing);
+  if (typing) { el.textContent = typing; return; }
   if (c.is_group) {
     const n = (S.members.get(c.id) || []).length;
     const on = (S.members.get(c.id) || []).filter((m) => S.online.has(m.user_id) && m.user_id !== S.me.id).length;
@@ -795,11 +874,14 @@ function messageEl(m, c, firstInRun, tail) {
       h("span", { class: "icon-btn", html: I.file }), h("span", null, m.media_name || "Файл")));
     else if (m.media_type === "video_note") { bubble.classList.add("vnote-bubble"); bubble.append(videoNoteEl(url)); }
     else if (m.media_type === "location") { const g = parseGeo(m.body); if (g) bubble.append(mapCard(g.lat, g.lon, g.acc)); }
-    if (m.body && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(m.body)));
+    const fwd = Tg.forwardedFrom(m.body);
+    if (fwd) bubble.insertBefore(h("div", { class: "fwd" }, "Переслано от ", h("b", null, fwd)), bubble.querySelector(".photo,video,audio,.file,.vnote,.map-card") || null);
+    const clean = Tg.text(m.body);
+    if (clean && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(clean)));
     if (m.body === GC_MARK && !m.media_type && Date.now() - new Date(m.created_at) < 6 * 3600e3)
       bubble.append(h("button", { class: "btn gc-join", onclick: () => GroupCall.join(m.chat_id, true) }, "Присоединиться"));
   }
-  const meta = h("span", { class: "meta" }, fmtTime(m.created_at));
+  const meta = h("span", { class: "meta" }, Tg.edited(m.body) ? h("i", { class: "edited" }, "изменено ") : null, fmtTime(m.created_at));
   if (out && !m.deleted) {
     const others = (S.members.get(m.chat_id) || []).filter((x) => x.user_id !== S.me.id);
     const read = others.some((x) => new Date(x.last_read_at) >= new Date(m.created_at));
@@ -819,7 +901,7 @@ function messageEl(m, c, firstInRun, tail) {
   }
   const row = h("div", { class: `msg ${out ? "out" : "in"}${firstInRun ? " first-in-run" : ""}${tail ? " tail" : ""}${isCall ? " call-log" : ""}`, "data-id": m.id },
     c.is_group && !out ? avatarEl(m.user_id, "sm") : null, bubble);
-  if (!m.pending) attachGestures(bubble, m);
+  if (!m.pending) { attachGestures(bubble, m); Tg.swipeReply(bubble, m); }
   return row;
 }
 
@@ -850,7 +932,11 @@ function messageMenu(m) {
   if (!m.deleted) {
     items.push(h("div", { class: "emoji-row" }, EMOJI.map((e) => h("button", { class: mine.includes(e) ? "mine" : "", onclick: () => { close(); toggleReaction(m, e); } }, e))));
     items.push(h("button", { class: "menu-item", onclick: () => { close(); setReply(m); } }, h("span", { html: I.reply }), "Ответить"));
-    if (m.body) items.push(h("button", { class: "menu-item", onclick: async () => { close(); try { await navigator.clipboard.writeText(m.body); toast("Скопировано"); } catch { toast("Не удалось скопировать"); } } }, h("span", { html: I.copy }), "Копировать текст"));
+    if (m.body) items.push(h("button", { class: "menu-item", onclick: async () => { close(); try { await navigator.clipboard.writeText(Tg.text(m.body)); toast("Скопировано"); } catch { toast("Не удалось скопировать"); } } }, h("span", { html: I.copy }), "Копировать текст"));
+    if (m.user_id === S.me.id && m.body && !m.media_type && !Tg.isCallMsg(m) && !String(m.id).startsWith("tmp-"))
+      items.push(h("button", { class: "menu-item", onclick: () => { close(); Tg.startEdit(m); } }, h("span", { html: I.pen }), "Изменить"));
+    if (!String(m.id).startsWith("tmp-") && (m.body || m.media_path) && m.media_type !== "location")
+      items.push(h("button", { class: "menu-item", onclick: () => { close(); Tg.forward(m); } }, h("span", { html: I.forward }), "Переслать"));
     if (m.body || (m.media_path && S.urls.get(m.media_path))) items.push(h("button", { class: "menu-item", onclick: () => { close(); shareOut(m); } }, h("span", { html: I.share }), "Поделиться"));
     if (m.media_path && S.urls.get(m.media_path)) items.push(h("a", { class: "menu-item", href: S.urls.get(m.media_path), target: "_blank", rel: "noopener", download: m.media_name || "", onclick: () => close() }, h("span", { html: I.download }), "Сохранить файл"));
     if (m.user_id === S.me.id) items.push(h("button", { class: "menu-item danger", onclick: () => { close(); deleteMessage(m); } }, h("span", { html: I.trash }), "Удалить у всех"));
@@ -918,9 +1004,10 @@ function composer() {
     action.innerHTML = has ? I.send : I.mic; action.title = has ? "Отправить" : "Голосовое";
     vnBtn.classList.toggle("hidden", has);
   };
-  ta.addEventListener("input", update);
+  ta.addEventListener("input", () => { update(); if (ta.value.trim()) Tg.sendTyping(); });
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); sendText(ta, update); }
+    if (e.key === "Escape" && S.editing) Tg.cancelEdit();
   });
   action.addEventListener("click", () => { if (ta.value.trim()) sendText(ta, update); else Voice.start(wrap); });
   file.addEventListener("change", async () => { const files = [...file.files]; file.value = ""; for (const f of files) await sendFile(f); });
@@ -1072,6 +1159,8 @@ function clearReply() { S.replyTo = null; const b = $("#replyBox"); if (b) b.inn
 async function sendText(ta, update) {
   const body = ta.value.trim(); if (!body) return;
   ta.value = ""; update();
+  if (S.editing) { await Tg.saveEdit(body); return; }
+  if (Prefs.get("inAppSound")) beep([1046], 0.06);
   await postMessage({ body });
 }
 
@@ -1227,7 +1316,7 @@ function openProfile() {
       if (error) throw error;
       await S.sb.from("profiles").update({ avatar_path: path }).eq("id", S.me.id);
       await signUrls([path]); S.me.avatar_path = path; S.profiles.set(S.me.id, S.me);
-      close(); buildShell(); if (S.current) { const id = S.current; S.current = null; openChat(id); }
+      close(); buildShell(); showTab(S.tab || "chats"); if (S.current) { const id = S.current; S.current = null; openChat(id); }
       toast("Фото обновлено"); Live.broadcast("profile", {});
     } catch { toast("Не удалось загрузить фото"); }
   };
@@ -1244,15 +1333,8 @@ function openProfile() {
       S.me.status = st;
       if (error) { toast("Не удалось сохранить"); return; }
       S.me.name = n; S.profiles.set(S.me.id, S.me); close(); toast("Сохранено"); renderChatList(); Live.broadcast("profile", {});
+      if (S.tab === "settings") Tg.renderSettings();
     } }, "Сохранить"),
-    h("button", { class: "menu-item", style: { marginTop: "8px" }, onclick: () => { close(); Theme.sheet(); } }, h("span", { html: I.palette }), "Оформление и цвета"),
-    h("button", { class: "menu-item", onclick: () => { close(); changePasswordSheet(); } }, h("span", { html: I.lock }), "Сменить пароль"),
-    h("button", { class: "menu-item", onclick: () => { close(); recoveryWordSheet(); } }, h("span", { html: I.key }), "Кодовое слово для восстановления"),
-    S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); membersAdmin(); } }, h("span", { html: I.shield }), "Управление участниками") : null,
-    S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); adminResetSheet(); } }, h("span", { html: I.group }), "Сбросить пароль участнику") : null,
-    h("button", { class: "menu-item danger", onclick: async () => {
-      await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
-    } }, h("span", { html: I.logout }), "Выйти"),
   ]);
 }
 
@@ -1285,6 +1367,7 @@ function subscribe() {
       if (m) { m.last_read_at = payload.at; if (S.current === payload.chat_id) renderMessages(false); }
     })
     .on("broadcast", { event: "profile" }, async () => { await loadProfiles(); renderChatList(); })
+    .on("broadcast", { event: "typing" }, ({ payload }) => Tg.onTyping(payload))
     .subscribe(async (status) => { if (status === "SUBSCRIBED") await Live.presence.track({ at: Date.now() }); });
   // при возврате в приложение — догружаем пропущенное
   document.addEventListener("visibilitychange", () => {
@@ -1307,15 +1390,20 @@ function onProfileChange(np) {
   renderChatList(); updateChatSub(); Stories.renderAll();
 }
 const appVisible = () => (window.AndroidBridge?.isForeground ? window.AndroidBridge.isForeground() : document.visibilityState === "visible");
+const TABS = { chats: "Чаты", contacts: "Контакты", calls: "Звонки", stories: "Истории", settings: "Настройки", invite: "Пригласить" };
 function showTab(t) {
-  $("#tabChats")?.classList.toggle("hidden", t !== "chats");
-  $("#tabStories")?.classList.toggle("hidden", t !== "stories");
-  $("#tabBtnChats")?.classList.toggle("on", t === "chats");
-  $("#tabBtnStories")?.classList.toggle("on", t === "stories");
-  $("#tabInvite")?.classList.toggle("hidden", t !== "invite");
-  $("#tabBtnInvite")?.classList.toggle("on", t === "invite");
+  for (const k of Object.keys(TABS)) {
+    const id = k[0].toUpperCase() + k.slice(1);
+    $(`#tab${id}`)?.classList.toggle("hidden", t !== k);
+    $(`#tabBtn${id}`)?.classList.toggle("on", t === k || (t === "invite" && k === "settings"));
+  }
+  S.tab = t;
+  const st = $("#sideTitle"); if (st) st.textContent = t === "chats" ? (CFG.appName || "Семья") : TABS[t];
   if (t === "stories") Stories.refreshAndRender();
   if (t === "invite") renderInvite();
+  if (t === "contacts") Tg.renderContacts();
+  if (t === "calls") Tg.renderCalls();
+  if (t === "settings") Tg.renderSettings();
 }
 async function resync() {
   await loadChats(); renderChatList();
@@ -1323,6 +1411,11 @@ async function resync() {
 }
 async function onNewMessage(m) {
   if (!S.chats.find((c) => c.id === m.chat_id)) { await loadProfiles(); await loadChats(); renderChatList(); }
+  Tg.typing.get(m.chat_id)?.delete(m.user_id);
+  if (Tg.isCallMsg(m) && !(S.callLog || []).some((x) => x.id === m.id)) {
+    (S.callLog = S.callLog || []).unshift(m);
+    Tg.updateCallsBadge(); if (S.tab === "calls") Tg.renderCalls();
+  }
   S.lastByChat.set(m.chat_id, m);
   if (m.media_path) await signUrls([m.media_path]);
   if (!S.profiles.has(m.user_id)) await loadProfiles();
@@ -1371,10 +1464,13 @@ function beep(freqs = [880, 1320], dur = 0.09) {
   } catch { /* без звука */ }
 }
 function notify(m) {
-  beep();
+  if (Prefs.muted(m.chat_id)) return;
+  if (Prefs.get("sound")) beep();
+  if (Prefs.get("vibrate") && appVisible()) navigator.vibrate?.(60);
   if (window.AndroidBridge?.notify) {
     const c = S.chats.find((x) => x.id === m.chat_id);
-    window.AndroidBridge.notify(c ? chatTitle(c) : "Новое сообщение", (c?.is_group ? (S.profiles.get(m.user_id)?.name || "") + ": " : "") + previewText({ ...m, user_id: null }), m.chat_id);
+    const text = Prefs.get("preview") ? (c?.is_group ? (S.profiles.get(m.user_id)?.name || "") + ": " : "") + previewText({ ...m, user_id: null }) : "Новое сообщение";
+    window.AndroidBridge.notify(c ? chatTitle(c) : "Новое сообщение", text, m.chat_id);
   } else if (!appVisible() && "Notification" in window && Notification.permission === "granted") {
     try { new Notification(S.profiles.get(m.user_id)?.name || "Новое сообщение", { body: previewText({ ...m, user_id: null }), icon: "icon-192.png" }); } catch { /* */ }
   }
@@ -1383,6 +1479,49 @@ document.addEventListener("click", function askNotify() {
   document.removeEventListener("click", askNotify);
   if ("Notification" in window && Notification.permission === "default" && !window.AndroidBridge) Notification.requestPermission().catch(() => {});
 }, { once: true });
+
+// ───────────── Серверы для звонков ─────────────
+// STUN помогает соединиться напрямую. Если напрямую нельзя (мобильный интернет, разные операторы),
+// звонок идёт через TURN-ретранслятор. Логин для общего ретранслятора Open Relay вычисляется
+// по его открытому ключу (схема TURN REST API) и действует сутки.
+const Ice = {
+  list: null, until: 0,
+  async get() {
+    if (this.list && Date.now() < this.until) return this.list;
+    const base = (CFG.iceServers || []).length ? CFG.iceServers : [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+    const list = [...base];
+    const relay = CFG.turnRelay === false ? null : (CFG.turnRelay || { host: "staticauth.openrelay.metered.ca", secret: "openrelayprojectsecret" });
+    if (relay && crypto?.subtle) {
+      try {
+        const username = `${Math.floor(Date.now() / 1000) + 86400}:semya`;
+        const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(relay.secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+        const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(username));
+        const credential = btoa(String.fromCharCode(...new Uint8Array(sig)));
+        list.push({ urls: [`turn:${relay.host}:80`, `turn:${relay.host}:80?transport=tcp`, `turn:${relay.host}:443`, `turns:${relay.host}:443?transport=tcp`], username, credential });
+      } catch { /* без ретранслятора — только напрямую */ }
+    }
+    this.list = list; this.until = Date.now() + 12 * 3600e3;
+    return list;
+  },
+  now() { return this.list || CFG.iceServers || [{ urls: "stun:stun.l.google.com:19302" }]; },
+};
+
+// Входящий звонок из уведомления Android: «Ответить» / «Отклонить»
+window.answerIncoming = () => { S.autoAnswerUntil = Date.now() + 40000; Calls.tryAutoAnswer(); };
+window.declineIncoming = () => {
+  S.autoAnswerUntil = 0;
+  if (Calls.role === "callee" && Calls.ui && !Calls.pc) Calls.decline();
+  else if (window.GroupCall?.inviteUi) GroupCall.closeInvite();
+};
+// Вызывается Android каждые 20 секунд: если соединение с сервером уснуло — будим его
+window.__keepAlive = (urgent) => {
+  const rt = S.sb?.realtime; if (!rt || !S.me) return;
+  try {
+    if (typeof rt.isConnected === "function" && !rt.isConnected()) { rt.connect(); S.resync = true; }
+    else if (typeof rt.sendHeartbeat === "function") rt.sendHeartbeat();
+  } catch { /* */ }
+  if (urgent) setTimeout(() => Calls.tryAutoAnswer(), 500);
+};
 
 // ───────────── Звонки (WebRTC) ─────────────
 const Calls = {
@@ -1418,7 +1557,7 @@ const Calls = {
     });
   },
   makePc() {
-    const pc = new RTCPeerConnection({ iceServers: CFG.iceServers || [{ urls: "stun:stun.l.google.com:19302" }] });
+    const pc = new RTCPeerConnection({ iceServers: Ice.now() });
     this.remote = new MediaStream();
     pc.ontrack = (e) => {
       const tracks = e.streams[0] ? e.streams[0].getTracks() : [e.track];
@@ -1455,16 +1594,28 @@ const Calls = {
     window.AndroidBridge?.callState?.(true, !!video);
     this.showUi("Вызов…");
     this.ringback();
+    await Ice.get();
+    if (this.peer !== userId || !this.local) return;
     this.pc = this.makePc();
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
+    const callId = this.callId;
     await this.send(userId, { kind: "offer", sdp: offer.sdp, video, name: S.me.name });
-    this.ringTimer = setTimeout(() => { if (!this.connected) { toast("Не отвечает"); this.hangup(true, "noanswer"); } }, 45000);
+    // Повторяем вызов каждые 3 секунды, пока не ответят: если телефон собеседника спал и только
+    // проснулся, он всё равно получит звонок — уже со всеми адресами соединения внутри.
+    clearInterval(this.resendTimer);
+    this.resendTimer = setInterval(() => {
+      if (this.callId !== callId || this.answered || !this.pc) { clearInterval(this.resendTimer); return; }
+      this.send(userId, { kind: "offer", sdp: this.pc.localDescription?.sdp || offer.sdp, video, name: S.me.name, resend: true }).catch(() => {});
+    }, 3000);
+    this.ringTimer = setTimeout(() => { if (!this.connected && !this.answered) { toast("Не отвечает"); this.hangup(true, "noanswer"); } }, 50000);
   },
 
   async onSignal(p) {
     if (p.to !== S.me.id) return;
     if (p.kind === "offer") {
+      if (p.callId && p.callId === this.callId) return;                 // повтор того же вызова
+      if (p.callId && this.ended?.has(p.callId)) return;                // уже отклонён или завершён
       if (this.pc || this.ui) { this.send(p.from, { kind: "busy", callId: p.callId }); return; }
       this.peer = p.from; this.video = !!p.video; this.callId = p.callId; this.role = "callee"; this.offer = p.sdp; this.pendingIce = []; this.connected = false;
       if (!S.profiles.has(p.from)) await loadProfiles();
@@ -1474,7 +1625,10 @@ const Calls = {
     if (p.callId !== this.callId) return;
     switch (p.kind) {
       case "answer":
+        if (this.answered) return;
+        this.answered = true; clearInterval(this.resendTimer);
         clearTimeout(this.ringTimer); this.stopRing(); this.setStatus("Соединение…");
+        this.ringTimer = setTimeout(() => { if (!this.connected) { toast("Связь не установилась. Проверьте интернет и попробуйте ещё раз.", 4000); this.hangup(true, "failed"); } }, 30000);
         await this.pc.setRemoteDescription({ type: "answer", sdp: p.sdp });
         for (const c of this.pendingIce.splice(0)) await this.pc.addIceCandidate(c).catch(() => {});
         break;
@@ -1494,7 +1648,9 @@ const Calls = {
   },
 
   async accept() {
-    this.stopRing();
+    if (this.pc || this.accepting) return;
+    this.accepting = true; setTimeout(() => { this.accepting = false; }, 3000);
+    clearTimeout(this.ringTimer); this.stopRing(); window.AndroidBridge?.cancelCall?.();
     try { this.local = await this.media(this.video); }
     catch {
       try { this.local = await this.media(false); this.video = false; }
@@ -1502,6 +1658,8 @@ const Calls = {
     }
     window.AndroidBridge?.callState?.(true, !!this.video);
     this.showUi("Соединение…");
+    await Ice.get();
+    if (!this.local) return;
     this.pc = this.makePc();
     await this.pc.setRemoteDescription({ type: "offer", sdp: this.offer });
     for (const c of this.pendingIce.splice(0)) await this.pc.addIceCandidate(c).catch(() => {});
@@ -1510,6 +1668,11 @@ const Calls = {
     await this.send(this.peer, { kind: "answer", sdp: answer.sdp });
   },
   decline() { this.send(this.peer, { kind: "decline" }); this.logMissed = false; this.reset(); },
+  tryAutoAnswer() {
+    if (!(S.autoAnswerUntil > Date.now())) return;
+    if (this.role === "callee" && this.ui && !this.pc && this.offer) { S.autoAnswerUntil = 0; this.accept(); return; }
+    if (window.GroupCall?.inviteUi && GroupCall.pendingInvite) { S.autoAnswerUntil = 0; const p = GroupCall.pendingInvite; GroupCall.join(p.chatId, !!p.video); }
+  },
 
   async hangup(notifyPeer, reason) {
     if (notifyPeer && this.peer) this.send(this.peer, { kind: "hangup" });
@@ -1526,6 +1689,8 @@ const Calls = {
     }
   },
   reset() {
+    if (this.callId) { this.ended = this.ended || new Set(); this.ended.add(this.callId); }
+    clearInterval(this.resendTimer); this.answered = false; this.accepting = false;
     if (this.screen) this.stopScreen(true);
     if (this.ui || this.pc) { window.AndroidBridge?.callState?.(false, false); window.AndroidBridge?.cancelCall?.(); }
     clearTimeout(this.ringTimer); clearTimeout(this.videoOffTimer); clearInterval(this.tick); this.stopRing();
@@ -1546,7 +1711,15 @@ const Calls = {
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn green", html: this.video ? I.video : I.phone, onclick: () => this.accept() }), "Ответить")));
     document.body.append(this.ui);
     this.ringtone();
-    if (window.AndroidBridge?.incomingCall) window.AndroidBridge.incomingCall(p?.name || "Звонок");
+    if (window.AndroidBridge?.incomingCall2) window.AndroidBridge.incomingCall2(p?.name || "Звонок", !!this.video);
+    else if (window.AndroidBridge?.incomingCall) window.AndroidBridge.incomingCall(p?.name || "Звонок");
+    else if (!appVisible() && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification(p?.name || "Звонок", { body: this.video ? "Входящий видеозвонок" : "Входящий звонок", icon: "icon-192.png", requireInteraction: true }); } catch { /* */ }
+    }
+    // если позвонивший сдался, пока мы не ответили
+    clearTimeout(this.ringTimer);
+    this.ringTimer = setTimeout(() => { if (this.role === "callee" && !this.pc) { this.logMissed = true; this.reset(); } }, 55000);
+    this.tryAutoAnswer();
   },
   showUi(status) {
     const p = S.profiles.get(this.peer);

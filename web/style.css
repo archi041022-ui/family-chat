@@ -561,3 +561,83 @@ input, textarea { font: inherit; color: inherit; }
 .gc-banner .btn { padding: 7px 14px; font-size: 14px; }
 .bubble .gc-join { margin-top: 6px; width: 100%; padding: 8px 12px; font-size: 14px; }
 .gcall .tile.span2 { grid-column: span 2; }
+
+/* ───────── Интерфейс в стиле Telegram ───────── */
+:root { --fs: 16px; }
+.messages .bubble .text { font-size: var(--fs); }
+.no-pattern .messages { background-image: none !important; }
+.folders { display: flex; gap: 6px; padding: 2px 12px 8px; overflow-x: auto; scrollbar-width: none; flex: none; }
+.folders::-webkit-scrollbar { display: none; }
+.folders button { flex: none; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--muted); background: var(--bg); white-space: nowrap; }
+.folders button.on { background: var(--accent); color: #fff; }
+.chat-item { border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.chat-item .avatar { width: 54px; height: 54px; font-size: 20px; flex: none; }
+.chat-item.pinned { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.chat-item .muted-ico, .chat-item .pin-ico { display: inline-flex; color: var(--muted); vertical-align: -2px; margin-left: 4px; }
+.chat-item .muted-ico svg { width: 14px; height: 14px; }
+.chat-item .pin-ico svg { width: 16px; height: 16px; transform: rotate(45deg); }
+.chat-item .list-tick { display: inline-flex; color: var(--muted); }
+.chat-item .list-tick.read { color: var(--accent); }
+.chat-item .list-tick svg { width: 17px; height: 15px; }
+.badge.muted { background: #9aa3ad; }
+.typing-text { color: var(--accent) !important; font-style: italic; }
+.chat > .topbar .title small.typing-text { color: #fff !important; opacity: .95; }
+.list-caption { padding: 14px 16px 6px; font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; }
+.tg-action { padding: 12px 16px; border-radius: 0; color: var(--accent); font-weight: 600; }
+.tg-ico { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #fff; flex: none; }
+.tg-ico svg, .menu-item .tg-ico svg { width: 19px; height: 19px; color: #fff !important; }
+.contact-row, .call-row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; cursor: pointer; }
+.contact-row:hover, .call-row:hover { background: var(--bg); }
+.contact-row .mid, .call-row .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.contact-row .mid b, .call-row .mid b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contact-row small, .call-row small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contact-row small.online { color: var(--accent); }
+.contact-row .icon-btn, .call-row .icon-btn { color: var(--accent); }
+.contact-row.me { cursor: default; }
+.call-row .dir { display: inline-flex; vertical-align: -3px; margin-right: 4px; color: var(--ok, #2EAD6B); }
+.call-row .dir svg { width: 15px; height: 15px; }
+.call-row.missed b, .call-row.missed .dir { color: var(--danger); }
+.call-row .when { flex: none; }
+.set-profile { display: flex; align-items: center; gap: 14px; padding: 16px; cursor: pointer; background: var(--panel); }
+.set-profile .avatar { width: 72px; height: 72px; font-size: 28px; }
+.set-profile .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.set-profile .mid b { font-size: 20px; }
+.set-profile .mid small { color: var(--muted); }
+.set-profile .chev { color: var(--accent); display: inline-flex; }
+.set-profile .chev svg { width: 22px; height: 22px; }
+.set-group { margin: 10px 0; background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+#tabSettings { background: var(--bg); }
+.tg-set { border-radius: 0; padding: 10px 16px; gap: 14px; }
+.tg-set .lbl { flex: 1; }
+.tg-set .val { color: var(--muted); font-size: 14px; max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-set + .tg-set { border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.tg-set.danger .lbl { color: var(--danger); }
+.tg-back { display: flex; align-items: center; gap: 6px; padding: 10px 12px; color: var(--accent); font-weight: 600; }
+.tg-back svg { width: 20px; height: 20px; }
+.toggle-row span small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; margin-top: 2px; }
+.health { display: flex; align-items: center; gap: 10px; padding: 10px 6px; border-bottom: 1px solid var(--line); }
+.health .st { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 800; flex: none; }
+.health.ok .st { background: var(--ok, #2EAD6B); }
+.health.bad .st { background: var(--danger); }
+.health .lbl { flex: 1; }
+.btn.small { padding: 6px 12px; font-size: 14px; }
+.sheet-head { display: flex; align-items: center; gap: 10px; padding: 4px 6px 10px; font-size: 17px; }
+.search-results { max-height: 55vh; overflow-y: auto; }
+.search-hit .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.search-hit .mid span { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-hit small { color: var(--muted); }
+.media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-height: 60vh; overflow-y: auto; }
+.media-grid img, .media-grid video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; background: #000; cursor: pointer; }
+.media-grid .media-file { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; background: var(--bg); color: var(--text); }
+.media-grid .empty-chat { grid-column: 1 / -1; }
+.bubble .fwd { font-size: 13px; color: var(--accent); margin-bottom: 3px; }
+.msg.out .bubble .fwd { color: inherit; opacity: .85; }
+.meta .edited { font-style: normal; opacity: .8; }
+.msg.swipe-ready .bubble { box-shadow: 0 0 0 2px var(--accent); }
+.replying.editing { border-left-color: var(--accent); }
+.to-bottom { position: absolute; right: 14px; bottom: calc(76px + var(--safe-bottom)); width: 44px; height: 44px; border-radius: 50%; background: var(--panel);
+  color: var(--muted); box-shadow: 0 2px 10px rgba(0, 0, 0, .18); display: grid; place-items: center; z-index: 3; }
+.to-bottom svg { width: 24px; height: 24px; }
+.chat { position: relative; }
+.bottom-tabs button { font-size: 11px; }
+.bottom-tabs button svg { width: 23px; height: 23px; }

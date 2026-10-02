@@ -36,6 +36,7 @@ class MainActivity : Activity() {
         root.addView(w, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         web = w
         openChatFrom(intent)
+        callFrom(intent)
         if (Sharing.isShare(intent)) Sharing.accept(this, intent)
         askStartupPermissions()
     }
@@ -44,7 +45,21 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openChatFrom(intent)
+        callFrom(intent)
         if (Sharing.isShare(intent)) Sharing.accept(this, intent)
+    }
+
+    /** Нажали «Ответить» в уведомлении о звонке — отвечаем, как только звонок дойдёт до страницы. */
+    private fun callFrom(i: Intent?) {
+        if (i?.getBooleanExtra(EXTRA_ANSWER, false) == true) {
+            i.removeExtra(EXTRA_ANSWER)
+            Notifier.cancelCall(this)
+            WebHolder.js("window.answerIncoming && window.answerIncoming()")
+        }
+        if (i?.getBooleanExtra(EXTRA_RING, false) == true || i?.getBooleanExtra(EXTRA_ANSWER, false) == true) {
+            if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
+            WebHolder.js("window.__keepAlive && window.__keepAlive(true)")
+        }
     }
 
     private fun openChatFrom(i: Intent?) {
@@ -109,6 +124,15 @@ class MainActivity : Activity() {
             prefs.edit().putBoolean("asked_battery", true).apply()
             try {
                 startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            } catch (_: Throwable) {}
+            return
+        }
+        // Android 14+: разрешение показывать входящий звонок на весь экран (иначе экран не включается)
+        if (Build.VERSION.SDK_INT >= 34 && !Notifier.canFullScreen(this) && !prefs.getBoolean("asked_fsi", false)) {
+            prefs.edit().putBoolean("asked_fsi", true).apply()
+            android.widget.Toast.makeText(this, "Разрешите «Семье» показывать входящие звонки на весь экран", android.widget.Toast.LENGTH_LONG).show()
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
             } catch (_: Throwable) {}
         }
     }
@@ -266,6 +290,8 @@ class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_CHAT = "chat"
+        const val EXTRA_ANSWER = "answer_call"
+        const val EXTRA_RING = "ring_call"
         private const val REQ_MEDIA = 10
         private const val REQ_FILE = 11
         private const val REQ_NOTIFY = 12

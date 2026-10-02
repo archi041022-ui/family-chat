@@ -29,6 +29,7 @@
     eq(k, v) { this.f.push((r) => r[k] === v); return this; }
     lt(k, v) { this.f.push((r) => r[k] < v); return this; }
     gt(k, v) { this.f.push((r) => r[k] > v); return this; }
+    ilike(k, pat) { const q = pat.replace(/%/g, "").toLowerCase(); this.f.push((r) => String(r[k] || "").toLowerCase().includes(q)); return this; }
     in(k, vs) { this.f.push((r) => vs.includes(r[k])); return this; }
     match(o) { for (const [k, v] of Object.entries(o)) this.eq(k, v); return this; }
     order(k, o) { this.ord = [k, o?.ascending !== false]; return this; }

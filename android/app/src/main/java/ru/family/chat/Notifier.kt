@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
@@ -68,25 +69,60 @@ object Notifier {
         try { NotificationManagerCompat.from(ctx).notify(id, n) } catch (_: SecurityException) {}
     }
 
-    fun incomingCall(ctx: Context, name: String) {
-        if (WebHolder.foreground || !allowed(ctx)) return
-        val open = openIntent(ctx, null, ID_CALL)
+    /**
+     * Входящий звонок, когда приложение свёрнуто или экран выключен:
+     * будим экран, показываем звонок поверх блокировки, кнопки «Ответить» и «Отклонить».
+     */
+    fun incomingCall(ctx: Context, name: String, video: Boolean = false) {
+        if (WebHolder.foreground && isScreenOn(ctx)) return
+        wakeScreen(ctx)
+        if (!allowed(ctx)) return
+        val ring = PendingIntent.getActivity(ctx, ID_CALL,
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_RING, true),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val answer = PendingIntent.getActivity(ctx, ID_CALL + 1,
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_ANSWER, true),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val decline = PendingIntent.getService(ctx, ID_CALL + 2,
+            Intent(ctx, ChatService::class.java).setAction(ChatService.ACTION_DECLINE),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(ctx, CH_CALL)
             .setSmallIcon(android.R.drawable.sym_call_incoming)
-            .setContentTitle("Входящий звонок")
-            .setContentText(name)
+            .setContentTitle(name)
+            .setContentText(if (video) "Входящий видеозвонок" else "Входящий звонок")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(true)
-            .setTimeoutAfter(45_000)
-            .setContentIntent(open)
-            .setFullScreenIntent(open, true)
-            .addAction(0, "Открыть", open)
+            .setTimeoutAfter(50_000)
+            .setContentIntent(ring)
+            .setFullScreenIntent(ring, true)
+            .addAction(0, "Отклонить", decline)
+            .addAction(0, "Ответить", answer)
             .build()
         n.flags = n.flags or android.app.Notification.FLAG_INSISTENT
         try { NotificationManagerCompat.from(ctx).notify(ID_CALL, n) } catch (_: SecurityException) {}
     }
+
+    private fun isScreenOn(ctx: Context) = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+
+    /** Включает экран на полминуты — как при обычном звонке. */
+    @Suppress("DEPRECATION")
+    private fun wakeScreen(ctx: Context) {
+        try {
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (pm.isInteractive) return
+            pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE, "family:ring")
+                .acquire(30_000)
+        } catch (_: Throwable) {}
+    }
+
+    /** Может ли приложение показывать звонок на весь экран поверх блокировки (Android 14+ спрашивает отдельно). */
+    fun canFullScreen(ctx: Context): Boolean = Build.VERSION.SDK_INT < 34 ||
+        (ctx.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() ?: true)
 
     fun cancelCall(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_CALL)
 
