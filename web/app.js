@@ -125,7 +125,7 @@ const app = $("#app");
 
 // ───────────── Вход и регистрация ─────────────
 function showAuth() {
-  app.className = "app"; app.innerHTML = "";
+  app.className = "app auth-mode"; app.innerHTML = "";
   let mode = "in";
   const err = h("p", { class: "error" });
   const login = h("input", { autocomplete: "username", autocapitalize: "none", placeholder: "например, papa или 79001234567" });
@@ -304,7 +304,7 @@ async function adminResetFor(p) {
 }
 
 async function enter(user) {
-  app.innerHTML = "";
+  app.className = "app"; app.innerHTML = "";
   const { data: me } = await S.sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
   if (!me) { await S.sb.auth.signOut(); showAuth(); toast("Профиль не найден"); return; }
   S.me = me;

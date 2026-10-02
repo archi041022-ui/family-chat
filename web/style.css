@@ -314,3 +314,7 @@ input, textarea { font: inherit; color: inherit; }
 .sheet .error { margin: 0 4px 10px; }
 .status-card div { font-size: 17px; margin: 2px 0; user-select: text; -webkit-user-select: text; }
 .sheet .btn + .sheet-note { margin-top: 14px; }
+
+/* экран входа прокручивается, если не помещается (маленький экран, открыта клавиатура) */
+.app.auth-mode { display: block; overflow-y: auto; padding: calc(16px + var(--safe-top)) 0 calc(24px + var(--safe-bottom)); }
+.app.auth-mode .auth { margin: 0 auto; }
