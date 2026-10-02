@@ -10,6 +10,7 @@ const Assistant = {
   key(k) { return `assistant:${k}:${S.me?.id || ""}`; },
   load() {
     try { this.history = JSON.parse(localStorage.getItem(this.key("h")) || "[]"); } catch { this.history = []; }
+    for (const m of this.history) if (m.card?.state === "pending") m.card.state = "cancelled";
     try { Object.assign(this.settings, JSON.parse(localStorage.getItem(this.key("s")) || "{}")); } catch { /* */ }
   },
   save() {
@@ -47,8 +48,12 @@ const Assistant = {
         h("button", { class: "icon-btn", title: "Настройки", html: I.gear, onclick: () => this.settingsSheet() })),
       h("div", { class: "messages", id: "asstMsgs" }),
       h("div", { class: "asst-chips", id: "asstChips" },
-        ["☀️ Погода сейчас", "🌦 Погода на завтра", "📰 Главные новости", "💵 Курс доллара", "😄 Расскажи анекдот"].map((t) =>
-          h("button", { onclick: () => this.ask(t.replace(/^\S+\s/, "")) }, t))),
+        ["📞 Позвони…", "✉️ Напиши…", "☀️ Погода сейчас", "📰 Главные новости", "💵 Курс доллара", "😄 Расскажи анекдот"].map((t) =>
+          h("button", { onclick: () => {
+            const q = t.replace(/^\S+\s/, "");
+            if (q.endsWith("…")) { const inp = $("#asstInput"); inp.value = q.replace("…", " "); inp.focus(); inp.dispatchEvent(new Event("input")); }
+            else this.ask(q);
+          } }, t))),
       this.composer());
     app.append(view);
     renderChatList();
@@ -82,6 +87,7 @@ const Assistant = {
     for (const m of this.history) {
       const out = m.role === "user";
       const bubble = h("div", { class: "bubble" }, h("div", { class: "text" }, linkify(m.content), h("span", { class: "meta" }, fmtTime(m.at || Date.now()))));
+      if (m.card) bubble.append(this.cardEl(m));
       if (!out) bubble.append(h("button", { class: "asst-say", title: "Прочитать вслух", html: I.speaker, onclick: (e) => { e.stopPropagation(); Voice2.speak(m.content, this.settings.voice); } }));
       box.append(h("div", { class: `msg ${out ? "out" : "in"} tail first-in-run` }, bubble));
     }
@@ -103,6 +109,8 @@ const Assistant = {
     if (this.busy) return;
     Voice2.stop();
     this.history.push({ role: "user", content: text, at: Date.now() });
+    // звонки и сообщения выполняются прямо в приложении, без интернета-нейросети
+    try { if (await this.command(text)) return; } catch { /* обычный вопрос */ }
     this.busy = true; this.render(); this.save();
     let geo = null;
     if (/погод|температур|градус|дожд|снег|ветер|прогноз|холодно|тепло|зонт|одеться/i.test(text) && !/\s(в|во)\s+[А-ЯЁ]/.test(text) && !this.settings.city) geo = await this.location();
@@ -167,6 +175,178 @@ const Assistant = {
     ]);
   },
 };
+
+// ───────────── Команды: «позвони маме», «напиши папе что…» ─────────────
+Object.assign(Assistant, {
+  pending: null,     // { type: "dictate" | "confirm", target, text, msgIndex }
+
+  say(text, extra = {}) {
+    const m = { role: "assistant", content: text, at: Date.now(), ...extra };
+    this.history.push(m); this.save(); this.render();
+    if (this.settings.speak && S.assistantOpen) Voice2.speak(text, this.settings.voice);
+    return m;
+  },
+
+  norm(w) { return String(w).toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9]/g, ""); },
+  stem(w) {
+    w = this.norm(w);
+    if (w.length <= 3) return w;
+    return w.replace(/(ами|ями|ого|ему|ому|ыми|ими|ой|ей|ом|ем|ам|ям|ах|ях|ою|ею|у|ю|е|и|ы|а|я|ь)$/, "") || w;
+  },
+  same(a, b) {
+    const x = this.stem(a), y = this.stem(b);
+    if (x.length < 2 || y.length < 2) return false;
+    return x === y || (Math.min(x.length, y.length) >= 3 && (x.startsWith(y) || y.startsWith(x)));
+  },
+  targets() {
+    const list = [];
+    for (const p of S.profiles.values()) if (p.id !== S.me.id && !p.banned) list.push({ kind: "user", id: p.id, name: p.name, words: p.name.split(/\s+/) });
+    for (const c of S.chats) if (c.is_group) {
+      const words = (c.title || "Группа").split(/\s+/);
+      list.push({ kind: "chat", id: c.id, name: c.title || "Группа", words });
+      if (c.id === FAMILY_CHAT) for (const alias of [["семейный", "чат"], ["общий", "чат"], ["общую", "группу"], ["всем"], ["всех"]])
+        list.push({ kind: "chat", id: c.id, name: c.title || "Семья", words: alias });
+    }
+    return list;
+  },
+  // ищем адресата в начале фразы: «маме», «тёте Свете», «в группу Семья»
+  findTarget(words, groupOnly) {
+    let best = null;
+    for (const t of this.targets()) {
+      if (groupOnly && t.kind !== "chat") continue;
+      for (let k = Math.min(3, words.length); k >= 1; k--) {
+        const part = words.slice(0, k);
+        // все слова фразы должны совпасть со словами имени (по порядку), либо одно слово — с любым словом имени
+        const ok = k === 1 ? t.words.some((w) => this.same(part[0], w)) : part.every((w, i) => t.words[i] && this.same(w, t.words[i]));
+        if (ok && (!best || k > best.used)) best = { ...t, used: k };
+        if (ok) break;
+      }
+    }
+    return best;
+  },
+
+  async command(raw) {
+    const text = raw.trim().replace(/[.!]+$/, "").replace(/(^|\s)(пожалуйста|срочно|быстро)(?=[\s,]|$),?/gi, " ").replace(/\s+/g, " ").trim();
+    const low = text.toLowerCase().replace(/ё/g, "е");
+    const p = this.pending;
+
+    // ответ на «Отправить?» или текст под диктовку
+    if (p?.type === "confirm") {
+      if (/^(да|ага|угу|верно|ок|окей|давай|конечно|отправ|подтвержда)/.test(low)) { await this.sendPending(); return true; }
+      if (/^(нет|не надо|отмен|стоп|не отправ)/.test(low)) { this.cancelPending(); return true; }
+      if (/^(измени|исправ|по-другому|заново|перепиш)/.test(low)) {
+        this.markCard("cancelled"); this.pending = { type: "dictate", target: p.target };
+        this.say("Хорошо, продиктуйте новый текст."); return true;
+      }
+      // любая другая фраза — новый вариант текста
+      this.markCard("cancelled"); this.offer(p.target, text); return true;
+    }
+    if (p?.type === "dictate") {
+      if (/^(отмен|не надо|стоп)/.test(low)) { this.pending = null; this.say("Отменил."); return true; }
+      this.offer(p.target, text); return true;
+    }
+
+    // звонок
+    let m = text.match(/^(?:пожалуйста[,\s]+)?(позвони(?:ть)?|набери|звони|вызови|сделай\s+(?:видео)?звонок|видеозвонок|видео\s*звонок|аудиозвонок)\s+(.*)$/i);
+    if (m) {
+      const video = /видео/i.test(text);
+      let rest = m[2].replace(/^(?:мне\s+)?(?:по\s+видео(?:связи)?\s+|по\s+телефону\s+)?/i, "").replace(/^(к|с|на)\s+/i, "");
+      const g = rest.match(/^(?:в\s+)?(?:группу|группе|чат|чате|беседу)\s+(.*)$/i);
+      if (g) rest = g[1];
+      const t = this.findTarget(rest.split(/\s+/).filter(Boolean), !!g);
+      if (!t) { this.notFound(rest, !!g); return true; }
+      if (t.kind === "chat") { this.say(`Групповые звонки пока не поддерживаются. Скажите, кому из «${t.name}» позвонить.`); return true; }
+      if (Calls.pc || Calls.ui) { this.say("Сейчас уже идёт звонок."); return true; }
+      this.say(`${video ? "Видеозвонок" : "Звоню"}: ${t.name}…`);
+      setTimeout(() => Calls.start(t.id, video), 900);
+      return true;
+    }
+
+    // сообщение
+    m = text.match(/^(?:пожалуйста[,\s]+)?(напиши|написать|отправь|отправить|сообщи|передай|скажи)\s+(.*)$/i);
+    if (m) {
+      let rest = m[2].replace(/^(сообщение|смс|sms)\s+/i, "");
+      let groupOnly = false;
+      const g = rest.match(/^(?:в\s+)?(?:группу|группе|чат|чате|беседу)\s+(.*)$/i);
+      if (g) { rest = g[1]; groupOnly = true; }
+      const words = rest.split(/\s+/).filter(Boolean);
+      const t = this.findTarget(words.map((w) => w.replace(/[,:—-]+$/, "")), groupOnly);
+      // «напиши стих», «скажи, который час» — это не сообщение человеку, а вопрос ассистенту
+      if (!t) { if (groupOnly) { this.notFound(words[0] || "", true); return true; } return false; }
+      let body = words.slice(t.used).join(" ").replace(/^[,:—-]+\s*/, "").replace(/^(что|чтобы|текст|сообщение)\s+/i, "").trim();
+      if (!body) {
+        this.pending = { type: "dictate", target: t };
+        this.say(`Что написать? ${t.kind === "chat" ? "Группа: «" + t.name + "»" : "Получатель: " + t.name}. Продиктуйте или напишите текст.`);
+        return true;
+      }
+      body = body.charAt(0).toUpperCase() + body.slice(1);
+      this.offer(t, body);
+      return true;
+    }
+    return false;
+  },
+
+  offer(target, text) {
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+    this.pending = { type: "confirm", target, text };
+    const to = target.kind === "chat" ? `Группа: «${target.name}»` : `Получатель: ${target.name}`;
+    this.say(`${to}. Текст: «${text}». Отправить? Скажите «да», «нет» или «измени».`,
+      { card: { kind: target.kind, id: target.id, name: target.name, text, state: "pending" } });
+  },
+  markCard(state) {
+    for (let i = this.history.length - 1; i >= 0; i--) {
+      const c = this.history[i].card;
+      if (c && c.state === "pending") { c.state = state; break; }
+    }
+    this.save();
+  },
+  cancelPending() { this.markCard("cancelled"); this.pending = null; this.say("Не отправляю."); },
+  async sendPending() {
+    const p = this.pending; if (!p) return;
+    this.pending = null;
+    let chatId = p.target.id;
+    try {
+      if (p.target.kind === "user") {
+        const { data, error } = await S.sb.rpc("get_or_create_dm", { other: p.target.id });
+        if (error || !data) throw error || new Error("dm");
+        chatId = data;
+        if (!S.chats.find((c) => c.id === chatId)) { await loadChats(); renderChatList(); }
+      }
+      const res = await postMessage({ body: p.text.slice(0, 8000) }, chatId);
+      if (!res) throw new Error("send");
+      this.markCard("sent");
+      this.say(`Отправлено ✓ ${p.target.kind === "chat" ? "Группа: «" + p.target.name + "»" : "Получатель: " + p.target.name}.`);
+    } catch {
+      this.markCard("cancelled");
+      this.say("Не получилось отправить. Проверьте интернет и попробуйте ещё раз.");
+    }
+  },
+  notFound(what, group) {
+    if (group) {
+      const groups = [...new Set(this.targets().filter((t) => t.kind === "chat").map((t) => t.name))];
+      this.say(`Не нашёл группу «${what}». Ваши группы: ${groups.join(", ") || "нет"}.`);
+      return;
+    }
+    const names = this.targets().filter((t) => t.kind === "user").map((t) => t.name).slice(0, 8);
+    this.say(`Не нашёл «${what}» среди участников.${names.length ? " В семье есть: " + names.join(", ") + "." : ""}`);
+  },
+  cardEl(m) {
+    const c = m.card;
+    const box = h("div", { class: `asst-card${c.state !== "pending" ? " done" : ""}` },
+      h("div", { class: "who-to" }, c.kind === "chat" ? "👥" : "👤", c.kind === "chat" ? `в «${c.name}»` : c.name),
+      h("div", { class: "draft" }, c.text));
+    const last = this.history.filter((x) => x.card).at(-1) === m;
+    if (c.state === "pending" && last && this.pending?.type === "confirm") {
+      box.append(h("div", { class: "row" },
+        h("button", { class: "btn", onclick: (e) => { e.stopPropagation(); this.history.push({ role: "user", content: "Отправить", at: Date.now() }); this.sendPending(); } }, "Отправить"),
+        h("button", { class: "btn ghost", onclick: (e) => { e.stopPropagation(); const inp = $("#asstInput"); inp.value = c.text; inp.focus(); inp.dispatchEvent(new Event("input")); this.markCard("cancelled"); this.pending = { type: "dictate", target: { kind: c.kind, id: c.id, name: c.name } }; this.render(); } }, "Изменить"),
+        h("button", { class: "btn ghost", onclick: (e) => { e.stopPropagation(); this.cancelPending(); } }, "Отмена")));
+    } else {
+      box.append(h("small", { style: { color: "var(--muted)" } }, c.state === "sent" ? "✓ Отправлено" : c.state === "cancelled" ? "Отменено" : ""));
+    }
+    return box;
+  },
+});
 
 // ───────────── Озвучка ─────────────
 const Voice2 = {

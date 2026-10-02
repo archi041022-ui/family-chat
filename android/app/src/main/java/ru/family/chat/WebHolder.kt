@@ -140,6 +140,13 @@ object WebHolder {
 
         @JavascriptInterface fun takeShared(): String = Sharing.take()
 
+        /** Цвет строки состояния под выбранную тему оформления. */
+        @JavascriptInterface fun setBarColor(hex: String) {
+            val a = activity ?: return
+            val color = try { android.graphics.Color.parseColor(hex) } catch (_: Throwable) { return }
+            a.runOnUiThread { try { a.window.statusBarColor = color } catch (_: Throwable) {} }
+        }
+
         @JavascriptInterface fun speak(text: String, gender: String) {
             android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.speak(ctx, text, gender) }
         }

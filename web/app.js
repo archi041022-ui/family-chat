@@ -47,6 +47,8 @@ const I = {
   mute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 5M22 9l-5 5"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>',
   bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>',
+  palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18c1.1 0 1.6-.9 1.3-1.8-.3-.9.2-1.9 1.2-1.9H17a4 4 0 004-4c0-5-4-10.3-9-10.3z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor"/></svg>',
+  circleCam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 9.5h5.5a1 1 0 011 1v3a1 1 0 01-1 1H8a1 1 0 01-1-1v-3a1 1 0 011-1zM14.5 11.2l2.5-1.5v4.6l-2.5-1.5"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -115,6 +117,48 @@ const S = {
   replyTo: null, filter: "",
 };
 const app = $("#app");
+
+// ───────────── Оформление (цвет темы и светлая/тёмная) ─────────────
+const THEMES = [
+  ["coral", "Коралл", "#E8664F", "#F2A541"], ["ocean", "Океан", "#2F80ED", "#00B4D8"], ["forest", "Лес", "#23985B", "#8DBA2B"],
+  ["lavender", "Лаванда", "#8B5CF6", "#EC4899"], ["sunset", "Закат", "#F06418", "#E5374B"], ["sky", "Небо", "#0EA5E9", "#6366F1"],
+  ["rose", "Роза", "#E11D74", "#F59E0B"], ["graphite", "Графит", "#4B5A70", "#0EA5E9"],
+];
+const Theme = {
+  get(k, d) { try { return localStorage.getItem("ui:" + k) || d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("ui:" + k, v); } catch { /* */ } },
+  apply() {
+    const t = this.get("theme", "coral"), m = this.get("mode", "auto");
+    const root = document.documentElement;
+    if (t === "coral") delete root.dataset.theme; else root.dataset.theme = t;
+    if (m === "auto") delete root.dataset.mode; else root.dataset.mode = m;
+    const color = (THEMES.find((x) => x[0] === t) || THEMES[0])[2];
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
+    try { window.AndroidBridge?.setBarColor?.(color); } catch { /* */ }
+  },
+  sheet() {
+    let close;
+    const cur = () => this.get("theme", "coral");
+    const grid = h("div", { class: "theme-grid" }, THEMES.map(([id, name, c1, c2]) =>
+      h("button", { class: `theme-sw${cur() === id ? " on" : ""}`, onclick: (e) => {
+        this.set("theme", id); this.apply();
+        grid.querySelectorAll(".theme-sw").forEach((b) => b.classList.toggle("on", b === e.currentTarget));
+      } }, h("i", { style: { background: `linear-gradient(135deg, ${c1}, ${c2})` } }), name)));
+    const mode = this.get("mode", "auto");
+    const seg = (v, label) => h("button", { class: `seg${mode === v ? " on" : ""}`, onclick: (e) => {
+      this.set("mode", v); this.apply();
+      e.currentTarget.parentNode.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === e.currentTarget));
+    } }, label);
+    close = sheet([
+      h("h3", null, "🎨 Оформление"),
+      h("div", { class: "section-title", style: { padding: "0 4px 8px" } }, "Цвет"), grid,
+      h("div", { class: "section-title", style: { padding: "0 4px 8px" } }, "Тема"),
+      h("div", { class: "segmented" }, seg("auto", "Авто"), seg("light", "☀️ Светлая"), seg("dark", "🌙 Тёмная")),
+      h("button", { class: "btn wide", onclick: () => close() }, "Готово"),
+    ]);
+  },
+};
+Theme.apply();
 
 // ───────────── Запуск ─────────────
 (async function start() {
@@ -860,12 +904,14 @@ function composer() {
   const ta = h("textarea", { rows: 1, placeholder: "Сообщение", id: "input" });
   const file = h("input", { type: "file", multiple: true, class: "hidden", accept: "image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" });
   const action = h("button", { class: "send", title: "Голосовое", html: I.mic });
+  const vnBtn = h("button", { class: "vn-btn", title: "Видеосообщение (кружок)", html: I.circleCam, onclick: () => VideoNote.open() });
   const wrap = h("div", { class: "composer" },
-    h("button", { class: "icon-btn", title: "Фото, видео, файл", onclick: () => attachMenu(file), html: I.clip }), file, ta, action);
+    h("button", { class: "icon-btn", title: "Фото, видео, файл", onclick: () => attachMenu(file), html: I.clip }), file, ta, vnBtn, action);
   const update = () => {
     ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
     const has = ta.value.trim().length > 0;
     action.innerHTML = has ? I.send : I.mic; action.title = has ? "Отправить" : "Голосовое";
+    vnBtn.classList.toggle("hidden", has);
   };
   ta.addEventListener("input", update);
   ta.addEventListener("keydown", (e) => {
@@ -1194,7 +1240,8 @@ function openProfile() {
       if (error) { toast("Не удалось сохранить"); return; }
       S.me.name = n; S.profiles.set(S.me.id, S.me); close(); toast("Сохранено"); renderChatList(); Live.broadcast("profile", {});
     } }, "Сохранить"),
-    h("button", { class: "menu-item", style: { marginTop: "8px" }, onclick: () => { close(); changePasswordSheet(); } }, h("span", { html: I.lock }), "Сменить пароль"),
+    h("button", { class: "menu-item", style: { marginTop: "8px" }, onclick: () => { close(); Theme.sheet(); } }, h("span", { html: I.palette }), "Оформление и цвета"),
+    h("button", { class: "menu-item", onclick: () => { close(); changePasswordSheet(); } }, h("span", { html: I.lock }), "Сменить пароль"),
     h("button", { class: "menu-item", onclick: () => { close(); recoveryWordSheet(); } }, h("span", { html: I.key }), "Кодовое слово для восстановления"),
     S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); membersAdmin(); } }, h("span", { html: I.shield }), "Управление участниками") : null,
     S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); adminResetSheet(); } }, h("span", { html: I.group }), "Сбросить пароль участнику") : null,
@@ -1239,7 +1286,7 @@ function subscribe() {
     if (window.AndroidBridge) return; // в приложении это сообщает сам Android
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
-  window.onAppForeground = () => { resync(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
+  window.onAppForeground = () => { Theme.apply(); resync(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
   window.onAppBackground = () => { S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }
