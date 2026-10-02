@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>STT CI</title>
+<script>window.CHAT_CONFIG = { sttModelUrl: "/models/vosk-ru.tar.gz" };</script>
+<script src="/stt.js"></script>
+<script>STT.libUrl = "/vendor/vosk.js";
+window.runStt = async (url) => { const b = await (await fetch(url)).blob(); const t0 = performance.now(); const text = await STT.transcribe(b); return { text, ms: Math.round(performance.now() - t0) }; };
+</script>

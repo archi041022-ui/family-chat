@@ -25,6 +25,14 @@ jobs:
           mkdir -p web/vendor
           curl -fsSL -o web/vendor/supabase.js https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js
           curl -fsSL -o web/vendor/qrcode.js https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js
+          curl -fsSL -o web/vendor/vosk.js https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js
+
+      - name: Модель распознавания речи (Vosk, русский, ≈45 МБ) — для расшифровки голосовых
+        run: |
+          curl -fsSL -o /tmp/ru.zip https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+          cd /tmp && unzip -q ru.zip && mv vosk-model-small-ru-0.22 model && tar -czf vosk-ru.tar.gz model
+          mkdir -p $GITHUB_WORKSPACE/web/models && mv /tmp/vosk-ru.tar.gz $GITHUB_WORKSPACE/web/models/
+          ls -la $GITHUB_WORKSPACE/web/models
 
       - name: Сайт (GitHub Pages)
         if: github.ref == 'refs/heads/main'
@@ -48,6 +56,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets
           cp -r ../web app/src/main/assets/web
+          rm -rf app/src/main/assets/web/models     # модель речи скачивается с сайта по запросу, в приложение не входит
           gradle assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../Semya.apk
 
@@ -59,3 +68,22 @@ jobs:
           name: Семья — сборка ${{ github.run_number }}
           body: ${{ github.event.head_commit.message }}
           files: Semya.apk
+
+  stt-test:
+    # проверка расшифровки голосовых в настоящем браузере
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Подготовка
+        run: |
+          mkdir -p web/vendor web/models
+          curl -fsSL -o web/vendor/vosk.js https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js
+          curl -fsSL -o /tmp/ru.zip https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+          cd /tmp && unzip -q ru.zip && mv vosk-model-small-ru-0.22 model && tar -czf vosk-ru.tar.gz model
+          mv /tmp/vosk-ru.tar.gz $GITHUB_WORKSPACE/web/models/
+          sudo apt-get update -qq && sudo apt-get install -y -qq espeak-ng ffmpeg > /dev/null
+          espeak-ng -v ru -s 140 -w /tmp/speech.wav "привет мама как дела"
+          ffmpeg -loglevel error -y -i /tmp/speech.wav -ar 48000 -c:a libopus /tmp/speech.webm
+          pip install -q playwright && python -m playwright install --with-deps chromium > /dev/null
+      - name: Расшифровка тестовой фразы
+        run: python test/stt_ci.py

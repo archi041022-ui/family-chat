@@ -239,6 +239,20 @@ object WebHolder {
         @JavascriptInterface fun canInstallUpdates(): Boolean =
             android.os.Build.VERSION.SDK_INT < 26 || ctx.packageManager.canRequestPackageInstalls()
 
+                @JavascriptInterface fun lockAvailable(): Boolean =
+            (ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isDeviceSecure
+
+        @JavascriptInterface fun unlock() {
+            val a = activity
+            if (a == null) { WebHolder.js("window.onUnlock && window.onUnlock(false, 'no_activity')"); return }
+            a.runOnUiThread { a.unlock() }
+        }
+
+        @JavascriptInterface fun setSecure(on: Boolean) {
+            val a = activity ?: return
+            a.runOnUiThread { a.setSecure(on) }
+        }
+
                 @JavascriptInterface fun ringStart() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.ringStart(ctx) } }
         @JavascriptInterface fun ringStop() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.ringStop() } }
         @JavascriptInterface fun playMessageSound() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.message(ctx) } }

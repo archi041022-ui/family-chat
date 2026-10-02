@@ -245,6 +245,49 @@ class MainActivity : Activity() {
         Speech.listen(this)
     }
 
+    // ───────────── Вход по отпечатку / лицу / ПИН-коду телефона ─────────────
+    fun unlock() {
+        val done = { ok: Boolean, reason: String -> WebHolder.js("window.onUnlock && window.onUnlock($ok, " + JSONObject.quote(reason) + ")") }
+        val km = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if (!km.isDeviceSecure) { done(false, "no_lock"); return }
+        if (Build.VERSION.SDK_INT >= 28) {
+            val b = android.hardware.biometrics.BiometricPrompt.Builder(this)
+                .setTitle("Вход в «Семью»")
+                .setSubtitle("Приложите палец или посмотрите на экран")
+            if (Build.VERSION.SDK_INT >= 30) {
+                b.setAllowedAuthenticators(android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                    android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+            } else if (Build.VERSION.SDK_INT == 29) {
+                @Suppress("DEPRECATION") b.setDeviceCredentialAllowed(true)
+            } else {
+                b.setNegativeButton("ПИН-код телефона", mainExecutor) { _, _ -> confirmCredential(km) }
+            }
+            try {
+                b.build().authenticate(android.os.CancellationSignal(), mainExecutor,
+                    object : android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: android.hardware.biometrics.BiometricPrompt.AuthenticationResult?) = done(true, "ok")
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence?) {
+                            if (Build.VERSION.SDK_INT == 28 && errorCode == android.hardware.biometrics.BiometricPrompt.BIOMETRIC_ERROR_NO_BIOMETRICS) confirmCredential(km)
+                            else done(false, errString?.toString() ?: "cancel")
+                        }
+                    })
+            } catch (_: Throwable) { confirmCredential(km) }
+        } else confirmCredential(km)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun confirmCredential(km: android.app.KeyguardManager) {
+        val i = km.createConfirmDeviceCredentialIntent("Вход в «Семью»", "Введите ПИН-код или графический ключ телефона")
+        if (i == null) { WebHolder.js("window.onUnlock && window.onUnlock(false, 'no_lock')"); return }
+        try { startActivityForResult(i, REQ_UNLOCK) } catch (_: Throwable) { WebHolder.js("window.onUnlock && window.onUnlock(false, 'error')") }
+    }
+
+    /** Защищённый чат: запрет снимков и записи экрана. */
+    fun setSecure(on: Boolean) {
+        if (on) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
     // ───────────── Мелодии звонка и уведомлений ─────────────
     private var soundKind = "ring"
 
@@ -346,6 +389,10 @@ class MainActivity : Activity() {
             cb?.onReceiveValue(if (resultCode == RESULT_OK && u != null) arrayOf(u) else null)
             return
         }
+        if (requestCode == REQ_UNLOCK) {
+            WebHolder.js("window.onUnlock && window.onUnlock(" + (resultCode == RESULT_OK) + ", 'credential')")
+            return
+        }
         if (requestCode == REQ_SOUND || requestCode == REQ_SOUND_FILE) {
             soundResult(requestCode, if (resultCode == RESULT_OK) data else null)
             return
@@ -384,5 +431,6 @@ class MainActivity : Activity() {
         private const val REQ_CONTACT = 18
         private const val REQ_SOUND = 19
         private const val REQ_SOUND_FILE = 20
+        private const val REQ_UNLOCK = 21
     }
 }
