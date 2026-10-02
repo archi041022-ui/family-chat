@@ -43,6 +43,7 @@ object WebHolder {
         val wrap = MutableContextWrapper(app)
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(app))
+            .addPathHandler("/shared/", Sharing.Handler(app))
             .build()
         val w = WebView(wrap)
         w.settings.apply {
@@ -130,6 +131,13 @@ object WebHolder {
             ctx.getSharedPreferences("family", Context.MODE_PRIVATE).edit().putBoolean("logged_in", false).apply()
             ChatService.stop(ctx)
         }
+
+        @JavascriptInterface fun takeShared(): String = Sharing.take()
+
+        @JavascriptInterface fun shareFile(url: String, mime: String, name: String, text: String?) =
+            Sharing.shareFile(ctx, url, mime, name, text)
+
+        @JavascriptInterface fun shareText(text: String) = Sharing.shareText(ctx, text)
 
         @JavascriptInterface fun startScreenShare(): Boolean {
             val a = activity ?: return false

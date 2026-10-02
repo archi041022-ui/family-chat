@@ -327,3 +327,10 @@ input, textarea { font: inherit; color: inherit; }
 .share-banner button { background: #fff; color: #E5484D; font-weight: 700; padding: 6px 12px; border-radius: 999px; }
 .call .controls { gap: 14px; }
 .call .cbtn { width: 58px; height: 58px; }
+.call .status.weak { color: #ffd38a; }
+
+/* ───────── Поделиться ───────── */
+.share-previews { display: flex; gap: 8px; overflow-x: auto; margin: 0 4px 12px; }
+.share-previews img { width: 84px; height: 84px; object-fit: cover; border-radius: 12px; flex: none; }
+.share-file { width: 84px; height: 84px; border-radius: 12px; background: var(--bg); flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 28px; padding: 4px; }
+.share-file small { font-size: 10px; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }

@@ -106,6 +106,23 @@ try:
         A.click("#tabBtnChats"); A.wait_for_timeout(300); shot(A, "17_A_chats_strip")
         B.click("#tabBtnChats"); B.wait_for_timeout(300)
         print("views:", views_txt)
+        # входящий «Поделиться» (как из галереи Android): фото + текст → выбор чата
+        A.evaluate("""() => { const c = document.createElement('canvas'); c.width = 200; c.height = 150; const x = c.getContext('2d');
+            x.fillStyle = '#9B5DE5'; x.fillRect(0,0,200,150); x.fillStyle='#fff'; x.font='28px sans-serif'; x.fillText('Галерея', 30, 85);
+            const url = c.toDataURL('image/png');
+            window.AndroidBridge = Object.assign(window.AndroidBridge || {}, { takeShared: () => { const r = window.__sh; window.__sh = null; return r || ''; } });
+            window.__sh = JSON.stringify({ files: [{ url, name: 'photo.png', mime: 'image/png' }], text: 'Смотри, какое фото!' });
+            window.onSharedItems(); }""")
+        A.wait_for_selector(".sheet >> text=Кому"); A.wait_for_timeout(300); shot(A, "22_A_share_in")
+        A.click(".sheet .menu-item >> text=Семья")
+        B.wait_for_timeout(1500)
+        A.wait_for_selector(".msg .text >> text=Смотри, какое фото!"); shot(A, "23_A_shared_sent")
+        print("share in: ok")
+        # «Поделиться» из сообщения наружу (в браузере без системного меню — копирование ссылки или системное окно)
+        A.evaluate("() => { window.AndroidBridge.shareFile = (u, m, n, t) => { window.__out = [u.slice(0, 10), m, n, t]; }; }")
+        A.click(".msg.out img.photo >> nth=-1", button="right"); A.click(".sheet >> text=Поделиться")
+        print("share out:", A.evaluate("window.__out"))
+        A.click(".back-btn")
         # восстановление пароля: Мама задаёт кодовое слово, выходит и меняет пароль по нему
         B.click("button[title='Профиль']"); B.click("text=Кодовое слово для восстановления")
         B.fill(".sheet input", "Барсик"); B.click(".sheet .btn.wide"); B.wait_for_timeout(300)

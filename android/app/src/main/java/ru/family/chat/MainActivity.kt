@@ -36,12 +36,15 @@ class MainActivity : Activity() {
         root.addView(w, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         web = w
         openChatFrom(intent)
+        if (Sharing.isShare(intent)) Sharing.accept(this, intent)
         askStartupPermissions()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         openChatFrom(intent)
+        if (Sharing.isShare(intent)) Sharing.accept(this, intent)
     }
 
     private fun openChatFrom(i: Intent?) {

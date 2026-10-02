@@ -36,6 +36,7 @@ const I = {
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
   key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/></svg>',
   screen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M9 10l3-3 3 3M12 7v6"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -191,6 +192,67 @@ function showAuth() {
   app.append(form);
 }
 
+// ───────────── Поделиться ─────────────
+const MIME_BY_TYPE = { image: "image/jpeg", video: "video/mp4", audio: "audio/webm", file: "application/octet-stream" };
+function fileNameFor(m) {
+  if (m.media_name) return m.media_name.replace(/[\\/:*?"<>|]/g, "_");
+  const ext = (m.media_path || "").split(".").pop() || "bin";
+  return `${{ image: "Фото", video: "Видео", audio: "Голосовое", file: "Файл" }[m.media_type] || "Файл"}.${ext}`;
+}
+async function shareOut(m) {
+  const url = m.media_path && S.urls.get(m.media_path);
+  const text = m.body || "";
+  const ab = window.AndroidBridge;
+  try {
+    if (url && ab?.shareFile) { ab.shareFile(url, MIME_BY_TYPE[m.media_type] || "*/*", fileNameFor(m), text); toast("Готовлю файл…"); return; }
+    if (!url && ab?.shareText) { ab.shareText(text); return; }
+    if (url && navigator.canShare) {
+      const blob = await (await fetch(url)).blob();
+      const file = new File([blob], fileNameFor(m), { type: blob.type || MIME_BY_TYPE[m.media_type] });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: text || undefined }); return; }
+    }
+    if (navigator.share) { await navigator.share(url ? { url, text: text || undefined } : { text }); return; }
+    await navigator.clipboard.writeText(url || text); toast(url ? "Ссылка на файл скопирована" : "Текст скопирован");
+  } catch (e) { if (e?.name !== "AbortError") toast("Не удалось поделиться"); }
+}
+
+// Файлы, которыми поделились из других приложений («Поделиться» → «Семья»)
+window.onSharedItems = async () => {
+  if (!S.me || !window.AndroidBridge?.takeShared) return;
+  let items;
+  try { items = JSON.parse(window.AndroidBridge.takeShared() || "null"); } catch { items = null; }
+  if (!items || (!items.files?.length && !items.text)) return;
+  const files = [];
+  for (const f of items.files || []) {
+    try {
+      const blob = await (await fetch(f.url)).blob();
+      files.push(new File([blob], f.name || "Файл", { type: f.mime || blob.type || "application/octet-stream" }));
+    } catch { /* пропускаем недоступный файл */ }
+  }
+  pickChatAndSend(files, items.text || "");
+};
+function pickChatAndSend(files, text) {
+  let close;
+  const what = [files.length ? `${files.length} ${plural(files.length, "файл", "файла", "файлов")}` : "", text ? "текст" : ""].filter(Boolean).join(" и ");
+  const sorted = [...S.chats].sort((a, b) => new Date(S.lastByChat.get(b.id)?.created_at || b.last_message_at) - new Date(S.lastByChat.get(a.id)?.created_at || a.last_message_at));
+  const previews = h("div", { class: "share-previews" }, files.slice(0, 6).map((f) =>
+    f.type.startsWith("image/") ? h("img", { src: URL.createObjectURL(f), alt: "" }) : h("div", { class: "share-file" }, f.type.startsWith("video/") ? "🎬" : "📎", h("small", null, f.name))));
+  close = sheet([
+    h("h3", null, "Отправить " + (what || "")),
+    files.length ? previews : null,
+    text ? h("div", { class: "status-card" }, h("div", { class: "status-text" }, text.length > 200 ? text.slice(0, 200) + "…" : text)) : null,
+    h("div", { class: "section-title" }, "Кому"),
+    ...sorted.map((c) => h("button", { class: "menu-item", onclick: async () => {
+      close();
+      showTab("chats");
+      S.current = null; await openChat(c.id);
+      for (const f of files) await sendFile(f);
+      if (text) await postMessage({ body: text.slice(0, 8000) });
+      toast("Отправлено");
+    } }, chatAvatar(c, "sm"), chatTitle(c))),
+  ]);
+}
+
 // ───────────── Восстановление пароля ─────────────
 const loginToEmail = (l) => `${l.trim().toLowerCase().replace(/^\+/, "")}@${CFG.loginDomain || "family-chat.app"}`;
 function forgotPassword(prefill = "") {
@@ -323,6 +385,7 @@ async function enter(user) {
   subscribe();
   Calls.init();
   window.AndroidBridge?.loggedIn?.();
+  setTimeout(() => window.onSharedItems(), 300);
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -629,6 +692,7 @@ function messageMenu(m) {
     items.push(h("div", { class: "emoji-row" }, EMOJI.map((e) => h("button", { class: mine.includes(e) ? "mine" : "", onclick: () => { close(); toggleReaction(m, e); } }, e))));
     items.push(h("button", { class: "menu-item", onclick: () => { close(); setReply(m); } }, h("span", { html: I.reply }), "Ответить"));
     if (m.body) items.push(h("button", { class: "menu-item", onclick: async () => { close(); try { await navigator.clipboard.writeText(m.body); toast("Скопировано"); } catch { toast("Не удалось скопировать"); } } }, h("span", { html: I.copy }), "Копировать текст"));
+    if (m.body || (m.media_path && S.urls.get(m.media_path))) items.push(h("button", { class: "menu-item", onclick: () => { close(); shareOut(m); } }, h("span", { html: I.share }), "Поделиться"));
     if (m.media_path && S.urls.get(m.media_path)) items.push(h("a", { class: "menu-item", href: S.urls.get(m.media_path), target: "_blank", rel: "noopener", download: m.media_name || "", onclick: () => close() }, h("span", { html: I.download }), "Сохранить файл"));
     if (m.user_id === S.me.id) items.push(h("button", { class: "menu-item danger", onclick: () => { close(); deleteMessage(m); } }, h("span", { html: I.trash }), "Удалить у всех"));
   }
@@ -1054,7 +1118,7 @@ const Calls = {
   async media(video) {
     return navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      video: video ? { facingMode: this.facing, width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+      video: video ? { facingMode: this.facing, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } } : false,
     });
   },
   makePc() {
@@ -1068,9 +1132,19 @@ const Calls = {
     pc.onicecandidate = (e) => { if (e.candidate) this.send(this.peer, { kind: "ice", candidate: e.candidate.toJSON() }); };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected" && !this.connected) {
-        this.connected = true; this.startedAt = Date.now(); this.stopRing(); this.setStatus("00:00"); this.timer();
+        this.connected = true; this.startedAt = Date.now(); this.stopRing(); this.setStatus("00:00"); this.timer(); this.attach(); this.tuneSenders();
       }
-      if (pc.connectionState === "failed") { toast("Связь не установилась: сеть блокирует звонок", 4000); this.hangup(true, "failed"); }
+      if (pc.connectionState === "connected" && this.connected) { this.reconnecting = false; clearTimeout(this.restartTimer); this.ui?.querySelector(".status")?.classList.remove("weak"); }
+      // кратковременный обрыв (смена Wi-Fi/мобильной сети) — переподключаемся, не сбрасывая звонок
+      if (pc.connectionState === "disconnected" && this.connected) {
+        this.setStatus("Восстанавливаю связь…"); this.ui?.querySelector(".status")?.classList.add("weak");
+        clearTimeout(this.restartTimer);
+        this.restartTimer = setTimeout(() => { if (this.pc === pc && pc.connectionState !== "connected") this.restartIce(); }, 2500);
+      }
+      if (pc.connectionState === "failed") {
+        if (this.connected && (this.restarts || 0) < 3) { this.restartIce(); return; }
+        toast(this.connected ? "Связь потеряна" : "Связь не установилась: сеть блокирует звонок", 4000); this.hangup(true, "failed");
+      }
     };
     this.local.getTracks().forEach((t) => pc.addTrack(t, this.local));
     return pc;
@@ -1158,9 +1232,10 @@ const Calls = {
   reset() {
     if (this.screen) this.stopScreen(true);
     if (this.ui || this.pc) { window.AndroidBridge?.callState?.(false, false); window.AndroidBridge?.cancelCall?.(); }
-    clearTimeout(this.ringTimer); clearInterval(this.tick); this.stopRing();
+    clearTimeout(this.ringTimer); clearTimeout(this.videoOffTimer); clearInterval(this.tick); this.stopRing();
     this.pc?.close(); this.pc = null;
     this.local?.getTracks().forEach((t) => t.stop()); this.local = null; this.remote = null;
+    clearTimeout(this.restartTimer); this.restarts = 0;
     this.ui?.remove(); this.ui = null; this.peer = null; this.callId = null; this.connected = false; this.pendingIce = [];
   },
 
@@ -1204,13 +1279,38 @@ const Calls = {
   attach() {
     if (!this.ui) return;
     const lv = this.ui.querySelector("video.local"), rv = this.ui.querySelector("video.remote");
-    if (lv && this.local) { lv.srcObject = this.local; lv.classList.toggle("hidden", !this.local.getVideoTracks().some((t) => t.enabled)); }
-    if (rv && this.remote) { rv.srcObject = this.remote; rv.play?.().catch(() => {}); }
-    this.ui.classList.toggle("has-video", this.hasRemoteVideo());
+    if (lv && this.local) {
+      if (lv.srcObject !== this.local) lv.srcObject = this.local;
+      lv.classList.toggle("hidden", !this.local.getVideoTracks().some((t) => t.enabled && t.readyState === "live"));
+    }
+    if (rv && this.remote) {
+      if (rv.srcObject !== this.remote) rv.srcObject = this.remote;
+      if (rv.paused) rv.play?.().catch(() => {});
+    }
+    // видео собеседника: включаем сразу, а выключаем только если кадров нет дольше 2 секунд — без мигания
+    const has = this.hasRemoteVideo();
+    clearTimeout(this.videoOffTimer);
+    if (has) this.ui.classList.add("has-video");
+    else if (this.ui.classList.contains("has-video")) this.videoOffTimer = setTimeout(() => { if (!this.hasRemoteVideo()) this.ui?.classList.remove("has-video"); }, 2000);
     if (this.connected) this.ui.classList.remove("ringing");
   },
+  // ровное качество: ограничиваем битрейт и частоту кадров, при плохой сети снижаем чёткость, а не плавность
+  async tuneSenders() {
+    if (!this.pc) return;
+    for (const snd of this.pc.getSenders()) {
+      if (snd.track?.kind !== "video") continue;
+      try {
+        const prm = snd.getParameters();
+        if (!prm.encodings || !prm.encodings.length) prm.encodings = [{}];
+        prm.encodings[0].maxBitrate = this.screen ? 1200000 : 800000;
+        prm.encodings[0].maxFramerate = this.screen ? 10 : 24;
+        prm.degradationPreference = this.screen ? "maintain-resolution" : "maintain-framerate";
+        await snd.setParameters(prm);
+      } catch { /* браузер не поддерживает — не страшно */ }
+    }
+  },
   hasRemoteVideo() { return !!this.remote?.getVideoTracks().some((t) => t.readyState === "live" && !t.muted); },
-  setStatus(t) { const s = this.ui?.querySelector(".status"); if (s) s.textContent = t; if (this.connected) this.ui?.classList.remove("ringing"); this.attach(); },
+  setStatus(t) { const s = this.ui?.querySelector(".status"); if (s) s.textContent = t; if (this.connected) this.ui?.classList.remove("ringing"); },
   timer() { clearInterval(this.tick); this.tick = setInterval(() => this.setStatus(fmtDur((Date.now() - this.startedAt) / 1000)), 1000); },
 
   async toggleCamera(btn) {
@@ -1233,11 +1333,20 @@ const Calls = {
       this.video = true; btn.innerHTML = I.video; btn.classList.remove("off"); this.send(this.peer, { kind: "video", on: true }); this.attach();
     } catch { toast("Камера недоступна"); }
   },
+  async restartIce() {
+    if (!this.pc || this.role !== "caller") return;      // перезапуск начинает звонящий, чтобы не было встречных предложений
+    this.restarts = (this.restarts || 0) + 1;
+    try {
+      const offer = await this.pc.createOffer({ iceRestart: true });
+      await this.pc.setLocalDescription(offer);
+      await this.send(this.peer, { kind: "reoffer", sdp: offer.sdp });
+    } catch { /* следующая попытка по таймеру */ }
+  },
   // ── демонстрация экрана
   async videoSend(track) {
     const sender = this.pc.getSenders().find((x) => x.track?.kind === "video") ||
       this.pc.getTransceivers().find((t) => t.receiver.track?.kind === "video" && t.sender && !t.sender.track && t.direction !== "recvonly")?.sender;
-    if (sender) { await sender.replaceTrack(track); return; }
+    if (sender) { await sender.replaceTrack(track); this.tuneSenders(); return; }
     this.pc.addTrack(track, this.local);
     const offer = await this.pc.createOffer(); await this.pc.setLocalDescription(offer);
     await this.send(this.peer, { kind: "reoffer", sdp: offer.sdp });
