@@ -72,6 +72,28 @@ try:
         has_video = A.evaluate("Calls.hasRemoteVideo()")
         B.click(".cbtn.red"); A.wait_for_selector(".call", state="detached", timeout=5000)
         B.wait_for_selector(".msg .text >> text=📞 Видеозвонок"); shot(B, "11_B_call_log")
+        # статус
+        A.goto(URL); B.goto(URL); A.wait_for_selector("#chatItems .chat-item"); B.wait_for_selector("#chatItems .chat-item")
+        A.click("button[title='Профиль']")
+        A.click(".status-presets >> text=💼 На работе"); A.click(".sheet .btn.wide")
+        B.click("#tabBtnStories"); B.wait_for_selector("#tabStories >> text=💼 На работе"); shot(B, "13_B_statuses")
+        # текстовая история
+        A.click("#tabBtnStories"); A.click(".add-story"); A.click("text=Текст на цветном фоне")
+        A.fill(".story-text-input", "С днём рождения, сынок! 🎂"); A.click("text=Опубликовать на 24 часа")
+        B.wait_for_selector("#storiesBadge:not(.hidden)"); B.wait_for_timeout(300); shot(B, "14_B_stories_tab")
+        B.click("#tabStories .story-row >> nth=1"); B.wait_for_selector(".story-viewer .sv-text"); B.wait_for_timeout(700); shot(B, "15_B_story_view")
+        B.click(".sv-quick button >> nth=0"); B.wait_for_timeout(400)
+        B.click(".sv-head button[title='Закрыть']")
+        # фото-история и просмотры у автора
+        A.set_input_files("#tabStories input[type=file]", "/tmp/fc_icon_432.png") if A.locator("#tabStories input[type=file]").count() else None
+        A.click(".add-story"); A.set_input_files(".sheet input[type=file]", "/tmp/fc_icon_432.png")
+        A.wait_for_timeout(800)
+        A.click("#tabStories .story-row >> nth=0"); A.wait_for_selector(".sv-views"); A.wait_for_timeout(500); shot(A, "16_A_own_story")
+        views_txt = A.inner_text(".sv-views")
+        A.click(".sv-head button[title='Закрыть']")
+        A.click("#tabBtnChats"); A.wait_for_timeout(300); shot(A, "17_A_chats_strip")
+        B.click("#tabBtnChats"); B.wait_for_timeout(300)
+        print("views:", views_txt)
         # широкий экран
         W = ctx.new_page(); W.set_viewport_size({"width": 1280, "height": 800}); W.goto(URL)
         W.wait_for_timeout(500); shot(W, "12_desktop_login")

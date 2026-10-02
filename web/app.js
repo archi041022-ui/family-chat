@@ -6,6 +6,7 @@ const CFG = window.CHAT_CONFIG || {};
 const FAMILY_CHAT = "00000000-0000-0000-0000-000000000001";
 const EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🔥", "🙏", "🎉"];
 const PAGE = 50;
+const STATUS_PRESETS = ["🏠 Дома", "💼 На работе", "🚗 В дороге", "😴 Сплю", "🍽 Обедаю", "📵 Не беспокоить", "🎉 Праздную"];
 const COLORS = ["#E8664F", "#3D8BFD", "#2EAD6B", "#9B5DE5", "#F2A541", "#00A6A6", "#E0457B", "#6C7A89"];
 
 // ───────────── Иконки ─────────────
@@ -29,6 +30,9 @@ const I = {
   logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.6 7.1L4 20.5l1.4-5A8 8 0 1121 12z"/></svg>',
+  story: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="4 2.2"/><circle cx="12" cy="12" r="4.5"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -65,6 +69,7 @@ const fmtDur = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padSta
 function colorFor(id) { let n = 0; for (const c of String(id)) n = (n * 31 + c.charCodeAt(0)) >>> 0; return COLORS[n % COLORS.length]; }
 function initials(name) { return (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase(); }
 function toast(text, ms = 2600) {
+  document.querySelectorAll(".toast").forEach((x) => x.remove());
   const t = h("div", { class: "toast" }, text); document.body.append(t); setTimeout(() => t.remove(), ms);
 }
 function linkify(text) {
@@ -185,9 +190,11 @@ async function enter(user) {
   S.me = me;
   await loadProfiles();
   await loadChats();
+  await Stories.load();
   buildShell();
   subscribe();
   Calls.init();
+  window.AndroidBridge?.loggedIn?.();
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -233,11 +240,17 @@ function buildShell() {
         avatarEl(S.me.id, "sm", { onclick: openProfile, style: { cursor: "pointer" } }),
         h("div", { class: "title" }, h("b", null, CFG.appName || "Семья"), h("small", { id: "conn" }, "в сети")),
         h("button", { class: "icon-btn", title: "Профиль", onclick: openProfile, html: I.pen })),
-      h("div", { class: "search" }, h("input", { placeholder: "Поиск", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } })),
-      h("div", { class: "chat-list", id: "chatList" }),
-      h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.plus })),
+      h("div", { class: "tab-body", id: "tabChats" },
+        h("div", { class: "search" }, h("input", { placeholder: "Поиск", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } })),
+        h("div", { class: "chat-list", id: "chatList" }, h("div", { id: "storyStrip" }), h("div", { id: "chatItems" })),
+        h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.plus })),
+      h("div", { class: "tab-body hidden", id: "tabStories" }),
+      h("nav", { class: "bottom-tabs" },
+        h("button", { class: "on", id: "tabBtnChats", onclick: () => showTab("chats") }, h("span", { html: I.chat }), "Чаты", h("i", { class: "tab-badge hidden", id: "chatsBadge" })),
+        h("button", { id: "tabBtnStories", onclick: () => showTab("stories") }, h("span", { html: I.story }), "Истории", h("i", { class: "tab-badge hidden", id: "storiesBadge" })))),
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
   renderChatList();
+  Stories.renderAll();
   if (!window.__popBound) {
     window.__popBound = true;
     window.addEventListener("popstate", () => {
@@ -277,8 +290,10 @@ function previewText(m) {
 }
 
 function renderChatList() {
-  const list = $("#chatList"); if (!list) return;
+  const list = $("#chatItems"); if (!list) return;
   list.innerHTML = "";
+  const totalUnread = [...S.unread.values()].reduce((a, b) => a + b, 0);
+  const cb = $("#chatsBadge"); if (cb) { cb.textContent = totalUnread > 99 ? "99+" : totalUnread; cb.classList.toggle("hidden", !totalUnread); }
   const sorted = [...S.chats].sort((a, b) => {
     const ta = S.lastByChat.get(a.id)?.created_at || a.last_message_at, tb = S.lastByChat.get(b.id)?.created_at || b.last_message_at;
     return new Date(tb) - new Date(ta);
@@ -348,7 +363,8 @@ function updateChatSub() {
     el.textContent = `${n} ${plural(n, "участник", "участника", "участников")}${on ? `, ${on} в сети` : ""}`;
   } else {
     const o = otherUser(c);
-    el.textContent = S.online.has(o) ? "в сети" : lastSeen(S.profiles.get(o)?.last_seen);
+    const st = S.profiles.get(o)?.status;
+    el.textContent = (S.online.has(o) ? "в сети" : lastSeen(S.profiles.get(o)?.last_seen)) + (st ? " · " + st : "");
   }
 }
 function lastSeen(t) {
@@ -720,6 +736,7 @@ function chatInfo(c) {
 function openProfile() {
   let close;
   const name = h("input", { value: S.me.name });
+  const status = h("input", { value: S.me.status || "", maxlength: 100, placeholder: "Например: На работе до 18:00" });
   const pic = h("input", { type: "file", accept: "image/*", class: "hidden" });
   const av = avatarEl(S.me.id, "xl", { onclick: () => pic.click(), title: "Сменить фото" });
   pic.onchange = async () => {
@@ -738,14 +755,19 @@ function openProfile() {
   close = sheet([
     h("div", { class: "profile-card" }, av, pic, h("small", { style: { color: "var(--muted)" } }, "Нажмите на фото, чтобы сменить")),
     h("label", { class: "field" }, h("span", null, "Имя"), name),
+    h("label", { class: "field" }, h("span", null, "Статус"), status),
+    h("div", { class: "status-presets" }, STATUS_PRESETS.map((t) => h("button", { type: "button", onclick: () => { status.value = t; } }, t)),
+      h("button", { type: "button", onclick: () => { status.value = ""; } }, "✕ Без статуса")),
     h("button", { class: "btn wide", onclick: async () => {
       const n = name.value.trim(); if (!n) return;
-      const { error } = await S.sb.from("profiles").update({ name: n.slice(0, 60) }).eq("id", S.me.id);
+      const st = status.value.trim().slice(0, 100) || null;
+      const { error } = await S.sb.from("profiles").update({ name: n.slice(0, 60), status: st, status_at: st ? new Date().toISOString() : null }).eq("id", S.me.id);
+      S.me.status = st;
       if (error) { toast("Не удалось сохранить"); return; }
       S.me.name = n; S.profiles.set(S.me.id, S.me); close(); toast("Сохранено"); renderChatList(); Live.broadcast("profile", {});
     } }, "Сохранить"),
     h("button", { class: "menu-item danger", style: { marginTop: "8px" }, onclick: async () => {
-      await S.sb.auth.signOut(); location.hash = ""; location.reload();
+      await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
     } }, h("span", { html: I.logout }), "Выйти"),
   ]);
 }
@@ -760,6 +782,9 @@ function subscribe() {
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => onUpdatedMessage(p.new))
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "reactions" }, (p) => onReaction(p.new, true))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "reactions" }, (p) => onReaction(p.old, false))
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "stories" }, (p) => Stories.onNew(p.new))
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "stories" }, (p) => Stories.onDeleted(p.old))
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (p) => onProfileChange(p.new))
     .subscribe((status) => {
       const el = $("#conn"); if (el) el.textContent = status === "SUBSCRIBED" ? "в сети" : "подключение…";
       if (status === "SUBSCRIBED" && S.resync) { S.resync = false; resync(); }
@@ -779,9 +804,27 @@ function subscribe() {
     .subscribe(async (status) => { if (status === "SUBSCRIBED") await Live.presence.track({ at: Date.now() }); });
   // при возврате в приложение — догружаем пропущенное
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") { resync(); if (S.current) markRead(S.current); }
-    else S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {});
+    if (window.AndroidBridge) return; // в приложении это сообщает сам Android
+    if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
+  window.onAppForeground = () => { resync(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
+  window.onAppBackground = () => { S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
+
+}
+function onProfileChange(np) {
+  const old = S.profiles.get(np.id) || {};
+  S.profiles.set(np.id, { ...old, ...np });
+  if (np.id === S.me.id) Object.assign(S.me, np);
+  if (np.avatar_path && !S.urls.has(np.avatar_path)) signUrls([np.avatar_path]).then(renderChatList);
+  renderChatList(); updateChatSub(); Stories.renderAll();
+}
+const appVisible = () => (window.AndroidBridge?.isForeground ? window.AndroidBridge.isForeground() : document.visibilityState === "visible");
+function showTab(t) {
+  $("#tabChats")?.classList.toggle("hidden", t !== "chats");
+  $("#tabStories")?.classList.toggle("hidden", t !== "stories");
+  $("#tabBtnChats")?.classList.toggle("on", t === "chats");
+  $("#tabBtnStories")?.classList.toggle("on", t === "stories");
+  if (t === "stories") Stories.refreshAndRender();
 }
 async function resync() {
   await loadChats(); renderChatList();
@@ -798,7 +841,7 @@ async function onNewMessage(m) {
     if (pend) list.splice(list.indexOf(pend), 1, m); else list.push(m);
     S.reacts.set(m.id, S.reacts.get(m.id) || []);
   }
-  if (S.current === m.chat_id && document.visibilityState === "visible") {
+  if (S.current === m.chat_id && appVisible()) {
     renderMessages(m.user_id === S.me.id);
     if (m.user_id !== S.me.id) markRead(m.chat_id);
   } else if (m.user_id !== S.me.id) {
@@ -840,8 +883,8 @@ function notify(m) {
   beep();
   if (window.AndroidBridge?.notify) {
     const c = S.chats.find((x) => x.id === m.chat_id);
-    window.AndroidBridge.notify(c ? chatTitle(c) : "Новое сообщение", (S.profiles.get(m.user_id)?.name || "") + ": " + previewText({ ...m, user_id: null }));
-  } else if (document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
+    window.AndroidBridge.notify(c ? chatTitle(c) : "Новое сообщение", (c?.is_group ? (S.profiles.get(m.user_id)?.name || "") + ": " : "") + previewText({ ...m, user_id: null }), m.chat_id);
+  } else if (!appVisible() && "Notification" in window && Notification.permission === "granted") {
     try { new Notification(S.profiles.get(m.user_id)?.name || "Новое сообщение", { body: previewText({ ...m, user_id: null }), icon: "icon-192.png" }); } catch { /* */ }
   }
 }
@@ -908,6 +951,7 @@ const Calls = {
     this.peer = userId; this.video = video; this.role = "caller"; this.callId = crypto.randomUUID(); this.connected = false;
     try { this.local = await this.media(video); }
     catch { toast(video ? "Нет доступа к камере или микрофону" : "Нет доступа к микрофону"); this.reset(); return; }
+    window.AndroidBridge?.callState?.(true, !!video);
     this.showUi("Вызов…");
     this.ringback();
     this.pc = this.makePc();
@@ -951,6 +995,7 @@ const Calls = {
       try { this.local = await this.media(false); this.video = false; }
       catch { toast("Нет доступа к микрофону"); this.decline(); return; }
     }
+    window.AndroidBridge?.callState?.(true, !!this.video);
     this.showUi("Соединение…");
     this.pc = this.makePc();
     await this.pc.setRemoteDescription({ type: "offer", sdp: this.offer });
@@ -976,6 +1021,7 @@ const Calls = {
     }
   },
   reset() {
+    if (this.ui || this.pc) { window.AndroidBridge?.callState?.(false, false); window.AndroidBridge?.cancelCall?.(); }
     clearTimeout(this.ringTimer); clearInterval(this.tick); this.stopRing();
     this.pc?.close(); this.pc = null;
     this.local?.getTracks().forEach((t) => t.stop()); this.local = null; this.remote = null;

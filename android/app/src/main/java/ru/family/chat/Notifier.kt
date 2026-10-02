@@ -1,0 +1,107 @@
+package ru.family.chat
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+
+/** Все уведомления приложения: сообщения, входящие звонки и «на связи». */
+object Notifier {
+    const val CH_MSG = "messages"
+    const val CH_CALL = "calls_ring"
+    const val CH_SERVICE = "service"
+    const val ID_SERVICE = 100
+    private const val ID_CALL = 2
+
+    fun channels(ctx: Context) {
+        if (Build.VERSION.SDK_INT < 26) return
+        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        nm.createNotificationChannel(NotificationChannel(CH_MSG, "Сообщения", NotificationManager.IMPORTANCE_HIGH).apply {
+            enableVibration(true)
+        })
+        nm.createNotificationChannel(NotificationChannel(CH_CALL, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 800, 600, 800, 600, 800)
+            setSound(
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
+                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+            )
+        })
+        nm.createNotificationChannel(NotificationChannel(CH_SERVICE, "Работа в фоне", NotificationManager.IMPORTANCE_MIN).apply {
+            setShowBadge(false)
+            description = "Нужно, чтобы сообщения и звонки приходили, когда приложение закрыто"
+        })
+    }
+
+    private fun allowed(ctx: Context) = Build.VERSION.SDK_INT < 33 ||
+        ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    fun openIntent(ctx: Context, chatId: String?, req: Int): PendingIntent = PendingIntent.getActivity(
+        ctx, req,
+        Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .apply { if (chatId != null) putExtra(MainActivity.EXTRA_CHAT, chatId) },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
+
+    fun message(ctx: Context, title: String, text: String, chatId: String?) {
+        if (WebHolder.foreground || !allowed(ctx)) return
+        val id = (chatId ?: title).hashCode()
+        val n = NotificationCompat.Builder(ctx, CH_MSG)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(ctx, chatId, id))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(id, n) } catch (_: SecurityException) {}
+    }
+
+    fun incomingCall(ctx: Context, name: String) {
+        if (WebHolder.foreground || !allowed(ctx)) return
+        val open = openIntent(ctx, null, ID_CALL)
+        val n = NotificationCompat.Builder(ctx, CH_CALL)
+            .setSmallIcon(android.R.drawable.sym_call_incoming)
+            .setContentTitle("Входящий звонок")
+            .setContentText(name)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(45_000)
+            .setContentIntent(open)
+            .setFullScreenIntent(open, true)
+            .addAction(0, "Открыть", open)
+            .build()
+        n.flags = n.flags or android.app.Notification.FLAG_INSISTENT
+        try { NotificationManagerCompat.from(ctx).notify(ID_CALL, n) } catch (_: SecurityException) {}
+    }
+
+    fun cancelCall(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_CALL)
+
+    fun clearMessages(ctx: Context) {
+        val nm = NotificationManagerCompat.from(ctx)
+        for (sb in nm.activeNotifications) if (sb.notification.channelId == CH_MSG) nm.cancel(sb.id)
+    }
+
+    fun service(ctx: Context, inCall: Boolean) = NotificationCompat.Builder(ctx, CH_SERVICE)
+        .setSmallIcon(android.R.drawable.stat_notify_chat)
+        .setContentTitle(if (inCall) "Идёт звонок" else "Семья на связи")
+        .setContentText(if (inCall) "Нажмите, чтобы вернуться к звонку" else "Сообщения и звонки приходят и при закрытом приложении")
+        .setOngoing(true)
+        .setShowWhen(false)
+        .setPriority(if (inCall) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_MIN)
+        .setContentIntent(openIntent(ctx, null, 7))
+        .build()
+}

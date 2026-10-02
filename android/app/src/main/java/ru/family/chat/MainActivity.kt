@@ -3,127 +3,100 @@ package ru.family.chat
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.webkit.JavascriptInterface
+import android.os.PowerManager
+import android.provider.Settings
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.webkit.WebViewAssetLoader
+import android.widget.FrameLayout
 
 /**
- * Приложение «Семья»: сам мессенджер — веб-страница из папки assets/web,
- * показанная во встроенном браузере с доступом к камере, микрофону и уведомлениям.
+ * Окно приложения «Семья». Сам мессенджер живёт в общем WebView (WebHolder),
+ * который продолжает работать в фоне вместе со службой ChatService.
  */
 class MainActivity : Activity() {
 
-    private lateinit var web: WebView
+    private lateinit var root: FrameLayout
+    private var web: WebView? = null
     private var pendingPermission: PermissionRequest? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
-    private var visible = false
 
-    private val assets by lazy {
-        WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .build()
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        createChannels()
-        web = WebView(this)
-        setContentView(web)
-        web.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            allowFileAccess = false
-            allowContentAccess = true
-            setSupportMultipleWindows(false)
-        }
-        web.addJavascriptInterface(Bridge(), "AndroidBridge")
-        web.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                assets.shouldInterceptRequest(request.url)
-
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                val url = request.url
-                if (url.host == HOST) return false
-                // ссылки, файлы и всё внешнее — открываем в обычном браузере
-                try { startActivity(Intent(Intent.ACTION_VIEW, url)) } catch (_: Throwable) {}
-                return true
-            }
-        }
-        web.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest) {
-                runOnUiThread { askMediaPermissions(request) }
-            }
-
-            override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
-                fileCallback?.onReceiveValue(null)
-                fileCallback = callback
-                val pick = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
-                    val types = params.acceptTypes.filter { it.isNotBlank() && !it.startsWith(".") }.toTypedArray()
-                    if (types.isNotEmpty()) putExtra(Intent.EXTRA_MIME_TYPES, types)
-                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.mode == FileChooserParams.MODE_OPEN_MULTIPLE)
-                }
-                return try {
-                    startActivityForResult(Intent.createChooser(pick, "Выберите файл"), REQ_FILE); true
-                } catch (_: Throwable) {
-                    fileCallback = null; false
-                }
-            }
-        }
-        web.setDownloadListener { url, _, _, _, _ ->
-            try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: Throwable) {}
-        }
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
-        }
-        if (savedInstanceState != null) web.restoreState(savedInstanceState)
-        else web.loadUrl(START + (intent?.getStringExtra(EXTRA_CHAT)?.let { "#$it" } ?: ""))
+        Notifier.channels(this)
+        root = FrameLayout(this)
+        setContentView(root)
+        val w = WebHolder.attach(this)
+        root.addView(w, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        web = w
+        openChatFrom(intent)
+        askStartupPermissions()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra(EXTRA_CHAT)?.let { web.evaluateJavascript("location.hash='$it'", null) }
+        openChatFrom(intent)
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        web.saveState(outState)
+    private fun openChatFrom(i: Intent?) {
+        val id = i?.getStringExtra(EXTRA_CHAT) ?: return
+        if (id.matches(Regex("[0-9a-f-]{36}"))) WebHolder.js("location.hash='$id'")
     }
 
-    override fun onResume() { super.onResume(); visible = true; NotificationManagerCompat.from(this).cancelAll() }
-    override fun onPause() { super.onPause(); visible = false }
+    override fun onResume() {
+        super.onResume()
+        WebHolder.foreground = true
+        Notifier.clearMessages(this)
+        Notifier.cancelCall(this)
+        WebHolder.js("window.onAppForeground && window.onAppForeground()")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        WebHolder.foreground = false
+        WebHolder.js("window.onAppBackground && window.onAppBackground()")
+    }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (web.canGoBack()) web.goBack() else moveTaskToBack(true)
+        val w = web
+        if (w != null && w.canGoBack()) w.goBack() else moveTaskToBack(true)
     }
 
     override fun onDestroy() {
-        web.destroy()
+        WebHolder.detach(this)
+        root.removeAllViews()
+        // без службы (пользователь не вошёл) — освобождаем память
+        if (!ChatService.running) WebHolder.destroy()
         super.onDestroy()
     }
 
+    // ───────────── Разрешения при первом запуске ─────────────
+    @SuppressLint("BatteryLife")
+    private fun askStartupPermissions() {
+        val prefs = getSharedPreferences("family", MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
+            return
+        }
+        // чтобы Android не усыплял мессенджер — спрашиваем один раз
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName) && !prefs.getBoolean("asked_battery", false)) {
+            prefs.edit().putBoolean("asked_battery", true).apply()
+            try {
+                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            } catch (_: Throwable) {}
+        }
+    }
+
     // ───────────── Камера и микрофон для звонков ─────────────
-    private fun askMediaPermissions(request: PermissionRequest) {
+    fun askMediaPermissions(request: PermissionRequest) {
         val need = mutableListOf<String>()
         if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in request.resources) need += Manifest.permission.CAMERA
         if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in request.resources) {
@@ -139,6 +112,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_NOTIFY) { askStartupPermissions(); return }
         if (requestCode != REQ_MEDIA) return
         val req = pendingPermission ?: return
         pendingPermission = null
@@ -150,6 +124,24 @@ class MainActivity : Activity() {
             }
         }
         if (granted.isEmpty()) req.deny() else req.grant(granted.toTypedArray())
+    }
+
+    // ───────────── Выбор фото, видео, файлов ─────────────
+    fun chooseFile(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
+        fileCallback?.onReceiveValue(null)
+        fileCallback = callback
+        val pick = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            val types = params.acceptTypes.filter { it.isNotBlank() && !it.startsWith(".") }.toTypedArray()
+            if (types.isNotEmpty()) putExtra(Intent.EXTRA_MIME_TYPES, types)
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, params.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE)
+        }
+        return try {
+            startActivityForResult(Intent.createChooser(pick, "Выберите файл"), REQ_FILE); true
+        } catch (_: Throwable) {
+            fileCallback = null; false
+        }
     }
 
     @Deprecated("Deprecated in Java")
@@ -165,52 +157,8 @@ class MainActivity : Activity() {
         cb.onReceiveValue(if (uris.isEmpty()) null else uris.toTypedArray())
     }
 
-    // ───────────── Уведомления ─────────────
-    private fun createChannels() {
-        if (Build.VERSION.SDK_INT < 26) return
-        val nm = getSystemService(NotificationManager::class.java) ?: return
-        nm.createNotificationChannel(NotificationChannel(CH_MSG, "Сообщения", NotificationManager.IMPORTANCE_HIGH))
-        nm.createNotificationChannel(NotificationChannel(CH_CALL, "Звонки", NotificationManager.IMPORTANCE_HIGH).apply {
-            enableVibration(true); vibrationPattern = longArrayOf(0, 600, 400, 600, 400, 600)
-        })
-    }
-
-    private fun show(channel: String, id: Int, title: String, text: String) {
-        if (visible && channel == CH_MSG) return
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
-        val open = PendingIntent.getActivity(this, id, Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val n = NotificationCompat.Builder(this, channel)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setAutoCancel(true)
-            .setContentIntent(open)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(if (channel == CH_CALL) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
-            .apply { if (channel == CH_CALL) setFullScreenIntent(open, true) }
-            .build()
-        try { NotificationManagerCompat.from(this).notify(id, n) } catch (_: SecurityException) {}
-    }
-
-    inner class Bridge {
-        @JavascriptInterface
-        fun notify(title: String, text: String) = runOnUiThread { show(CH_MSG, 1, title, text) }
-
-        @JavascriptInterface
-        fun incomingCall(name: String) = runOnUiThread {
-            show(CH_CALL, 2, "Входящий звонок", name)
-            if (!visible) startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-        }
-    }
-
     companion object {
-        private const val HOST = "appassets.androidplatform.net"
-        private const val START = "https://$HOST/assets/web/index.html"
-        private const val EXTRA_CHAT = "chat"
-        private const val CH_MSG = "messages"
-        private const val CH_CALL = "calls"
+        const val EXTRA_CHAT = "chat"
         private const val REQ_MEDIA = 10
         private const val REQ_FILE = 11
         private const val REQ_NOTIFY = 12

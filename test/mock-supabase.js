@@ -6,7 +6,7 @@
   const FAMILY = "00000000-0000-0000-0000-000000000001";
   const load = () => JSON.parse(localStorage.getItem(DB_KEY) || "null") || {
     users: [], profiles: [], chats: [{ id: FAMILY, title: "Семья", is_group: true, dm_key: null, last_message_at: new Date().toISOString() }],
-    chat_members: [], messages: [], reactions: [], files: {},
+    chat_members: [], messages: [], reactions: [], stories: [], story_views: [], files: {},
   };
   const save = (db) => localStorage.setItem(DB_KEY, JSON.stringify(db));
   const uid = () => crypto.randomUUID();
@@ -18,6 +18,7 @@
     if (table === "chat_members") return isMember(db, row.chat_id, u);
     if (table === "messages") return isMember(db, row.chat_id, u);
     if (table === "reactions") return isMember(db, row.chat_id, u);
+    if (table === "story_views") return row.viewer_id === u || db.stories.some((s) => s.id === row.story_id && s.user_id === u);
     return true;
   };
   const emit = (table, event, row) => { const msg = { table, event, row }; bc.postMessage(msg); dispatch(msg); };
@@ -27,6 +28,7 @@
     select() { if (this.op !== "select") this.ret = true; return this; }
     eq(k, v) { this.f.push((r) => r[k] === v); return this; }
     lt(k, v) { this.f.push((r) => r[k] < v); return this; }
+    gt(k, v) { this.f.push((r) => r[k] > v); return this; }
     in(k, vs) { this.f.push((r) => vs.includes(r[k])); return this; }
     match(o) { for (const [k, v] of Object.entries(o)) this.eq(k, v); return this; }
     order(k, o) { this.ord = [k, o?.ascending !== false]; return this; }
@@ -38,7 +40,7 @@
     delete() { this.op = "delete"; return this; }
     then(res, rej) { return Promise.resolve(this.run()).then(res, rej); }
     run() {
-      const db = load(), u = me()?.id, tb = db[this.t];
+      const db = load(), u = me()?.id, tb = db[this.t] || (db[this.t] = []);
       if (this.op === "select") {
         let rows = tb.filter((r) => visible(db, this.t, r, u)).filter((r) => this.f.every((f) => f(r)));
         if (this.ord) rows.sort((a, b) => (a[this.ord[0]] < b[this.ord[0]] ? -1 : 1) * (this.ord[1] ? 1 : -1));
@@ -59,7 +61,13 @@
           r.user_id = u; r.chat_id = m.chat_id;
           if (db.reactions.some((x) => x.message_id === r.message_id && x.user_id === u && x.emoji === r.emoji)) return { data: null, error: { code: "23505" } };
         }
-        tb.push(r); save(db); emit(this.t, "INSERT", r);
+        if (this.t === "stories") Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 864e5).toISOString(), body: r.body ?? null, media_path: r.media_path ?? null, media_type: r.media_type ?? null, bg: r.bg ?? null });
+        if (this.t === "story_views") {
+          if (db.story_views.some((x) => x.story_id === r.story_id && x.viewer_id === u)) return { data: null, error: { code: "23505" } };
+          Object.assign(r, { viewer_id: u, emoji: null, viewed_at: new Date().toISOString() });
+        }
+        if (!db[this.t]) db[this.t] = [];
+        db[this.t].push(r); save(db); emit(this.t, "INSERT", r);
         return { data: this.one ? r : [r], error: null };
       }
       if (this.op === "update") {
@@ -157,6 +165,7 @@
             const url = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
             const db = load(); db.files[path] = url; save(db); return { data: { path }, error: null };
           },
+          async remove() { return { data: [], error: null }; },
           async createSignedUrls(paths) { const db = load(); return { data: paths.map((p) => ({ path: p, signedUrl: db.files[p] })) }; },
         }) },
         channel: (name) => new Channel(name),
