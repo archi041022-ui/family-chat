@@ -1,13 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════
 --  Семейный мессенджер — настройка базы Supabase.
 --  Вставьте ВЕСЬ этот файл в Supabase → SQL Editor → New query → Run.
---  Код приглашения поменяйте в строке ниже (SEMYA-2026) на свой.
+--  Код приглашения поменяйте в строке ниже (SEMYA-4825) на свой.
 -- ═══════════════════════════════════════════════════════════════
 
 -- Код приглашения: без него зарегистрироваться нельзя
 create table if not exists public.app_config (key text primary key, value text not null);
 alter table public.app_config enable row level security;          -- клиенты его не видят
-insert into public.app_config values ('invite_code', 'SEMYA-2026')
+insert into public.app_config values ('invite_code', 'SEMYA-4825')
   on conflict (key) do update set value = excluded.value;
 
 -- ───────── Таблицы ─────────
@@ -177,6 +177,12 @@ create policy "reactions read"   on public.reactions for select to authenticated
 create policy "reactions add"    on public.reactions for insert to authenticated
   with check (user_id = auth.uid() and exists (select 1 from public.messages m where m.id = message_id and public.is_member(m.chat_id)));
 create policy "reactions remove" on public.reactions for delete to authenticated using (user_id = auth.uid());
+
+-- Явные права для API (на случай, если автоматическая выдача прав выключена)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.profiles, public.chats, public.chat_members, public.messages, public.reactions to authenticated;
+grant execute on function public.get_or_create_dm(uuid), public.create_group(text, uuid[]), public.is_member(uuid), public.is_member_text(text) to authenticated;
+revoke all on public.app_config from anon, authenticated;
 
 -- ───────── Хранилище фото / видео / голосовых ─────────
 insert into storage.buckets (id, name, public, file_size_limit)

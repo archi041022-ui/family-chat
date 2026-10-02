@@ -17,7 +17,7 @@ URL = "http://localhost:8765/index.html"
 
 def shot(page, name): page.screenshot(path=f"{OUT}/{name}.png")
 
-def register(page, login, name, invite="SEMYA-2026"):
+def register(page, login, name, invite="SEMYA-4825"):
     page.goto(URL)
     page.click("text=Регистрация")
     page.fill("input[autocomplete=username]", login)
@@ -38,7 +38,7 @@ try:
         # неверный код
         register(A, "papa", "Папа", invite="nope")
         A.wait_for_selector("text=Неверный код приглашения"); shot(A, "01_bad_invite")
-        A.fill("input[placeholder='выдаёт создатель чата']", "SEMYA-2026"); A.click("button[type=submit]")
+        A.fill("input[placeholder='выдаёт создатель чата']", "SEMYA-4825"); A.click("button[type=submit]")
         A.wait_for_selector("#chatList .chat-item"); shot(A, "02_list")
         register(B, "mama", "Мама")
         B.wait_for_selector("#chatList .chat-item")

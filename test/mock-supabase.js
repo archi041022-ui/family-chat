@@ -126,7 +126,7 @@
           },
           async signUp({ email, options }) {
             const db = load();
-            if (options.data.invite !== "SEMYA-2026") return { data: {}, error: { message: "Database error saving new user" } };
+            if (options.data.invite !== "SEMYA-4825") return { data: {}, error: { message: "Database error saving new user" } };
             if (db.users.some((x) => x.email === email)) return { data: {}, error: { message: "User already registered" } };
             const u = { id: uid(), email }; db.users.push(u);
             db.profiles.push({ id: u.id, name: options.data.name, avatar_path: null, last_seen: new Date().toISOString() });
