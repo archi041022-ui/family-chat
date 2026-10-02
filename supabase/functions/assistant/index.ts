@@ -103,8 +103,18 @@ async function askLLM(messages: Msg[], context: string, name: string) {
   } finally { clearTimeout(t); }
 }
 
+// Пускаем только вошедших участников семьи (а не любого, у кого есть публичный ключ)
+function isMember(req: Request) {
+  try {
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.role === "authenticated" && !!payload.sub;
+  } catch { return false; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (!isMember(req)) return new Response(JSON.stringify({ error: "Нужно войти в приложение" }), { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
   try {
     const { messages = [], lat, lon, city, name } = await req.json();
     const last: string = (messages.at(-1)?.content || "").slice(0, 1000);
