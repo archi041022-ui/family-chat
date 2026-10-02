@@ -16,8 +16,8 @@ import androidx.core.app.NotificationManagerCompat
 
 /** Все уведомления приложения: сообщения, входящие звонки и «на связи». */
 object Notifier {
-    const val CH_MSG = "messages"
-    const val CH_CALL = "calls_ring"
+    const val CH_MSG = "messages_v2"
+    const val CH_CALL = "calls_v2"
     const val CH_SERVICE = "service"
     const val ID_SERVICE = 100
     private const val ID_CALL = 2
@@ -25,17 +25,17 @@ object Notifier {
     fun channels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        // старые каналы со звуком системы — больше не нужны: мелодию играет само приложение
+        for (old in listOf("messages", "calls_ring")) try { nm.deleteNotificationChannel(old) } catch (_: Throwable) {}
         nm.createNotificationChannel(NotificationChannel(CH_MSG, "Сообщения", NotificationManager.IMPORTANCE_HIGH).apply {
-            enableVibration(true)
+            setSound(null, null)
+            enableVibration(false)
         })
         nm.createNotificationChannel(NotificationChannel(CH_CALL, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0, 800, 600, 800, 600, 800)
-            setSound(
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
-            )
+            setSound(null, null)
+            enableVibration(false)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            setBypassDnd(false)
         })
         nm.createNotificationChannel(NotificationChannel(CH_SERVICE, "Работа в фоне", NotificationManager.IMPORTANCE_MIN).apply {
             setShowBadge(false)
@@ -66,7 +66,7 @@ object Notifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .build()
-        try { NotificationManagerCompat.from(ctx).notify(id, n) } catch (_: SecurityException) {}
+        try { NotificationManagerCompat.from(ctx).notify(id, n); Sounds.message(ctx) } catch (_: SecurityException) {}
     }
 
     /**
@@ -76,6 +76,15 @@ object Notifier {
     fun incomingCall(ctx: Context, name: String, video: Boolean = false) {
         if (WebHolder.foreground && isScreenOn(ctx)) return
         wakeScreen(ctx)
+        Sounds.ringStart(ctx)
+        // Самый надёжный способ: если разрешён показ поверх других приложений — сразу открываем экран звонка
+        if (Build.VERSION.SDK_INT < 23 || android.provider.Settings.canDrawOverlays(ctx)) {
+            try {
+                ctx.startActivity(Intent(ctx, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    .putExtra(MainActivity.EXTRA_RING, true))
+            } catch (_: Throwable) {}
+        }
         if (!allowed(ctx)) return
         val ring = PendingIntent.getActivity(ctx, ID_CALL,
             Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -103,7 +112,6 @@ object Notifier {
             .addAction(0, "Отклонить", decline)
             .addAction(0, "Ответить", answer)
             .build()
-        n.flags = n.flags or android.app.Notification.FLAG_INSISTENT
         try { NotificationManagerCompat.from(ctx).notify(ID_CALL, n) } catch (_: SecurityException) {}
     }
 
@@ -121,6 +129,8 @@ object Notifier {
     }
 
     /** Может ли приложение показывать звонок на весь экран поверх блокировки (Android 14+ спрашивает отдельно). */
+    fun canOverlay(ctx: Context): Boolean = Build.VERSION.SDK_INT < 23 || android.provider.Settings.canDrawOverlays(ctx)
+
     fun canFullScreen(ctx: Context): Boolean = Build.VERSION.SDK_INT < 34 ||
         (ctx.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() ?: true)
 

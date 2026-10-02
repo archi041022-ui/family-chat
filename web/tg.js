@@ -114,6 +114,9 @@ const Tg = {
       h("button", { class: "menu-item", onclick: () => { close(); toast(Prefs.toggle("pinned", c.id) ? "Чат закреплён" : "Чат откреплён"); renderChatList(); } },
         h("span", { html: I.pushpin }), pinned ? "Открепить чат" : "Закрепить чат"),
       h("button", { class: "menu-item", onclick: () => { close(); this.mediaOfChat(c); } }, h("span", { html: I.gallery || I.clip }), "Фото, видео и файлы"),
+      h("button", { class: "menu-item", onclick: () => { close(); Wallpaper.sheet(c.id); } }, h("span", { html: I.palette }), "Фон чата"),
+      h("button", { class: "menu-item", onclick: () => { close(); Select.start(null); toast("Нажимайте на сообщения, чтобы выбрать"); } }, h("span", { html: I.ticks }), "Выбрать сообщения"),
+      h("button", { class: "menu-item danger", onclick: () => { close(); Select.clearHistory(c); } }, h("span", { html: I.trash }), "Очистить историю"),
       h("button", { class: "menu-item", onclick: () => { close(); chatInfo(c); } }, h("span", { html: I.info }), c.is_group ? "Информация о группе" : "Профиль"),
     ]);
   },
@@ -366,6 +369,8 @@ const Tg = {
         item("#6C7A89", I.lock, "Сменить пароль", () => changePasswordSheet()),
         item("#00A6A6", I.key, "Кодовое слово для восстановления", () => recoveryWordSheet()),
         item("#9B5DE5", I.palette, "Оформление и цвета", () => Theme.sheet()),
+        item("#F2A541", I.gallery || I.clip, "Фон чатов", () => Wallpaper.sheet(null)),
+        item("#E0457B", I.bell, "Мелодии", () => Snd.sheet(), { value: Snd.title("ring") }),
         item("#3D8BFD", I.data, "Данные и память", () => this.dataSheet())),
       group(
         item("#E8664F", I.bot, "Мой ассистент", () => { if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; } Assistant.settingsSheet(); }),
@@ -391,6 +396,7 @@ const Tg = {
       this.toggle("Вибрация", "vibrate"),
       this.toggle("Показывать текст сообщения", "preview", "Иначе в уведомлении будет «Новое сообщение»"),
       this.toggle("Звук отправки в открытом чате", "inAppSound"),
+      h("button", { class: "menu-item", onclick: () => Snd.sheet() }, h("span", { html: I.bell }), h("span", null, "Мелодии звонка и уведомлений", h("small", { class: "sub" }, `Звонок: ${Snd.title("ring")} · Сообщения: ${Snd.title("msg")}`))),
       window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => window.AndroidBridge.openSettings("notifications") }, h("span", { html: I.gear }), "Системные настройки уведомлений") : null,
       h("p", { class: "sheet-note" }, "Отключить звук у отдельного чата: долгое нажатие на чат → «Без звука»."),
     ]);
@@ -410,6 +416,7 @@ const Tg = {
         ok ? null : h("button", { class: "btn small", onclick: () => { window.AndroidBridge.openSettings(what); setTimeout(draw, 1500); } }, fixLabel));
       rows.append(
         line(st.notifications, "Уведомления разрешены", "Разрешить", "notifications"),
+        line(st.overlay !== false, "Показ поверх других приложений (включает экран при звонке)", "Разрешить", "overlay"),
         line(st.fullScreen, "Звонок на весь экран при блокировке", "Разрешить", "fullScreen"),
         line(st.battery, "Без ограничений экономии батареи", "Снять", "battery"),
         line(st.service, "Работа в фоне включена", "Открыть", "app"),
@@ -478,7 +485,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "2.2";
+const APP_VERSION = "2.3";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

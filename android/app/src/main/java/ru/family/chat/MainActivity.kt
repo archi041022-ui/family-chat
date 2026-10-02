@@ -15,6 +15,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.widget.FrameLayout
+import org.json.JSONObject
 
 /**
  * Окно приложения «Семья». Сам мессенджер живёт в общем WebView (WebHolder),
@@ -53,6 +54,7 @@ class MainActivity : Activity() {
     private fun callFrom(i: Intent?) {
         if (i?.getBooleanExtra(EXTRA_ANSWER, false) == true) {
             i.removeExtra(EXTRA_ANSWER)
+            Sounds.ringStop()
             Notifier.cancelCall(this)
             WebHolder.js("window.answerIncoming && window.answerIncoming()")
         }
@@ -125,6 +127,13 @@ class MainActivity : Activity() {
             try {
                 startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
             } catch (_: Throwable) {}
+            return
+        }
+        // Показ поверх других приложений — тогда экран звонка открывается сразу, даже на заблокированном телефоне
+        if (!Notifier.canOverlay(this) && !prefs.getBoolean("asked_overlay", false)) {
+            prefs.edit().putBoolean("asked_overlay", true).apply()
+            android.widget.Toast.makeText(this, "Разрешите «Семье» показ поверх других приложений — чтобы входящий звонок включал экран", android.widget.Toast.LENGTH_LONG).show()
+            try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) } catch (_: Throwable) {}
             return
         }
         // Android 14+: разрешение показывать входящий звонок на весь экран (иначе экран не включается)
@@ -236,6 +245,49 @@ class MainActivity : Activity() {
         Speech.listen(this)
     }
 
+    // ───────────── Мелодии звонка и уведомлений ─────────────
+    private var soundKind = "ring"
+
+    fun pickSound(kind: String, source: String) {
+        soundKind = if (kind == "msg") "msg" else "ring"
+        try {
+            if (source == "file") {
+                startActivityForResult(Intent.createChooser(Intent(Intent.ACTION_GET_CONTENT).setType("audio/*").addCategory(Intent.CATEGORY_OPENABLE), "Выберите мелодию"), REQ_SOUND_FILE)
+            } else {
+                val type = if (soundKind == "ring") android.media.RingtoneManager.TYPE_RINGTONE else android.media.RingtoneManager.TYPE_NOTIFICATION
+                startActivityForResult(Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, type)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, if (soundKind == "ring") "Мелодия звонка" else "Звук уведомлений")
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Sounds.uri(this, soundKind)), REQ_SOUND)
+            }
+        } catch (_: Throwable) { soundDone() }
+    }
+
+    private fun soundDone() {
+        WebHolder.js("window.onSoundPicked && window.onSoundPicked(" + JSONObject.quote(soundKind) + ", " + JSONObject.quote(Sounds.title(this, soundKind)) + ")")
+    }
+
+    private fun soundResult(requestCode: Int, data: Intent?) {
+        if (requestCode == REQ_SOUND) {
+            @Suppress("DEPRECATION")
+            val u: Uri? = data?.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            if (u != null) {
+                val title = try { android.media.RingtoneManager.getRingtone(this, u)?.getTitle(this) } catch (_: Throwable) { null }
+                Sounds.save(this, soundKind, u, title)
+            }
+        } else {
+            val u = data?.data
+            if (u != null) {
+                var name: String? = null
+                try { contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) name = c.getString(0) } } catch (_: Throwable) {}
+                Sounds.saveFile(this, soundKind, u, name)
+            }
+        }
+        soundDone()
+    }
+
     // ───────────── Контакты телефона (для приглашений) ─────────────
     fun pickContact() {
         try {
@@ -294,6 +346,10 @@ class MainActivity : Activity() {
             cb?.onReceiveValue(if (resultCode == RESULT_OK && u != null) arrayOf(u) else null)
             return
         }
+        if (requestCode == REQ_SOUND || requestCode == REQ_SOUND_FILE) {
+            soundResult(requestCode, if (resultCode == RESULT_OK) data else null)
+            return
+        }
         if (requestCode == REQ_CONTACT) {
             contactResult(if (resultCode == RESULT_OK) data else null)
             return
@@ -326,5 +382,7 @@ class MainActivity : Activity() {
         private const val REQ_LOCATION = 16
         private const val REQ_MIC = 17
         private const val REQ_CONTACT = 18
+        private const val REQ_SOUND = 19
+        private const val REQ_SOUND_FILE = 20
     }
 }

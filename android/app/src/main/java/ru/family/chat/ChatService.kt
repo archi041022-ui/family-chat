@@ -60,6 +60,7 @@ class ChatService : Service() {
         when (intent?.action) {
             ACTION_STOP -> { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return START_NOT_STICKY }
             ACTION_DECLINE -> {
+                Sounds.ringStop()
                 Notifier.cancelCall(this)
                 WebHolder.js("window.declineIncoming && window.declineIncoming()")
             }

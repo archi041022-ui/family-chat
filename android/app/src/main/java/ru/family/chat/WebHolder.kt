@@ -136,6 +136,7 @@ object WebHolder {
             val o = org.json.JSONObject()
             o.put("notifications", notif)
             o.put("fullScreen", Notifier.canFullScreen(ctx))
+            o.put("overlay", Notifier.canOverlay(ctx))
             o.put("battery", pm.isIgnoringBatteryOptimizations(ctx.packageName))
             o.put("reliable", ctx.getSharedPreferences("family", Context.MODE_PRIVATE).getBoolean("reliable", true))
             o.put("service", ChatService.running)
@@ -157,6 +158,7 @@ object WebHolder {
                 "fullScreen" -> if (android.os.Build.VERSION.SDK_INT >= 34)
                     Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkg)
                     else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+                "overlay" -> Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkg)
                 "battery" -> Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg)
                 "tts" -> Intent("com.android.settings.TTS_SETTINGS")
                 "ttsData" -> Intent(android.speech.tts.TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
@@ -236,6 +238,18 @@ object WebHolder {
 
         @JavascriptInterface fun canInstallUpdates(): Boolean =
             android.os.Build.VERSION.SDK_INT < 26 || ctx.packageManager.canRequestPackageInstalls()
+
+                @JavascriptInterface fun ringStart() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.ringStart(ctx) } }
+        @JavascriptInterface fun ringStop() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.ringStop() } }
+        @JavascriptInterface fun playMessageSound() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.message(ctx) } }
+        @JavascriptInterface fun previewSound(kind: String) { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.preview(ctx, kind) } }
+        @JavascriptInterface fun stopPreview() { android.os.Handler(android.os.Looper.getMainLooper()).post { Sounds.stopPreview() } }
+        @JavascriptInterface fun soundTitle(kind: String): String = Sounds.title(ctx, kind)
+        @JavascriptInterface fun resetSound(kind: String) = Sounds.save(ctx, kind, null, null)
+        @JavascriptInterface fun pickSound(kind: String, source: String) {
+            val a = activity ?: return
+            a.runOnUiThread { a.pickSound(kind, source) }
+        }
 
                 @JavascriptInterface fun stopSpeaking() = Speech.stop()
 

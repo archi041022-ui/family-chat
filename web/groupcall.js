@@ -288,6 +288,7 @@ const GroupCall = {
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.flip, onclick: () => this.flip() }), "Повернуть"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.group, onclick: () => this.invite() }), "Позвать"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.leave() }), "Выйти")));
+    callBackdrop(this.ui, null, c);
     document.body.append(this.ui);
     this.updateLocal(); this.renderTiles();
   },
@@ -399,6 +400,7 @@ const GroupCall = {
       h("div", { class: "controls" },
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.closeInvite() }), "Отклонить"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn green", html: p.video ? I.video : I.phone, onclick: () => this.join(p.chatId, !!p.video) }), "Войти")));
+    callBackdrop(this.inviteUi, null, c);
     document.body.append(this.inviteUi);
     Calls.ringtone();
     this.pendingInvite = p;

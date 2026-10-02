@@ -187,8 +187,39 @@
             for (const x of [u, args.other]) if (!isMember(db, c.id, x)) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
             save(db); return { data: c.id, error: null };
           }
+          const owner = (cid) => { const c = db.chats.find((x) => x.id === cid); return c && c.is_group && (c.created_by === u || db.admin === u); };
+          if (name === "group_update") {
+            if (!owner(args.cid)) return { data: "NOT_OWNER", error: null };
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (args.new_title && args.new_title.trim()) c.title = args.new_title.trim().slice(0, 80);
+            c.description = (args.new_description || "").trim() || null;
+            if (args.new_avatar !== null && args.new_avatar !== undefined) c.avatar_path = args.new_avatar || null;
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "group_add_members") {
+            if (!owner(args.cid)) return { data: "NOT_OWNER", error: null };
+            for (const m of args.members) if (!isMember(db, args.cid, m)) db.chat_members.push({ chat_id: args.cid, user_id: m, last_read_at: new Date(0).toISOString() });
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "group_remove_member") {
+            if (args.cid === FAMILY) return { data: "FAMILY", error: null };
+            if (!owner(args.cid)) return { data: "NOT_OWNER", error: null };
+            db.chat_members = db.chat_members.filter((m) => !(m.chat_id === args.cid && m.user_id === args.target)); save(db); return { data: "OK", error: null };
+          }
+          if (name === "group_leave") {
+            if (args.cid === FAMILY) return { data: "FAMILY", error: null };
+            db.chat_members = db.chat_members.filter((m) => !(m.chat_id === args.cid && m.user_id === u));
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (c && c.created_by === u) { const heir = db.chat_members.find((m) => m.chat_id === args.cid); if (heir) c.created_by = heir.user_id; else db.chats = db.chats.filter((x) => x !== c); }
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "group_delete") {
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (args.cid === FAMILY || !c || c.created_by !== u) return { data: "NOT_OWNER", error: null };
+            db.chats = db.chats.filter((x) => x !== c); db.chat_members = db.chat_members.filter((m) => m.chat_id !== args.cid); save(db); return { data: "OK", error: null };
+          }
           if (name === "create_group") {
-            const c = { id: uid(), is_group: true, title: args.title, last_message_at: new Date().toISOString() }; db.chats.push(c);
+            const c = { id: uid(), is_group: true, title: args.title, created_by: u, last_message_at: new Date().toISOString() }; db.chats.push(c);
             for (const x of [u, ...args.members]) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
             save(db); return { data: c.id, error: null };
           }
