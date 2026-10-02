@@ -94,6 +94,24 @@ try:
         A.click("#tabBtnChats"); A.wait_for_timeout(300); shot(A, "17_A_chats_strip")
         B.click("#tabBtnChats"); B.wait_for_timeout(300)
         print("views:", views_txt)
+        # восстановление пароля: Мама задаёт кодовое слово, выходит и меняет пароль по нему
+        B.click("button[title='Профиль']"); B.click("text=Кодовое слово для восстановления")
+        B.fill(".sheet input", "Барсик"); B.click(".sheet .btn.wide"); B.wait_for_timeout(300)
+        B.click("button[title='Профиль']"); B.click(".sheet .menu-item.danger"); B.wait_for_selector("text=Забыли пароль?")
+        B.click("text=Забыли пароль?")
+        f = B.locator(".sheet input")
+        f.nth(0).fill("mama"); f.nth(1).fill("мурзик"); f.nth(2).fill("newpass1"); f.nth(3).fill("newpass1")
+        B.click(".sheet .btn.wide"); B.wait_for_selector(".sheet >> text=Неверный логин или кодовое слово"); shot(B, "18_B_forgot_wrong")
+        f.nth(1).fill("барсик"); B.click(".sheet .btn.wide"); B.wait_for_selector(".sheet", state="detached")
+        B.fill("input[type=password]", "secret123"); B.click("button[type=submit]"); B.wait_for_selector("text=Неверный логин или пароль")
+        B.fill("input[type=password]", "newpass1"); B.click("button[type=submit]"); B.wait_for_selector("#chatItems .chat-item")
+        print("word reset: ok")
+        # администратор (Папа) сбрасывает пароль Маме
+        A.click("button[title='Профиль']"); A.click("text=Сбросить пароль участнику"); A.click(".sheet .menu-item >> text=Мама")
+        A.wait_for_selector(".sheet >> text=Логин: mama"); A.fill(".sheet input", "admin777"); A.click(".sheet .btn.wide")
+        A.wait_for_selector("text=Пароль: admin777"); shot(A, "19_A_admin_reset")
+        assert B.locator("text=Сбросить пароль участнику").count() == 0
+        print("admin reset: ok")
         # широкий экран
         W = ctx.new_page(); W.set_viewport_size({"width": 1280, "height": 800}); W.goto(URL)
         W.wait_for_timeout(500); shot(W, "12_desktop_login")

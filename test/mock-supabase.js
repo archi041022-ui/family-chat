@@ -127,26 +127,44 @@
       return {
         auth: {
           async getSession() { const s = me(); return { data: { session: s ? { user: s } : null } }; },
-          async signInWithPassword({ email }) {
+          async signInWithPassword({ email, password }) {
             const u = load().users.find((x) => x.email === email);
-            if (!u) return { data: {}, error: { message: "Invalid login credentials" } };
+            if (!u || (u.password && u.password !== password)) return { data: {}, error: { message: "Invalid login credentials" } };
             sessionStorage.setItem("mocksess", JSON.stringify(u)); return { data: { user: u, session: {} }, error: null };
           },
           async signUp({ email, options }) {
             const db = load();
             if (options.data.invite !== "SEMYA-4825") return { data: {}, error: { message: "Database error saving new user" } };
             if (db.users.some((x) => x.email === email)) return { data: {}, error: { message: "User already registered" } };
-            const u = { id: uid(), email }; db.users.push(u);
+            const u = { id: uid(), email, password: arguments[0].password }; db.users.push(u);
+            if (!db.admin) db.admin = u.id;
             db.profiles.push({ id: u.id, name: options.data.name, avatar_path: null, last_seen: new Date().toISOString() });
             db.chat_members.push({ chat_id: FAMILY, user_id: u.id, last_read_at: new Date(0).toISOString() });
             save(db); sessionStorage.setItem("mocksess", JSON.stringify(u));
             return { data: { user: u, session: {} }, error: null };
           },
           async signOut() { sessionStorage.removeItem("mocksess"); },
+          async updateUser({ password }) { const db = load(); db.users.find((x) => x.id === me().id).password = password; save(db); return { data: {}, error: null }; },
         },
         from: (t) => new Q(t),
         async rpc(name, args) {
-          const db = load(), u = me().id;
+          const db = load(), u = me()?.id;
+          db.words = db.words || {};
+          if (name === "set_recovery_word") { db.words[u] = args.word.trim().toLowerCase(); save(db); return { data: null, error: null }; }
+          if (name === "has_recovery_word") return { data: !!db.words[u], error: null };
+          if (name === "is_admin") return { data: db.admin === u, error: null };
+          if (name === "admin_user_login") return { data: db.admin === u ? db.users.find((x) => x.id === args.target)?.email.split("@")[0] : null, error: null };
+          if (name === "admin_reset_password") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            db.users.find((x) => x.id === args.target).password = args.new_password; save(db); return { data: "OK", error: null };
+          }
+          if (name === "reset_password_with_word") {
+            const usr = db.users.find((x) => x.email === args.login_email.toLowerCase());
+            if (!usr) return { data: "WRONG", error: null };
+            if (!db.words[usr.id]) return { data: "NO_WORD", error: null };
+            if (db.words[usr.id] !== args.word.trim().toLowerCase()) return { data: "WRONG", error: null };
+            usr.password = args.new_password; save(db); return { data: "OK", error: null };
+          }
           if (name === "get_or_create_dm") {
             const k = [u, args.other].sort().join(":");
             let c = db.chats.find((x) => x.dm_key === k);

@@ -308,3 +308,9 @@ input, textarea { font: inherit; color: inherit; }
 .sv-fly { position: absolute; left: 50%; bottom: 140px; font-size: 64px; transform: translateX(-50%); animation: fly .9s ease-out forwards; z-index: 4; pointer-events: none; }
 @keyframes fly { to { transform: translate(-50%, -220px) scale(1.4); opacity: 0; } }
 @media (min-width: 760px) { .story-viewer { left: 50%; width: 460px; transform: translateX(-50%); } }
+
+.link-btn { display: block; margin: 14px auto 0; color: var(--accent); font-weight: 600; font-size: 15px; }
+.sheet-note { color: var(--muted); font-size: 14px; margin: -4px 4px 12px; }
+.sheet .error { margin: 0 4px 10px; }
+.status-card div { font-size: 17px; margin: 2px 0; user-select: text; -webkit-user-select: text; }
+.sheet .btn + .sheet-note { margin-top: 14px; }

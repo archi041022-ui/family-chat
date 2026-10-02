@@ -33,6 +33,8 @@ const I = {
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.6 7.1L4 20.5l1.4-5A8 8 0 1121 12z"/></svg>',
   story: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="4 2.2"/><circle cx="12" cy="12" r="4.5"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
+  key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/></svg>',
   download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -130,15 +132,18 @@ function showAuth() {
   const pass = h("input", { type: "password", autocomplete: "current-password", placeholder: "не меньше 6 символов" });
   const name = h("input", { autocomplete: "name", placeholder: "Как вас подписывать" });
   const invite = h("input", { autocapitalize: "characters", placeholder: "выдаёт создатель чата" });
+  const word = h("input", { autocomplete: "off", placeholder: "например, кличка первого питомца" });
   const extra = h("div", { class: "hidden" },
     h("label", { class: "field" }, h("span", null, "Ваше имя"), name),
-    h("label", { class: "field" }, h("span", null, "Код приглашения"), invite));
+    h("label", { class: "field" }, h("span", null, "Код приглашения"), invite),
+    h("label", { class: "field" }, h("span", null, "Кодовое слово — для восстановления пароля"), word));
+  const forgot = h("button", { type: "button", class: "link-btn", onclick: () => forgotPassword(login.value) }, "Забыли пароль?");
   const go = h("button", { class: "btn wide", type: "submit" }, "Войти");
   const tIn = h("button", { type: "button", class: "on" }, "Вход");
   const tUp = h("button", { type: "button" }, "Регистрация");
   const setMode = (m) => {
     mode = m; tIn.classList.toggle("on", m === "in"); tUp.classList.toggle("on", m === "up");
-    extra.classList.toggle("hidden", m === "in"); go.textContent = m === "in" ? "Войти" : "Создать аккаунт";
+    extra.classList.toggle("hidden", m === "in"); forgot.classList.toggle("hidden", m !== "in"); go.textContent = m === "in" ? "Войти" : "Создать аккаунт";
     pass.autocomplete = m === "in" ? "current-password" : "new-password"; err.textContent = "";
   };
   tIn.onclick = () => setMode("in"); tUp.onclick = () => setMode("up");
@@ -149,7 +154,7 @@ function showAuth() {
     h("div", { class: "tabs" }, tIn, tUp),
     h("label", { class: "field" }, h("span", null, "Логин"), login),
     h("label", { class: "field" }, h("span", null, "Пароль"), pass),
-    extra, err, go);
+    extra, err, go, forgot);
   form.onsubmit = async (e) => {
     e.preventDefault(); err.textContent = "";
     const l = login.value.trim().toLowerCase().replace(/^\+/, "");
@@ -162,6 +167,7 @@ function showAuth() {
       if (mode === "in") res = await S.sb.auth.signInWithPassword({ email, password: pass.value });
       else {
         if (!name.value.trim()) { err.textContent = "Укажите имя"; return; }
+        if (word.value.trim() && word.value.trim().length < 3) { err.textContent = "Кодовое слово — не короче 3 букв"; return; }
         res = await S.sb.auth.signUp({ email, password: pass.value,
           options: { data: { name: name.value.trim(), invite: invite.value.trim() } } });
         if (!res.error && !res.data.session) {
@@ -169,6 +175,7 @@ function showAuth() {
         }
       }
       if (res.error) throw res.error;
+      if (mode === "up" && word.value.trim()) await S.sb.rpc("set_recovery_word", { word: word.value.trim() });
       await enter(res.data.user);
     } catch (ex) {
       const m = String(ex.message || ex);
@@ -183,6 +190,119 @@ function showAuth() {
   app.append(form);
 }
 
+// ───────────── Восстановление пароля ─────────────
+const loginToEmail = (l) => `${l.trim().toLowerCase().replace(/^\+/, "")}@${CFG.loginDomain || "family-chat.app"}`;
+function forgotPassword(prefill = "") {
+  let close;
+  const login = h("input", { value: prefill || "", autocapitalize: "none", placeholder: "ваш логин" });
+  const word = h("input", { autocomplete: "off", placeholder: "кодовое слово" });
+  const p1 = h("input", { type: "password", autocomplete: "new-password", placeholder: "не меньше 6 символов" });
+  const p2 = h("input", { type: "password", autocomplete: "new-password", placeholder: "ещё раз" });
+  const err = h("p", { class: "error" });
+  const go = h("button", { class: "btn wide" }, "Сменить пароль");
+  go.onclick = async () => {
+    err.textContent = "";
+    if (!/^[a-z0-9._-]{3,32}$/.test(login.value.trim().toLowerCase().replace(/^\+/, ""))) { err.textContent = "Введите логин"; return; }
+    if (!word.value.trim()) { err.textContent = "Введите кодовое слово"; return; }
+    if (p1.value.length < 6) { err.textContent = "Пароль должен быть не короче 6 символов"; return; }
+    if (p1.value !== p2.value) { err.textContent = "Пароли не совпадают"; return; }
+    go.disabled = true;
+    const { data, error } = await S.sb.rpc("reset_password_with_word", { login_email: loginToEmail(login.value), word: word.value, new_password: p1.value });
+    go.disabled = false;
+    if (error) { err.textContent = "Нет связи с сервером"; return; }
+    const msg = {
+      OK: null,
+      WRONG: "Неверный логин или кодовое слово",
+      NO_WORD: "Для этого аккаунта кодовое слово не задано. Попросите администратора семьи сбросить пароль.",
+      LOCKED: "Слишком много попыток. Попробуйте через час или попросите администратора семьи.",
+      PASSWORD_TOO_SHORT: "Пароль должен быть не короче 6 символов",
+    }[data];
+    if (msg !== null) { err.textContent = msg || "Не получилось, попробуйте ещё раз"; return; }
+    close(); toast("Пароль изменён — войдите с новым паролем", 4000);
+    const f = $(".auth input[autocomplete=username]"); if (f) f.value = login.value.trim();
+  };
+  close = sheet([
+    h("h3", null, "Восстановление пароля"),
+    h("p", { class: "sheet-note" }, "Введите логин и кодовое слово, которое вы задали при регистрации или в профиле, и придумайте новый пароль."),
+    h("label", { class: "field" }, h("span", null, "Логин"), login),
+    h("label", { class: "field" }, h("span", null, "Кодовое слово"), word),
+    h("label", { class: "field" }, h("span", null, "Новый пароль"), p1),
+    h("label", { class: "field" }, h("span", null, "Повторите пароль"), p2),
+    err, go,
+    h("p", { class: "sheet-note" }, "Не помните кодовое слово? Администратор семьи может задать вам новый пароль: «Профиль» → «Сбросить пароль участнику»."),
+  ]);
+}
+
+function changePasswordSheet() {
+  let close;
+  const p1 = h("input", { type: "password", autocomplete: "new-password", placeholder: "не меньше 6 символов" });
+  const p2 = h("input", { type: "password", autocomplete: "new-password", placeholder: "ещё раз" });
+  const err = h("p", { class: "error" });
+  close = sheet([
+    h("h3", null, "Новый пароль"),
+    h("label", { class: "field" }, h("span", null, "Новый пароль"), p1),
+    h("label", { class: "field" }, h("span", null, "Повторите"), p2), err,
+    h("button", { class: "btn wide", onclick: async () => {
+      if (p1.value.length < 6) { err.textContent = "Не короче 6 символов"; return; }
+      if (p1.value !== p2.value) { err.textContent = "Пароли не совпадают"; return; }
+      const { error } = await S.sb.auth.updateUser({ password: p1.value });
+      if (error) { err.textContent = /different|same/i.test(error.message) ? "Новый пароль совпадает со старым" : "Не удалось сменить пароль"; return; }
+      close(); toast("Пароль изменён");
+    } }, "Сохранить"),
+  ]);
+}
+
+async function recoveryWordSheet() {
+  let close;
+  const { data: has } = await S.sb.rpc("has_recovery_word");
+  const w = h("input", { autocomplete: "off", placeholder: "например, кличка первого питомца" });
+  const err = h("p", { class: "error" });
+  close = sheet([
+    h("h3", null, "Кодовое слово"),
+    h("p", { class: "sheet-note" }, has ? "Кодовое слово уже задано. Можно заменить его новым." :
+      "С ним вы сможете сами сменить пароль, если забудете его. Регистр букв не важен."),
+    h("label", { class: "field" }, h("span", null, has ? "Новое кодовое слово" : "Кодовое слово"), w), err,
+    h("button", { class: "btn wide", onclick: async () => {
+      if (w.value.trim().length < 3) { err.textContent = "Не короче 3 букв"; return; }
+      const { error } = await S.sb.rpc("set_recovery_word", { word: w.value.trim() });
+      if (error) { err.textContent = "Не удалось сохранить"; return; }
+      close(); toast("Кодовое слово сохранено");
+    } }, "Сохранить"),
+  ]);
+}
+
+function adminResetSheet() {
+  let close;
+  const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  close = sheet([
+    h("h3", null, "Сбросить пароль участнику"),
+    h("p", { class: "sheet-note" }, "Выберите, кому задать новый пароль. Потом сообщите его человеку лично — он сможет сменить пароль в профиле."),
+    ...people.map((p) => h("button", { class: "menu-item", onclick: () => { close(); adminResetFor(p); } }, avatarEl(p.id, "sm"), p.name)),
+    people.length ? null : h("p", { class: "empty-chat" }, "Других участников пока нет"),
+  ]);
+}
+async function adminResetFor(p) {
+  let close;
+  const { data: login } = await S.sb.rpc("admin_user_login", { target: p.id });
+  const gen = () => Math.random().toString(36).slice(2, 6) + "-" + Math.floor(1000 + Math.random() * 9000);
+  const pw = h("input", { value: gen(), autocomplete: "off" });
+  const err = h("p", { class: "error" });
+  close = sheet([
+    h("h3", null, p.name),
+    h("p", { class: "sheet-note" }, login ? `Логин: ${login}` : ""),
+    h("label", { class: "field" }, h("span", null, "Новый пароль"), pw), err,
+    h("button", { class: "btn wide", onclick: async () => {
+      if (pw.value.length < 6) { err.textContent = "Не короче 6 символов"; return; }
+      const { data, error } = await S.sb.rpc("admin_reset_password", { target: p.id, new_password: pw.value });
+      if (error || data !== "OK") { err.textContent = data === "NOT_ADMIN" ? "Сбрасывать пароли может только администратор" : "Не удалось"; return; }
+      close();
+      sheet([h("h3", null, "Пароль изменён"),
+        h("p", { class: "sheet-note" }, `Сообщите ${p.name}:`),
+        h("div", { class: "status-card" }, h("div", null, `Логин: ${login || "—"}`), h("div", null, `Пароль: ${pw.value}`))]);
+    } }, "Задать пароль"),
+  ]);
+}
+
 async function enter(user) {
   app.innerHTML = "";
   const { data: me } = await S.sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
@@ -191,7 +311,14 @@ async function enter(user) {
   await loadProfiles();
   await loadChats();
   await Stories.load();
+  S.isAdmin = !!(await S.sb.rpc("is_admin")).data;
   buildShell();
+  S.sb.rpc("has_recovery_word").then(({ data }) => {
+    if (data === false && !localStorage.getItem("wordHint")) {
+      try { localStorage.setItem("wordHint", "1"); } catch { /* */ }
+      setTimeout(() => toast("Задайте кодовое слово в профиле — с ним можно восстановить пароль", 5000), 1500);
+    }
+  });
   subscribe();
   Calls.init();
   window.AndroidBridge?.loggedIn?.();
@@ -766,7 +893,10 @@ function openProfile() {
       if (error) { toast("Не удалось сохранить"); return; }
       S.me.name = n; S.profiles.set(S.me.id, S.me); close(); toast("Сохранено"); renderChatList(); Live.broadcast("profile", {});
     } }, "Сохранить"),
-    h("button", { class: "menu-item danger", style: { marginTop: "8px" }, onclick: async () => {
+    h("button", { class: "menu-item", style: { marginTop: "8px" }, onclick: () => { close(); changePasswordSheet(); } }, h("span", { html: I.lock }), "Сменить пароль"),
+    h("button", { class: "menu-item", onclick: () => { close(); recoveryWordSheet(); } }, h("span", { html: I.key }), "Кодовое слово для восстановления"),
+    S.isAdmin ? h("button", { class: "menu-item", onclick: () => { close(); adminResetSheet(); } }, h("span", { html: I.group }), "Сбросить пароль участнику") : null,
+    h("button", { class: "menu-item danger", onclick: async () => {
       await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
     } }, h("span", { html: I.logout }), "Выйти"),
   ]);
