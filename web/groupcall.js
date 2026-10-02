@@ -170,7 +170,8 @@ const GroupCall = {
         });
         break;
       }
-      case "renego": { const peer = this.peers.get(p.from); if (peer?.offerer) this.negotiate(peer); break; }
+      case "react": CallReact.show(this.ui, String(p.emoji || "").slice(0, 8), (p.name || "").split(" ")[0]); break;
+            case "renego": { const peer = this.peers.get(p.from); if (peer?.offerer) this.negotiate(peer); break; }
     }
   },
   chain(peer, fn) { peer.q = peer.q.then(fn).catch((e) => console.warn("gc", e)); return peer.q; },
@@ -287,6 +288,7 @@ const GroupCall = {
         h("div", { class: "cbtn-wrap" }, camBtn, "Камера"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.flip, onclick: () => this.flip() }), "Повернуть"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.group, onclick: () => this.invite() }), "Позвать"),
+        CallReact.button((emoji) => this.emit({ kind: "react", emoji })),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.leave() }), "Выйти")));
     callBackdrop(this.ui, null, c);
     document.body.append(this.ui);

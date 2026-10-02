@@ -610,6 +610,7 @@ async function enter(user) {
   Welcome.maybeShow(user);
   Updates.start();
   Tasks.start();
+  Joins.load();
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -678,6 +679,10 @@ function buildShell() {
         tab("Stories", I.story, "Истории", "storiesBadge"),
         tab("Settings", I.gear, "Настройки"))),
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
+  Pull.attach($("#chatList"), async () => { await Promise.all([resync(), Stories.load().then(() => Stories.renderAll()), Tasks.load(), Joins.load(), loadProfiles()]); renderChatList(); });
+  Pull.attach($("#tabContacts"), async () => { await loadProfiles(); Tg.renderContacts(); });
+  Pull.attach($("#tabCalls"), async () => { await loadChats(); Tg.renderCalls(); });
+  Pull.attach($("#tabStories"), async () => { await Stories.refreshAndRender(); });
   renderChatList();
   Stories.renderAll();
   // В браузере «назад» (кнопка или свайп) сначала закрывает окна внутри мессенджера, а не уходит со страницы
@@ -734,8 +739,7 @@ function renderChatList() {
   Tg.renderFolders();
   const ub = Updates.banner(); if (ub) list.append(ub);
   const f = S.folder || "all";
-  if ((f === "all" || f === "personal") && (!S.filter || "мой ассистент помощник погода новости".includes(S.filter))) list.append(Assistant.listItem());
-  if ((f === "all" || f === "personal") && (!S.filter || "мои задачи список дел".includes(S.filter))) list.append(Tasks.listItem());
+  if (!S.filter) list.append(QuickBar.el());
   const totalUnread = [...S.unread.entries()].filter(([id]) => !Prefs.muted(id)).reduce((a, [, b]) => a + b, 0);
   const cb = $("#chatsBadge"); if (cb) { cb.textContent = totalUnread > 99 ? "99+" : totalUnread; cb.classList.toggle("hidden", !totalUnread); }
   const time = (c) => new Date(S.lastByChat.get(c.id)?.created_at || c.last_message_at || 0).getTime();
@@ -763,8 +767,10 @@ function renderChatList() {
       continue;
     }
     const c = r.c;
+    if (c.id === FAMILY_CHAT && !S.filter) continue;          // «Семья» — в панели сверху
     const title = chatTitle(c);
     const unread = S.unread.get(c.id) || 0;
+    const reqs = Joins.toMe(c.id).length;
     if (f === "personal" && c.is_group) continue;
     if (f === "groups" && !c.is_group) continue;
     if (f === "unread" && !unread) continue;
@@ -786,11 +792,12 @@ function renderChatList() {
           muted ? h("span", { class: "muted-ico", html: I.bellOff }) : null), tick, h("span", { class: "time" }, last ? fmtListTime(last.created_at) : "")),
         h("div", { class: "row" },
           typing ? h("span", { class: "last typing-text" }, typing) : h("span", { class: "last" }, previewText(last)),
+          reqs ? h("span", { class: "req-badge", title: "Заявки на вступление" }, "🙋" + reqs) : null,
           unread ? h("span", { class: `badge${muted ? " muted" : ""}` }, unread > 99 ? "99+" : unread) : pinned ? h("span", { class: "pin-ico", html: I.pushpin }) : null)));
     Tg.chatRowGestures(item, c);
     list.append(item);
   }
-  if (list.children.length <= (f === "all" || f === "personal" ? 1 : 0)) list.append(h("p", { class: "empty-chat" }, S.filter ? "Ничего не найдено" : f === "unread" ? "Все сообщения прочитаны 👍" : "Здесь пока пусто"));
+  if (list.children.length <= (S.filter ? 0 : 1)) list.append(h("p", { class: "empty-chat" }, S.filter ? "Ничего не найдено" : f === "unread" ? "Все сообщения прочитаны 👍" : "Здесь пока пусто"));
 }
 
 // ───────────── Открытый чат ─────────────
@@ -978,6 +985,7 @@ function messageEl(m, c, firstInRun, tail) {
   if (m.pending) meta.textContent = "⏳";
   const textEl = bubble.querySelector(".text");
   (textEl || bubble).append(meta);
+  const mod = Moderation.el(m, c); if (mod) { bubble.append(mod); bubble.classList.add("pending-approval"); }
   const rs = S.reacts.get(m.id) || [];
   if (rs.length && !m.deleted) {
     const counts = new Map();
@@ -1141,7 +1149,8 @@ function attachMenu(fileInput) {
   close = sheet([
     h("h3", null, "Отправить"),
     h("button", { class: "menu-item", onclick: () => pick("image/*,video/*") }, h("span", { html: I.gallery }), "Фото или видео из галереи"),
-    h("button", { class: "menu-item", onclick: () => pick("image/*", "environment") }, h("span", { html: I.camera }), "Сделать фото"),
+    h("button", { class: "menu-item", onclick: () => { close(); Camera.open("photo"); } }, h("span", { html: I.camera }), "Сделать фото"),
+    h("button", { class: "menu-item", onclick: () => { close(); Camera.open("doc"); } }, h("span", null, "📄"), "Сканер документов → PDF"),
     h("button", { class: "menu-item", onclick: () => { close(); VideoRec.open(); } }, h("span", { html: I.video }), "Записать видео"),
     h("button", { class: "menu-item", onclick: () => { close(); VideoNote.open(); } }, h("span", { html: I.circle }), "Видеосообщение (кружок)"),
     h("button", { class: "menu-item", onclick: () => { close(); sendLocation(); } }, h("span", { html: I.pin }), "Моя геолокация"),
@@ -1382,7 +1391,7 @@ function newChatSheet() {
     h("h3", null, "Новый чат"),
     h("button", { class: "menu-item", onclick: () => { close(); newGroupSheet(); } }, h("span", { html: I.group }), "Создать группу"),
     h("button", { class: "menu-item", onclick: () => { close(); Channels.create(); } }, h("span", null, "📢"), "Создать канал"),
-    h("button", { class: "menu-item", onclick: () => { close(); Channels.discover(); } }, h("span", { html: I.search }), "Найти каналы"),
+    h("button", { class: "menu-item", onclick: () => { close(); Joins.directory(); } }, h("span", { html: I.search }), "Найти группы и каналы"),
     ...people.map((p) => h("button", { class: "menu-item", onclick: async () => { close(); await openDm(p.id); } }, avatarEl(p.id, "sm"), p.name)),
     people.length ? null : h("p", { class: "empty-chat" }, "Пока никто больше не зарегистрировался. Поделитесь ссылкой и кодом приглашения."),
   ]);
@@ -1492,6 +1501,11 @@ function subscribe() {
   Live.channel = S.sb.channel("db-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => onNewMessage(p.new))
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => onUpdatedMessage(p.new))
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, (p) => {
+      // сообщение отклонено при одобрении — убираем у автора
+      const id = p.old?.id; if (!id) return;
+      for (const [cid, list] of S.msgs) { const i = list.findIndex((x) => x.id === id); if (i >= 0) { list.splice(i, 1); if (S.current === cid) renderMessages(false); if (list.length === i && S.lastByChat.get(cid)?.id === id) { S.lastByChat.delete(cid); renderChatList(); } } }
+    })
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "reactions" }, (p) => onReaction(p.new, true))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "reactions" }, (p) => onReaction(p.old, false))
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "stories" }, (p) => Stories.onNew(p.new))
@@ -1500,6 +1514,8 @@ function subscribe() {
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ new: p.new, eventType: "INSERT" }))
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ new: p.new, eventType: "UPDATE" }))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ old: p.old, eventType: "DELETE" }))
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "join_requests" }, (p) => Joins.onChange({ new: p.new, eventType: "INSERT" }))
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "join_requests" }, (p) => Joins.onChange({ old: p.old, eventType: "DELETE" }))
     .subscribe((status) => {
       const el = $("#conn"); if (el) el.textContent = status === "SUBSCRIBED" ? "в сети" : "подключение…";
       if (status === "SUBSCRIBED" && S.resync) { S.resync = false; resync(); }
@@ -1517,8 +1533,10 @@ function subscribe() {
     })
     .on("broadcast", { event: "profile" }, async () => { await loadProfiles(); renderChatList(); })
     .on("broadcast", { event: "typing" }, ({ payload }) => Tg.onTyping(payload))
+    .on("broadcast", { event: "joinreq" }, () => Joins.load())
     .on("broadcast", { event: "chats" }, async () => {
-      await loadChats(); renderChatList();
+      const before = new Set(S.chats.map((c) => c.id));
+      await loadChats(); renderChatList(); Joins.checkAccepted(before);
       if (S.current && !S.chats.some((c) => c.id === S.current)) { closeChat(); toast("Вас больше нет в этой группе"); }
       else if (S.current) updateChatSub();
     })
@@ -1566,6 +1584,10 @@ async function resync() {
 async function onNewMessage(m) {
   if (!S.chats.find((c) => c.id === m.chat_id)) { await loadProfiles(); await loadChats(); renderChatList(); }
   Tg.typing.get(m.chat_id)?.delete(m.user_id);
+  if (m.approved === false && m.user_id !== S.me.id) {
+    const ch = S.chats.find((x) => x.id === m.chat_id);
+    toast(`⏳ Новое сообщение ждёт одобрения в «${ch ? chatTitle(ch) : "чате"}»`, 4500);
+  }
   if (m.body === WELCOME_MARK && m.user_id !== S.me.id) Welcome.celebrate(m);
   if (Tg.isCallMsg(m) && !(S.callLog || []).some((x) => x.id === m.id)) {
     (S.callLog = S.callLog || []).unshift(m);
@@ -1590,7 +1612,12 @@ async function onNewMessage(m) {
   renderChatList();
 }
 function onUpdatedMessage(m) {
-  const list = S.msgs.get(m.chat_id); if (!list) return;
+  const list = S.msgs.get(m.chat_id);
+  // сообщение одобрили — у остальных оно появляется впервые
+  if ((!list || !list.some((x) => x.id === m.id)) && m.approved !== false && !m.deleted && Date.now() - new Date(m.created_at) < 7 * 864e5) {
+    if (!S.lastByChat.get(m.chat_id) || S.lastByChat.get(m.chat_id).id !== m.id) { onNewMessage(m); return; }
+  }
+  if (!list) return;
   const i = list.findIndex((x) => x.id === m.id); if (i < 0) return;
   list[i] = m; if (S.current === m.chat_id) rerenderMessage(m.id);
   if (S.lastByChat.get(m.chat_id)?.id === m.id) { S.lastByChat.set(m.chat_id, m); renderChatList(); }
@@ -1796,6 +1823,7 @@ const Calls = {
       case "busy": toast("Абонент занят"); this.hangup(false, "busy"); break;
       case "hangup": this.hangup(false, "remote"); break;
       case "video": this.ui?.classList.toggle("has-video", !!p.on && this.hasRemoteVideo()); break;
+      case "react": CallReact.show(this.ui, String(p.emoji || "").slice(0, 8), S.profiles.get(this.peer)?.name?.split(" ")[0]); break;
       case "screen":
         this.ui?.classList.toggle("remote-screen", !!p.on);
         if (p.on) toast(`${S.profiles.get(this.peer)?.name || "Собеседник"} показывает экран`);
@@ -1898,6 +1926,7 @@ const Calls = {
         h("div", { class: "cbtn-wrap" }, camBtn, "Камера"),
         h("div", { class: "cbtn-wrap" }, flipBtn, "Повернуть"),
         canShare ? h("div", { class: "cbtn-wrap" }, scrBtn, "Экран") : null,
+        CallReact.button((emoji) => this.send(this.peer, { kind: "react", emoji })),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.hangup(true, "local") }), "Завершить")));
     callBackdrop(this.ui, this.peer);
     document.body.append(this.ui);

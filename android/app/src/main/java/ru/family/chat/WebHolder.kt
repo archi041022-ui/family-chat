@@ -239,6 +239,24 @@ object WebHolder {
         @JavascriptInterface fun canInstallUpdates(): Boolean =
             android.os.Build.VERSION.SDK_INT < 26 || ctx.packageManager.canRequestPackageInstalls()
 
+                /** Сохранить файл (например, PDF из сканера) в «Загрузки» телефона. */
+        @JavascriptInterface fun saveFile(base64: String, name: String, mime: String): Boolean = try {
+            val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+            val safe = name.replace(Regex("[\\/:*?\"<>|]"), "_").take(120)
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, safe)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = ctx.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                uri != null && (ctx.contentResolver.openOutputStream(uri)?.use { it.write(bytes); true } ?: false)
+            } else {
+                val dir = ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: ctx.filesDir
+                java.io.File(dir, safe).writeBytes(bytes); true
+            }
+        } catch (_: Throwable) { false }
+
                 @JavascriptInterface fun lockAvailable(): Boolean =
             (ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager).isDeviceSecure
 

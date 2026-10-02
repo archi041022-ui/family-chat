@@ -942,3 +942,92 @@ input, textarea { font: inherit; color: inherit; }
 .tasks-empty div { font-size: 54px; }
 .tasks-empty b { display: block; color: var(--text); margin: 6px 0; font-size: 18px; }
 .task-composer input { flex: 1; min-width: 0; border: 0; outline: none; background: var(--bg); border-radius: 22px; padding: 11px 16px; font: inherit; color: var(--text); }
+
+/* ───────── v2.5 ───────── */
+/* панель «Ассистент · Задачи · Семья» */
+.quick-bar { display: flex; gap: 8px; padding: 6px 12px 10px; }
+.quick-bar .chat-item.quick-pill { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 0;
+  border-radius: 16px; background: var(--accent-soft); position: relative; transition: transform .15s; }
+.quick-bar .quick-pill:active { transform: scale(.95); }
+.quick-bar .quick-pill.on { background: color-mix(in srgb, var(--accent) 22%, var(--panel)); }
+.quick-bar .qp-ico { font-size: 24px; line-height: 1; }
+.quick-bar .quick-pill .name { font-size: 12px; font-weight: 700; color: var(--text); flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-bar .qp-badge { position: absolute; top: 4px; right: 8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger);
+  color: #fff; font-size: 11px; font-weight: 700; font-style: normal; display: grid; place-items: center; }
+.quick-bar .qp-badge.muted { background: var(--accent); }
+.req-badge { font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+/* обновление свайпом вниз */
+.ptr { height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; opacity: 0; flex: none; }
+.ptr.back { transition: height .3s cubic-bezier(.3, 1.4, .5, 1), opacity .3s; }
+.ptr-ball { width: 38px; height: 38px; border-radius: 50%; background: var(--hdr); display: grid; place-items: center; font-size: 20px; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
+.ptr small { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.ptr.ready .ptr-ball { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 25%, transparent); }
+.ptr.spin .ptr-ball { animation: ptrSpin .8s linear infinite; }
+.ptr.done .ptr-ball { animation: emojiPop .4s cubic-bezier(.3, 1.7, .5, 1); }
+@keyframes ptrSpin { to { transform: rotate(360deg); } }
+.refreshed .chat-item, .refreshed .contact-row, .refreshed .call-row, .refreshed .story-row { animation: ptrWave .45s ease-out backwards; }
+.refreshed .chat-item:nth-child(2), .refreshed .contact-row:nth-child(2) { animation-delay: .04s; }
+.refreshed .chat-item:nth-child(3), .refreshed .contact-row:nth-child(3) { animation-delay: .08s; }
+.refreshed .chat-item:nth-child(4), .refreshed .contact-row:nth-child(4) { animation-delay: .12s; }
+.refreshed .chat-item:nth-child(n+5), .refreshed .contact-row:nth-child(n+5) { animation-delay: .16s; }
+@keyframes ptrWave { from { transform: translateY(14px); opacity: .3; } }
+/* одобрение сообщений */
+.bubble.pending-approval { opacity: .85; outline: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+.mod-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.mod-bar span { flex: 1; min-width: 120px; }
+.mod-bar.mine { color: inherit; opacity: .8; }
+/* заявки и каталог */
+.req-block { background: var(--accent-soft); border-radius: 14px; padding: 4px 6px; margin: 6px 0; }
+.icon-btn.ok { color: var(--ok, #2EAD6B); }
+.dir-row .mid small { white-space: normal; }
+.dir-actions { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 4px; }
+/* реакции в звонке */
+.react-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(150px + var(--safe-bottom)); z-index: 6; display: flex; gap: 4px; flex-wrap: wrap;
+  justify-content: center; max-width: calc(100% - 24px); padding: 8px; border-radius: 22px; background: rgba(0,0,0,.45); backdrop-filter: blur(10px); animation: selIn .2s ease-out; }
+.react-bar button { font-size: 28px; padding: 4px; border-radius: 12px; transition: transform .15s; }
+.react-bar button:active { transform: scale(1.4); }
+.call .react-btn { font-size: 26px; }
+.call-react-layer { position: absolute; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
+.call-react-layer i { position: absolute; bottom: -40px; font-style: normal; animation: reactUp 2.6s ease-out forwards; }
+@keyframes reactUp { 0% { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: 1; } 100% { transform: translate(var(--dx), -95vh) scale(1.2) rotate(15deg); opacity: 0; } }
+.call-react-big { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); font-size: 96px; display: flex; flex-direction: column; align-items: center;
+  animation: reactBig 1.6s cubic-bezier(.3, 1.6, .5, 1) forwards; text-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.call-react-big small { font-size: 16px; color: #fff; background: rgba(0,0,0,.4); padding: 2px 10px; border-radius: 999px; margin-top: 4px; }
+@keyframes reactBig { 0% { transform: translate(-50%, -50%) scale(.2); opacity: 0; } 25% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(-50%, -80%) scale(.9); opacity: 0; } }
+.gcall .controls { gap: 8px; }
+/* камера и сканер */
+.camera { position: fixed; inset: 0; z-index: 85; background: #000; color: #fff; }
+.camera .cam-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.camera .cam-video.mirror { transform: scaleX(-1); }
+.camera.flash::after { content: ""; position: absolute; inset: 0; background: #fff; animation: camFlash .25s ease-out forwards; }
+@keyframes camFlash { to { opacity: 0; } }
+.cam-frame { display: none; position: absolute; left: 8%; right: 8%; top: 14%; bottom: 26%; border: 2px dashed rgba(255,255,255,.7); border-radius: 12px; pointer-events: none; }
+.camera.doc .cam-frame { display: block; }
+.cam-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-top)) 12px 10px;
+  background: linear-gradient(rgba(0,0,0,.5), transparent); }
+.cam-top .icon-btn { color: #fff; }
+.cam-pages { font-weight: 700; }
+.cam-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(20px + var(--safe-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+.cam-tabs { display: flex; justify-content: center; gap: 18px; margin-bottom: 14px; }
+.cam-tabs button { color: rgba(255,255,255,.7); font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.cam-tabs button.on { color: #000; background: #fff; }
+.cam-row { display: flex; align-items: center; justify-content: space-between; }
+.cam-row .icon-btn { color: #fff; width: 52px; height: 52px; }
+.cam-shutter { width: 74px; height: 74px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 5px rgba(255,255,255,.35); transition: transform .1s; }
+.cam-shutter:active { transform: scale(.9); }
+.camera.doc .cam-shutter { background: var(--accent); }
+.cam-done { min-width: 52px; height: 40px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 800; }
+.scan-editor { position: fixed; inset: 0; z-index: 88; background: #111; color: #fff; display: flex; flex-direction: column; padding: calc(10px + var(--safe-top)) 12px calc(14px + var(--safe-bottom)); gap: 10px; }
+.scan-title { text-align: center; font-weight: 700; }
+.scan-stage { flex: 1; min-height: 0; position: relative; display: grid; place-items: center; }
+.scan-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; background: #222; }
+.scan-editor > .scan-img { flex: 1; min-height: 0; margin: auto; }
+.scan-quad { position: absolute; touch-action: none; }
+.scan-quad polygon { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 3; }
+.scan-quad circle { fill: #fff; stroke: var(--accent); stroke-width: 4; cursor: grab; }
+.scan-bar { display: flex; gap: 8px; }
+.scan-bar .btn { flex: 1; }
+.scan-filters { justify-content: center; }
+.scan-filters button { background: rgba(255,255,255,.12); color: #fff; }
+.pdf-thumbs { display: flex; gap: 6px; overflow-x: auto; margin: 4px 0 12px; }
+.pdf-thumbs img { height: 110px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }

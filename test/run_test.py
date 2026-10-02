@@ -61,7 +61,7 @@ try:
         A.click("#chatList >> text=Семья"); A.wait_for_selector("#input")
         A.fill("#input", "Всем привет! Сегодня у сына день рождения 🎂"); A.click(".composer .send")
         B.wait_for_timeout(500); shot(B, "03_B_list_unread")
-        assert B.locator(".badge").count() >= 1, "нет счётчика непрочитанных"
+        assert B.locator(".badge, .qp-badge").count() >= 1, "нет счётчика непрочитанных"
         B.click("#chatList >> text=Семья"); B.wait_for_selector(".msg .text >> text=Сегодня у сына")
         # реакция через меню
         B.click(".msg.in .bubble", button="right"); B.click(".emoji-row button >> nth=1")

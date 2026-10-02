@@ -200,7 +200,7 @@ const Tr = {
 
 // ───────────── 4. Каналы ─────────────
 const Channels = {
-  canPost(c) { return !c?.is_channel || c.created_by === S.me.id || S.isAdmin; },
+  canPost(c) { return !c?.is_channel || c.members_can_post || c.created_by === S.me.id || S.isAdmin; },
   create() {
     let close, photo = null, priv = true;
     const title = h("input", { placeholder: "Название канала", maxlength: 80 });
@@ -217,7 +217,7 @@ const Channels = {
       h("button", { class: "seg", onclick: (e) => setKind(false, e.currentTarget) }, "🌐 Открытый"));
     const setKind = (p, btn) => {
       priv = p; kind.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === btn));
-      note.textContent = p ? "Канал видят только те, кого вы добавите. Писать в канал можете только вы." : "Любой член семьи найдёт канал в «Найти каналы» и сможет подписаться. Писать можете только вы.";
+      note.textContent = p ? "Вступить можно по заявке с вашего одобрения. Сообщения подписчиков публикуются после вашего одобрения." : "Любой член семьи найдёт канал и подпишется сам. Писать могут все подписчики.";
     };
     setKind(true, kind.firstChild);
     close = sheet([
@@ -231,6 +231,7 @@ const Channels = {
         e.currentTarget.disabled = true;
         const { data: id, error } = await S.sb.rpc("create_channel", { title: title.value.trim(), description: desc.value.trim(), private: priv, members: ids });
         if (error || !id) { e.currentTarget.disabled = false; toast("Не удалось создать канал"); return; }
+        await S.sb.rpc("chat_settings2", { cid: id, settings: { members_can_post: true, moderated: priv, listed: priv } });
         try { if (photo) { const path = await Groups.uploadPhoto(id, photo); await S.sb.rpc("group_update", { cid: id, new_title: title.value.trim(), new_description: desc.value.trim(), new_avatar: path }); } }
         catch { toast("Фото не загрузилось — можно добавить позже"); }
         close(); await Groups.refresh(id); openChat(id); FX.sparkle($("#chatView .topbar"));

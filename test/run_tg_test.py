@@ -51,20 +51,20 @@ try:
         assert A.locator("#chatItems .chat-item[data-user]:has-text('Мама')").count() == 0      # стала обычной перепиской
         print("all people listed: ok")
         # папки
-        A.click("#folders >> text=Группы"); assert A.locator("#chatItems .chat-item").count() == 1
-        assert A.locator("#chatItems .assistant-item").count() == 0
-        A.click("#folders >> text=Личные"); assert A.locator("#chatItems .chat-item:has-text('Семья')").count() == 0
+        A.click("#folders >> text=Группы"); assert A.locator("#chatItems .chat-item:not(.quick-pill)").count() == 0   # «Семья» — в панели сверху
+        assert A.locator("#chatItems .quick-bar .family-pill").count() == 1
+        A.click("#folders >> text=Личные"); assert A.locator("#chatItems .chat-item:not(.quick-pill):has-text('Семья')").count() == 0
         A.click("#folders >> text=Все")
         print("folders: ok")
         # у каждого свой ассистент: переписка Папы не видна Маме
         A.click(".assistant-item"); A.fill("#asstInput", "который час"); A.click("#chatView .composer .send"); A.wait_for_selector("#asstMsgs .msg.in >> text=Сейчас"); A.click(".back-btn")
-        assert "Вы: " not in B.inner_text("#chatItems .assistant-item") and "Сейчас" in A.inner_text("#chatItems .assistant-item")
+        assert A.evaluate("Assistant.history.length") > 0 and B.evaluate("(Assistant.loaded || Assistant.load(), Assistant.history.length)") == 0
         print("personal assistant: ok")
         # закрепить и без звука
-        A.click("#chatItems .chat-item[data-chat]:has-text('Семья')", button="right"); A.click(".sheet >> text=Закрепить")
-        assert "Семья" in A.inner_text("#chatItems .chat-item[data-chat] >> nth=0")
-        A.click("#chatItems .chat-item[data-chat]:has-text('Семья')", button="right"); A.click(".sheet >> text=Без звука")
-        A.wait_for_selector("#chatItems .chat-item:has-text('Семья') .muted-ico"); shot(A, "t2_A_pinned_muted")
+        A.click("#chatItems .chat-item[data-chat]:has-text('Мама')", button="right"); A.click(".sheet >> text=Закрепить")
+        assert "Мама" in A.inner_text("#chatItems .chat-item[data-chat]:not(.quick-pill) >> nth=0")
+        A.click("#chatItems .chat-item[data-chat]:not(.quick-pill):has-text('Мама')", button="right"); A.click(".sheet >> text=Без звука")
+        A.wait_for_selector("#chatItems .chat-item:has-text('Мама') .muted-ico"); shot(A, "t2_A_pinned_muted")
         print("pin/mute: ok")
         # «печатает…»
         A.click("#chatItems .chat-item:has-text('Семья')"); A.wait_for_selector("#input")

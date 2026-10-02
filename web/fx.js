@@ -446,11 +446,15 @@ const Groups = {
     pic.onchange = () => { photo = pic.files[0] || null; if (photo) { av.textContent = ""; av.style.background = `center/cover url("${URL.createObjectURL(photo)}")`; } };
     const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id && !p.banned).sort((a, b) => a.name.localeCompare(b.name, "ru"));
     const picks = people.map((p) => h("label", null, h("input", { type: "checkbox", value: p.id }), avatarEl(p.id, "sm"), p.name, p.family_role ? h("small", { class: "sub" }, " · " + p.family_role) : null));
+    const listedBox = h("input", { type: "checkbox", checked: true });
+    const modBox = h("input", { type: "checkbox" });
     close = sheet([
       h("h3", null, "Новая приватная группа"),
       h("div", { class: "group-create-head" }, av, pic, h("label", { class: "field", style: { flex: 1, margin: 0 } }, title)),
       h("label", { class: "field" }, desc),
-      h("p", { class: "sheet-note" }, "🔒 Группу и её переписку видят только участники, которых вы добавите."),
+      h("p", { class: "sheet-note" }, "🔒 Переписку видят только участники группы."),
+      h("label", { class: "toggle-row" }, h("span", null, "Принимать заявки на вступление", h("small", null, "Группу видно в поиске, остальные могут попроситься — вы одобряете")), listedBox),
+      h("label", { class: "toggle-row" }, h("span", null, "Сообщения участников — после одобрения", h("small", null, "Вы проверяете и публикуете их сами")), modBox),
       h("div", { class: "section-title", style: { padding: "4px 4px 6px" } }, "Участники"),
       h("div", { class: "people-pick" }, picks),
       h("button", { class: "btn wide", style: { marginTop: "12px" }, onclick: async (e) => {
@@ -462,6 +466,7 @@ const Groups = {
         let avatar = null;
         try { if (photo) avatar = await this.uploadPhoto(id, photo); } catch { toast("Фото не загрузилось — можно добавить позже"); }
         if (desc.value.trim() || avatar) await S.sb.rpc("group_update", { cid: id, new_title: title.value.trim(), new_description: desc.value.trim(), new_avatar: avatar });
+        if (listedBox.checked || modBox.checked) await S.sb.rpc("chat_settings2", { cid: id, settings: { listed: listedBox.checked, moderated: modBox.checked } });
         close(); await this.refresh(id); openChat(id);
         FX.sparkle($("#chatView .topbar"));
       } }, "Создать группу"),
@@ -485,12 +490,8 @@ const Groups = {
         h("button", { class: "pv-act", onclick: () => { close(); Wallpaper.sheet(c.id); } }, h("span", { html: I.palette }), "Фон")),
       owner && !family ? h("button", { class: "menu-item", onclick: () => { close(); this.edit(c); } }, h("span", { html: I.pen }), "Изменить название, описание, фото") : null,
       owner ? h("button", { class: "menu-item", onclick: () => { close(); this.addMembers(c); } }, h("span", { html: I.invite }), c.is_channel ? "Добавить подписчиков" : "Добавить участников") : null,
-      owner && c.is_channel ? h("label", { class: "toggle-row" }, h("span", null, "Открытый канал", h("small", null, "Любой член семьи найдёт его и подпишется сам")),
-        h("input", { type: "checkbox", checked: !c.is_private, onchange: async (e) => {
-          const { data } = await S.sb.rpc("chat_settings", { cid: c.id, private: !e.target.checked, protect: null });
-          if (data !== "OK") { e.target.checked = !e.target.checked; toast("Не получилось"); return; }
-          c.is_private = !e.target.checked; toast(c.is_private ? "Канал стал приватным" : "Канал стал открытым"); this.refresh(c.id);
-        } })) : null,
+      Joins.block(c, () => close()),
+      ...ChatSettings.rows(c),
       Protect.canChange(c) ? h("label", { class: "toggle-row" }, h("span", null, "🛡 Защита содержимого", h("small", null, "Запрет копирования, пересылки, сохранения и снимков экрана")),
         h("input", { type: "checkbox", checked: !!c.protected, onchange: () => { close(); Protect.toggle(c); } })) : null,
       h("div", { class: "section-title", style: { padding: "8px 4px 4px" } }, "Участники"),

@@ -91,12 +91,11 @@ try:
         A.fill(".sheet input[placeholder='Название канала']", "Новости семьи"); A.click(".sheet .segmented >> text=Открытый")
         A.click(".sheet >> text=Создать канал >> nth=-1"); A.wait_for_selector("#chatView.channel")
         A.fill("#input", "Первый пост канала"); A.click(".composer .send")
-        B.click(".back-btn"); B.click(".fab"); B.click(".sheet >> text=Найти каналы"); B.wait_for_selector(".sheet >> text=Новости семьи")
-        shot(B, "x5_B_discover"); B.click(".sheet .btn.small >> text=Подписаться"); B.wait_for_selector("#chatView.channel .channel-bar")
-        B.wait_for_selector(".msg .text >> text=Первый пост канала"); assert B.locator("#chatView .composer").count() == 0
+        B.click(".back-btn"); B.click(".fab"); B.click(".sheet >> text=Найти группы и каналы"); B.wait_for_selector(".sheet >> text=Новости семьи")
+        shot(B, "x5_B_discover"); B.click(".sheet .btn.small >> text=Подписаться"); B.wait_for_selector("#chatView.channel .composer")
+        B.wait_for_selector(".msg .text >> text=Первый пост канала")
         A.fill("#input", "Второй пост"); A.click(".composer .send"); B.wait_for_selector(".msg .text >> text=Второй пост", timeout=8000)
-        ok = B.evaluate("S.sb.from('messages').insert({ chat_id: S.current, body: 'взлом' }).then(r => !!r.error)")
-        assert ok, "подписчик смог написать в канал"
+        B.fill("#input", "Пост подписчика"); B.click(".composer .send"); A.wait_for_selector(".msg.in .text >> text=Пост подписчика", timeout=8000)   # в открытом канале пишут все
         shot(B, "x6_B_channel")
         print("channels: ok")
         B.click(".back-btn"); A.click(".back-btn")

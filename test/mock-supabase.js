@@ -16,7 +16,13 @@
     if (table === "profiles") return true;
     if (table === "chats") return isMember(db, row.id, u);
     if (table === "chat_members") return isMember(db, row.chat_id, u);
-    if (table === "messages") return isMember(db, row.chat_id, u);
+    if (table === "messages") {
+      if (!isMember(db, row.chat_id, u)) return false;
+      if (row.approved !== false || row.user_id === u) return true;
+      const ch = db.chats.find((x) => x.id === row.chat_id);
+      return ch && (ch.created_by === u || db.admin === u);
+    }
+    if (table === "join_requests") { const ch = db.chats.find((x) => x.id === row.chat_id); return row.user_id === u || (ch && (ch.created_by === u || db.admin === u)); }
     if (table === "reactions") return isMember(db, row.chat_id, u);
     if (table === "story_views") return row.viewer_id === u || db.stories.some((s) => s.id === row.story_id && s.user_id === u);
     return true;
@@ -54,7 +60,9 @@
         if (this.t === "messages") {
           if (!isMember(db, r.chat_id, u)) return { data: null, error: { message: "rls" } };
           const ch = db.chats.find((x) => x.id === r.chat_id);
-          if (ch?.is_channel && ch.created_by !== u && db.admin !== u) return { data: null, error: { message: "rls" } };
+          const owner = ch && (ch.created_by === u || db.admin === u);
+          if (ch?.is_channel && !ch.members_can_post && !owner) return { data: null, error: { message: "rls" } };
+          r.approved = !(ch?.moderated) || owner;
           Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), deleted: false, body: r.body ?? null,
             media_path: r.media_path ?? null, media_type: r.media_type ?? null, media_name: r.media_name ?? null, reply_to: r.reply_to ?? null });
           const c = db.chats.find((x) => x.id === r.chat_id); c.last_message_at = r.created_at;
@@ -221,6 +229,52 @@
             const c = db.chats.find((x) => x.id === args.cid);
             if (args.cid === FAMILY || !c || c.created_by !== u) return { data: "NOT_OWNER", error: null };
             db.chats = db.chats.filter((x) => x !== c); db.chat_members = db.chat_members.filter((m) => m.chat_id !== args.cid); save(db); return { data: "OK", error: null };
+          }
+          const chatOwner = (cid) => { const c = db.chats.find((x) => x.id === cid); return !!c && (c.created_by === u || db.admin === u); };
+          db.join_requests = db.join_requests || [];
+          if (name === "chat_settings2") {
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (!c || !isMember(db, c.id, u)) return { data: "NO_CHAT", error: null };
+            if (c.is_group && !chatOwner(c.id)) return { data: "NOT_OWNER", error: null };
+            const st = args.settings || {};
+            if ("private" in st && c.is_channel) c.is_private = st.private;
+            if ("protected" in st) c.protected = st.protected;
+            if ("members_can_post" in st && c.is_channel) c.members_can_post = st.members_can_post;
+            if ("moderated" in st) { c.moderated = st.moderated; if (!st.moderated) db.messages.filter((m) => m.chat_id === c.id && m.approved === false).forEach((m) => { m.approved = true; emit("messages", "UPDATE", m); }); }
+            if ("listed" in st) c.listed = st.listed;
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "moderate_message") {
+            const m = db.messages.find((x) => x.id === args.mid); if (!m) return { data: "NO_MESSAGE", error: null };
+            if (!chatOwner(m.chat_id)) return { data: "NOT_OWNER", error: null };
+            if (args.ok) { m.approved = true; save(db); emit("messages", "UPDATE", m); }
+            else { db.messages = db.messages.filter((x) => x !== m); save(db); emit("messages", "DELETE", m); }
+            return { data: "OK", error: null };
+          }
+          if (name === "directory") {
+            return { data: db.chats.filter((c) => c.is_group && c.id !== FAMILY && ((c.is_channel && !c.is_private) || c.listed) && !isMember(db, c.id, u)).map((c) => ({
+              id: c.id, title: c.title, description: c.description || null, avatar_path: c.avatar_path || null, is_channel: !!c.is_channel, is_private: c.is_private !== false,
+              members: db.chat_members.filter((m) => m.chat_id === c.id).length, requested: db.join_requests.some((r) => r.chat_id === c.id && r.user_id === u),
+              owner_name: db.profiles.find((p) => p.id === c.created_by)?.name || null })), error: null };
+          }
+          if (name === "request_join") {
+            const c = db.chats.find((x) => x.id === args.cid); if (!c || !c.is_group) return { data: "NO_CHAT", error: null };
+            if (isMember(db, c.id, u)) return { data: "MEMBER", error: null };
+            if (c.is_channel && !c.is_private) { db.chat_members.push({ chat_id: c.id, user_id: u, last_read_at: new Date(0).toISOString() }); save(db); return { data: "JOINED", error: null }; }
+            if (!c.listed) return { data: "PRIVATE", error: null };
+            if (!db.join_requests.some((r) => r.chat_id === c.id && r.user_id === u)) { const r = { chat_id: c.id, user_id: u, created_at: new Date().toISOString() }; db.join_requests.push(r); save(db); emit("join_requests", "INSERT", r); }
+            return { data: "REQUESTED", error: null };
+          }
+          if (name === "cancel_join") {
+            const r = db.join_requests.find((x) => x.chat_id === args.cid && x.user_id === u);
+            db.join_requests = db.join_requests.filter((x) => x !== r); save(db); if (r) emit("join_requests", "DELETE", r); return { data: "OK", error: null };
+          }
+          if (name === "decide_join") {
+            if (!chatOwner(args.cid)) return { data: "NOT_OWNER", error: null };
+            const r = db.join_requests.find((x) => x.chat_id === args.cid && x.user_id === args.target); if (!r) return { data: "NO_REQUEST", error: null };
+            db.join_requests = db.join_requests.filter((x) => x !== r);
+            if (args.ok && !isMember(db, args.cid, args.target)) db.chat_members.push({ chat_id: args.cid, user_id: args.target, last_read_at: new Date(0).toISOString() });
+            save(db); emit("join_requests", "DELETE", r); return { data: "OK", error: null };
           }
           if (name === "create_channel") {
             const c = { id: uid(), is_group: true, is_channel: true, is_private: args.private !== false, protected: false, title: args.title, description: args.description || null, created_by: u, last_message_at: new Date().toISOString() };
