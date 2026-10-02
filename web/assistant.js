@@ -48,7 +48,7 @@ const Assistant = {
         h("button", { class: "icon-btn", title: "Настройки", html: I.gear, onclick: () => this.settingsSheet() })),
       h("div", { class: "messages", id: "asstMsgs" }),
       h("div", { class: "asst-chips", id: "asstChips" },
-        ["📞 Позвони…", "✉️ Напиши…", "☀️ Погода сейчас", "📰 Главные новости", "💵 Курс доллара", "😄 Расскажи анекдот"].map((t) =>
+        ["📞 Позвони…", "📹 Видеочат с семьёй", "✉️ Напиши…", "☀️ Погода сейчас", "📰 Главные новости", "💵 Курс доллара", "😄 Расскажи анекдот"].map((t) =>
           h("button", { onclick: () => {
             const q = t.replace(/^\S+\s/, "");
             if (q.endsWith("…")) { const inp = $("#asstInput"); inp.value = q.replace("…", " "); inp.focus(); inp.dispatchEvent(new Event("input")); }
@@ -246,6 +246,22 @@ Object.assign(Assistant, {
       this.offer(p.target, text); return true;
     }
 
+    // групповой видеочат: «начни видеочат», «видеочат в группе Семья», «групповой звонок с семьёй»
+    const gm = text.match(/^(?:пожалуйста[,\s]+)?(?:(?:начни|начать|запусти|собери|устрой|открой|сделай|создай)\s+)?(?:групповой\s+видео\s*звонок|групповой\s+звонок|групповую\s+видеосвязь|видео\s*чат|видео\s*конференци\S*|конференци\S*)(?:\s+(.*))?$/i);
+    if (gm) {
+      const video = !/^(?:\S+\s+)?групповой\s+звонок/i.test(text.replace(/^пожалуйста[,\s]+/i, ""));
+      const rest = (gm[1] || "").replace(/^(?:в|во|для|с|со)\s+/i, "").replace(/^(?:группе|группу|группы|чате|чат|беседе)\s*/i, "").trim();
+      let t = null;
+      if (rest) {
+        t = this.findTarget(rest.split(/\s+/).filter(Boolean), true) || this.findTarget(rest.split(/\s+/).filter(Boolean), false);
+        if (!t) { this.notFound(rest, true); return true; }
+      } else {
+        const cur = S.chats.find((c) => c.id === S.current && c.is_group);
+        t = cur ? { kind: "chat", id: cur.id, name: chatTitle(cur) } : { kind: "chat", id: FAMILY_CHAT, name: chatTitle(S.chats.find((c) => c.id === FAMILY_CHAT) || { title: "Семья", is_group: true }) };
+      }
+      return this.callTarget(t, video);
+    }
+
     // звонок
     let m = text.match(/^(?:пожалуйста[,\s]+)?(позвони(?:ть)?|набери|звони|вызови|сделай\s+(?:видео)?звонок|видеозвонок|видео\s*звонок|аудиозвонок)\s+(.*)$/i);
     if (m) {
@@ -255,11 +271,7 @@ Object.assign(Assistant, {
       if (g) rest = g[1];
       const t = this.findTarget(rest.split(/\s+/).filter(Boolean), !!g);
       if (!t) { this.notFound(rest, !!g); return true; }
-      if (t.kind === "chat") { this.say(`Групповые звонки пока не поддерживаются. Скажите, кому из «${t.name}» позвонить.`); return true; }
-      if (Calls.pc || Calls.ui) { this.say("Сейчас уже идёт звонок."); return true; }
-      this.say(`${video ? "Видеозвонок" : "Звоню"}: ${t.name}…`);
-      setTimeout(() => Calls.start(t.id, video), 900);
-      return true;
+      return this.callTarget(t, video);
     }
 
     // сообщение
@@ -320,6 +332,17 @@ Object.assign(Assistant, {
       this.markCard("cancelled");
       this.say("Не получилось отправить. Проверьте интернет и попробуйте ещё раз.");
     }
+  },
+  callTarget(t, video) {
+    if (Calls.pc || Calls.ui || GroupCall.active) { this.say("Сейчас уже идёт звонок."); return true; }
+    if (t.kind === "chat") {
+      this.say(`${video ? "Начинаю видеочат" : "Начинаю групповой звонок"}: «${t.name}». Зову всех участников…`);
+      setTimeout(() => GroupCall.start(t.id, video), 900);
+      return true;
+    }
+    this.say(`${video ? "Видеозвонок" : "Звоню"}: ${t.name}…`);
+    setTimeout(() => Calls.start(t.id, video), 900);
+    return true;
   },
   notFound(what, group) {
     if (group) {

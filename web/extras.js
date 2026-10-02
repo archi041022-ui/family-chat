@@ -31,7 +31,7 @@ const VideoNote = {
   close: null,
   async open() {
     if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Запись видео не поддерживается на этом устройстве"); return; }
-    if (Calls.pc || Calls.ui) { toast("Сначала завершите звонок"); return; }
+    if (Calls.pc || Calls.ui || GroupCall.active) { toast("Сначала завершите звонок"); return; }
     const chatId = S.current; if (!chatId) return;
     this.facing = this.facing || "user";
     const preview = h("video", { autoplay: true, playsinline: true, muted: true });

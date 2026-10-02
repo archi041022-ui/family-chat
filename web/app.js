@@ -669,7 +669,9 @@ async function openChat(chatId) {
       chatAvatar(c, "sm"),
       h("div", { class: "title", onclick: () => chatInfo(c) }, h("b", null, chatTitle(c)), sub),
       other ? h("button", { class: "icon-btn", title: "Аудиозвонок", onclick: () => Calls.start(other, false), html: I.phone }) : null,
-      other ? h("button", { class: "icon-btn", title: "Видеозвонок", onclick: () => Calls.start(other, true), html: I.video }) : null),
+      other ? h("button", { class: "icon-btn", title: "Видеозвонок", onclick: () => Calls.start(other, true), html: I.video }) : null,
+      c.is_group ? h("button", { class: "icon-btn", title: "Групповой звонок", onclick: () => GroupCall.start(c.id, false), html: I.phone }) : null,
+      c.is_group ? h("button", { class: "icon-btn", title: "Видеочат", onclick: () => GroupCall.start(c.id, true), html: I.video }) : null),
     h("div", { class: "upload-bar", id: "upBar" }),
     h("div", { class: "messages", id: "msgs" }),
     h("div", { id: "replyBox" }),
@@ -677,6 +679,7 @@ async function openChat(chatId) {
   app.append(view);
   updateChatSub();
   renderChatList();
+  if (c.is_group) GroupCall.watch(c.id);
   const [{ data: mem }] = await Promise.all([
     S.sb.from("chat_members").select("*").eq("chat_id", chatId),
     S.msgs.has(chatId) ? null : loadMessages(chatId),
@@ -793,6 +796,8 @@ function messageEl(m, c, firstInRun, tail) {
     else if (m.media_type === "video_note") { bubble.classList.add("vnote-bubble"); bubble.append(videoNoteEl(url)); }
     else if (m.media_type === "location") { const g = parseGeo(m.body); if (g) bubble.append(mapCard(g.lat, g.lon, g.acc)); }
     if (m.body && m.media_type !== "location") bubble.append(h("div", { class: "text" }, linkify(m.body)));
+    if (m.body === GC_MARK && !m.media_type && Date.now() - new Date(m.created_at) < 6 * 3600e3)
+      bubble.append(h("button", { class: "btn gc-join", onclick: () => GroupCall.join(m.chat_id, true) }, "Присоединиться"));
   }
   const meta = h("span", { class: "meta" }, fmtTime(m.created_at));
   if (out && !m.deleted) {
@@ -952,7 +957,7 @@ const VideoRec = {
   MAX_SEC: 180,
   async open() {
     if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Запись видео не поддерживается на этом устройстве"); return; }
-    if (Calls.pc || Calls.ui) { toast("Сначала завершите звонок"); return; }
+    if (Calls.pc || Calls.ui || GroupCall.active) { toast("Сначала завершите звонок"); return; }
     this.facing = this.facing || "environment";
     const chatId = S.current; if (!chatId) return;
     const preview = h("video", { class: "vr-preview", autoplay: true, playsinline: true, muted: true });
@@ -1045,7 +1050,7 @@ window.handleBack = function () {
   if (VideoRec.close) { VideoRec.close(); return true; }
   if (VideoNote.close) { VideoNote.close(); return true; }
   if (Stories.closeViewer) { Stories.closeViewer(); return true; }
-  if (Calls.ui) return true;                                   // во время звонка жест ничего не закрывает
+  if (Calls.ui || GroupCall.ui || GroupCall.inviteUi) return true;   // во время звонка жест ничего не закрывает
   const sh = [...document.querySelectorAll(".sheet-back")].pop(); if (sh) { sh._close ? sh._close() : sh.remove(); return true; }
   if (S.current || S.assistantOpen) { closeChat(true); return true; }
   if ($("#tabChats")?.classList.contains("hidden")) { showTab("chats"); return true; }

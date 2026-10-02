@@ -528,3 +528,36 @@ input, textarea { font: inherit; color: inherit; }
 .asst-card .row { display: flex; flex-wrap: wrap; gap: 6px; }
 .asst-card .row .btn { flex: 1 1 auto; min-width: 0; padding: 9px 12px; font-size: 14px; white-space: nowrap; }
 .asst-card.done { opacity: .75; }
+
+/* ───────── Групповой видеочат ───────── */
+.gcall { background: radial-gradient(circle at 50% 20%, #2b2d3a, #0f1015 75%); }
+.gcall .g-head { position: relative; z-index: 2; padding: calc(12px + var(--safe-top)) 16px 6px; text-align: center; }
+.gcall .g-head b { display: block; font-size: 18px; }
+.gcall .g-head span { font-size: 13px; opacity: .8; }
+.gcall .grid { position: absolute; left: 8px; right: 8px; top: calc(62px + var(--safe-top)); bottom: calc(124px + var(--safe-bottom));
+  display: grid; gap: 8px; grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows, 1), minmax(0, 1fr)); }
+.gcall .tile { position: relative; overflow: hidden; border-radius: 16px; background: #24262f; display: grid; place-items: center; min-height: 0;
+  box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .2s; }
+.gcall .tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; background: #000; }
+.gcall .tile.has-video video { opacity: 1; }
+.gcall .tile.has-video .avatar { visibility: hidden; }
+.gcall .tile.me video { transform: scaleX(-1); }
+.gcall .tile.me.back video { transform: none; }
+.gcall .tile .avatar { max-width: 40%; max-height: 60%; aspect-ratio: 1; height: auto; }
+.gcall .tile .name { position: absolute; left: 8px; bottom: 8px; z-index: 1; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 16px);
+  background: #0009; padding: 3px 9px; border-radius: 999px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcall .tile .mic-off { display: none; width: 14px; height: 14px; color: #ff8a80; }
+.gcall .tile .mic-off svg { width: 14px; height: 14px; }
+.gcall .tile.muted .mic-off { display: inline-flex; }
+.gcall .tile .conn { position: absolute; top: 8px; left: 0; right: 0; text-align: center; font-size: 12px; opacity: .75; display: none; }
+.gcall .tile.wait .conn { display: block; }
+.gcall .tile.wait .avatar { opacity: .55; }
+.gcall .grid.solo .tile.me { max-width: 520px; width: 100%; justify-self: center; }
+.gcall .controls { bottom: calc(22px + var(--safe-bottom)); gap: 12px; }
+.gcall .cbtn { width: 56px; height: 56px; }
+.gcall .cbtn svg { width: 24px; height: 24px; }
+.gc-banner { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--accent-soft); color: var(--text); font-size: 14px; font-weight: 600; }
+.gc-banner span { flex: 1; }
+.gc-banner .btn { padding: 7px 14px; font-size: 14px; }
+.bubble .gc-join { margin-top: 6px; width: 100%; padding: 8px 12px; font-size: 14px; }
+.gcall .tile.span2 { grid-column: span 2; }
