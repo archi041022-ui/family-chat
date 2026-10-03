@@ -70,6 +70,7 @@ class ChatService : Service() {
             ACTION_RELIABLE -> applyReliable()
             ACTION_CALL -> {
                 inCall = intent.getBooleanExtra("active", false)
+                if (inCall) Sounds.ringStop()                       // разговор начался — мелодия не нужна
                 video = intent.getBooleanExtra("video", false)
                 if (!inCall) { callTypesOk = false; stopScreen() }
                 goForeground()

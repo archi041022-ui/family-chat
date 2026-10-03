@@ -21,7 +21,6 @@ import java.io.File
  */
 object Sounds {
     private const val PREFS = "family"
-    private var ringPlayer: MediaPlayer? = null
     private var shortPlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
     private val stopRing = Runnable { ringStop() }
@@ -87,44 +86,63 @@ object Sounds {
 
     private lateinit var app: Context
 
+    // Мелодия звонка: все запуски и остановки идут по очереди в главном потоке, плеер всегда один.
+    // Раньше звонок запускали одновременно страница и уведомление (из разных потоков) — создавались
+    // два плеера, а останавливался один, и мелодия играла после ответа.
+    private val ringPlayers = ArrayList<MediaPlayer>()
+    private var ringing = false
+    @Volatile private var ringSeq = 0          // каждое «стоп» увеличивает: запуск, не успевший начаться до «стоп», отменяется
+
+    private fun onMain(r: () -> Unit) { if (Looper.myLooper() == Looper.getMainLooper()) r() else handler.post(r) }
+
     /** Мелодия входящего звонка — играет по кругу до ответа/отказа (не дольше минуты). */
     fun ringStart(ctx: Context) {
         app = ctx.applicationContext
-        if (ringPlayer != null) return
+        val seq = ringSeq
+        onMain { startRingNow(seq) }
+    }
+
+    private fun startRingNow(seq: Int) {
+        if (seq != ringSeq || ringing) return
+        ringing = true
+        val ctx = app
         val mode = canSound(ctx)
         if (mode >= 1) vibrate(ctx, longArrayOf(0, 800, 700), 0)
-        val u = uri(ctx, "ring")
-        if (mode == 2 && u != null) {
-            val p = MediaPlayer()
-            try {
-                p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                p.setDataSource(ctx, u)
-                p.isLooping = true
-                p.prepare(); p.start()
-                ringPlayer = p
-            } catch (_: Throwable) {
-                p.release()
-                // своя мелодия не читается — играем стандартную
-                try {
-                    val d = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                    if (d != null && d != u) ringPlayer = MediaPlayer().apply {
-                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                        setDataSource(ctx, d); isLooping = true; prepare(); start()
-                    }
-                } catch (_: Throwable) { ringPlayer?.release(); ringPlayer = null }
-            }
+        if (mode == 2) {
+            val p = player(ctx, uri(ctx, "ring"))
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)?.let { player(ctx, it) }   // своя мелодия не читается — стандартная
+            if (p != null) ringPlayers.add(p)
         }
         handler.removeCallbacks(stopRing); handler.postDelayed(stopRing, 60_000)
     }
 
+    private fun player(ctx: Context, u: Uri?): MediaPlayer? {
+        if (u == null) return null
+        val p = MediaPlayer()
+        return try {
+            p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            p.setDataSource(ctx, u)
+            p.isLooping = true
+            p.prepare(); p.start()
+            p
+        } catch (_: Throwable) { try { p.release() } catch (_: Throwable) {}; null }
+    }
+
     fun ringStop() {
+        ringSeq++
+        onMain { stopRingNow() }
+    }
+
+    private fun stopRingNow() {
         handler.removeCallbacks(stopRing)
-        try { ringPlayer?.stop() } catch (_: Throwable) {}
-        ringPlayer?.release(); ringPlayer = null
+        ringing = false
+        for (p in ringPlayers) { try { p.stop() } catch (_: Throwable) {}; try { p.release() } catch (_: Throwable) {} }
+        ringPlayers.clear()
         if (::app.isInitialized) cancelVibrate(app)
     }
+
+    fun isRinging() = ringing
 
     /** Короткий звук уведомления о сообщении. */
     fun message(ctx: Context) {

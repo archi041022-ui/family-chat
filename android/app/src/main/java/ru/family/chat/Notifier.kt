@@ -133,7 +133,8 @@ object Notifier {
     fun canFullScreen(ctx: Context): Boolean = Build.VERSION.SDK_INT < 34 ||
         (ctx.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() ?: true)
 
-    fun cancelCall(ctx: Context) = NotificationManagerCompat.from(ctx).cancel(ID_CALL)
+    /** Звонок принят, отклонён или завершён: убрать уведомление и обязательно остановить мелодию. */
+    fun cancelCall(ctx: Context) { Sounds.ringStop(); NotificationManagerCompat.from(ctx).cancel(ID_CALL) }
 
     fun clearMessages(ctx: Context) {
         val nm = NotificationManagerCompat.from(ctx)

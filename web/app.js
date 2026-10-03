@@ -2098,7 +2098,8 @@ const Calls = {
   },
   stopRing() {
     clearInterval(this.ring); this.ring = null; navigator.vibrate?.(0); Snd.stopLoop();
-    if (this.ringNative) { this.ringNative = false; try { window.AndroidBridge?.ringStop?.(); } catch { /* */ } }
+    // мелодию телефона останавливаем всегда: её мог запустить и сам Android (уведомление о звонке)
+    this.ringNative = false; try { window.AndroidBridge?.ringStop?.(); } catch { /* */ }
   },
 };
 
