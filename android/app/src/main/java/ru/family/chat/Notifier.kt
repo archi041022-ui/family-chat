@@ -72,7 +72,7 @@ object Notifier {
      * Входящий звонок, когда приложение свёрнуто или экран выключен:
      * будим экран, показываем звонок поверх блокировки, кнопки «Ответить» и «Отклонить».
      */
-    fun incomingCall(ctx: Context, name: String, video: Boolean = false) {
+    fun incomingCall(ctx: Context, name: String, video: Boolean = false, photo: String? = null) {
         if (WebHolder.foreground && isScreenOn(ctx)) return
         wakeScreen(ctx)
         Sounds.ringStart(ctx)
@@ -110,8 +110,21 @@ object Notifier {
             .setFullScreenIntent(ring, true)
             .addAction(0, "Отклонить", decline)
             .addAction(0, "Ответить", answer)
-            .build()
-        try { NotificationManagerCompat.from(ctx).notify(ID_CALL, n) } catch (_: SecurityException) {}
+        try { NotificationManagerCompat.from(ctx).notify(ID_CALL, n.build()) } catch (_: SecurityException) {}
+        // фото звонящего: загружаем в фоне и обновляем уведомление (видно на экране блокировки)
+        if (!photo.isNullOrEmpty() && photo.startsWith("http")) Thread {
+            try {
+                val c = java.net.URL(photo).openConnection() as java.net.HttpURLConnection
+                c.connectTimeout = 4000; c.readTimeout = 5000
+                val bmp = c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+                c.disconnect()
+                if (bmp != null && Sounds.isRinging()) {
+                    val s = minOf(bmp.width, bmp.height)
+                    val sq = android.graphics.Bitmap.createBitmap(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s)
+                    NotificationManagerCompat.from(ctx).notify(ID_CALL, n.setLargeIcon(android.graphics.Bitmap.createScaledBitmap(sq, 256, 256, true)).build())
+                }
+            } catch (_: Throwable) {}
+        }.start()
     }
 
     private fun isScreenOn(ctx: Context) = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive

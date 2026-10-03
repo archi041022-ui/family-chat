@@ -44,10 +44,11 @@ try:
         A.reload(); A.wait_for_selector("#chatList .chat-item")
         name = lambda n: f"#chatItems .chat-item:not(.quick-pill):has(.name:text-is('{n}'))"
         # ── 1. панель сверху
-        A.wait_for_selector(".asst-fab.assistant-item"); A.wait_for_selector(".quick-bar .tasks-item"); A.wait_for_selector(".quick-bar .family-pill")   # ассистент — плавающий значок
-        assert A.locator(name("Семья")).count() == 0
+        A.wait_for_selector(".asst-fab.assistant-item"); A.wait_for_selector("#chatItems .chat-item[data-chat='00000000-0000-0000-0000-000000000001']")   # ассистент — значок, «Семья» — в списке
+        assert A.locator(".quick-bar").count() == 0
+        assert A.locator(name("Семья")).count() == 1                    # «Семья» снова обычная строка списка
         shot(A, "y1_A_quickbar")
-        A.click(".quick-bar .family-pill"); A.wait_for_selector("#chatView .topbar >> text=Семья"); A.click(".back-btn")
+        A.click("#chatItems .chat-item[data-chat='00000000-0000-0000-0000-000000000001']"); A.wait_for_selector("#chatView .topbar >> text=Семья"); A.click(".back-btn")
         print("quick bar: ok")
         # ── 5. обновление свайпом вниз
         A.evaluate("""() => { const el = document.querySelector('#chatList'); const t = (y) => new Touch({ identifier: 1, target: el, clientX: 150, clientY: y });

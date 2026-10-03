@@ -110,7 +110,7 @@ try:
         import struct, wave
         w = wave.open("/tmp/tone.wav", "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000)
         w.writeframes(b"".join(struct.pack("<h", int(8000 * ((i // 20) % 2 * 2 - 1))) for i in range(8000))); w.close()
-        B.click(".back-btn"); B.click("#tabBtnSettings"); B.click("#tabSettings >> text=Мелодии")
+        B.click(".back-btn"); B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Настройки')"); B.click("#tabSettings >> text=Мелодии")
         B.set_input_files(".snd-row:has-text('Мелодия звонка') input[type=file]", "/tmp/tone.wav"); B.wait_for_selector(".snd-row >> text=tone")
         shot(B, "v6_B_sounds"); B.click(".sheet-back", position={"x": 5, "y": 5}); B.click("#tabBtnChats")
         A.click("#tabBtnContacts"); A.click("#tabContacts .contact-row:has-text('Мама') button[title='Позвонить']")

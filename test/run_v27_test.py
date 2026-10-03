@@ -44,7 +44,7 @@ try:
         V = "/tmp/fc-ve"
         register(A, "papa", "Папа"); A.wait_for_selector("#chatList .chat-item")
         # статус → «Снять и смонтировать видео»
-        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Истории')"); A.evaluate("Stories.create()")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Истории')"); A.evaluate("Stories.create()")
         A.click(".sheet >> text=Снять и смонтировать видео")
         A.wait_for_selector(".ve-cam .ve-rec"); A.wait_for_function("document.querySelector('.ve-cam-video').videoWidth > 0", timeout=8000)
         shot(A, "v1_camera")
@@ -111,7 +111,7 @@ try:
         shot(A, "v5_story"); print("story video duration:", A.evaluate("document.querySelector('.story-viewer video').duration"))
         A.evaluate("Stories.closeViewer && Stories.closeViewer()")
         # из чата: редактор открывается и закрывается кнопкой «назад»
-        A.click("#tabBtnChats"); A.click("#chatItems .quick-bar .family-pill"); A.wait_for_selector("#input")
+        A.click("#tabBtnChats"); A.click("#chatItems .chat-item[data-chat='00000000-0000-0000-0000-000000000001']"); A.wait_for_selector("#input")
         A.evaluate("VideoEditor.open({ chat: S.current })"); A.wait_for_selector(".ve-cam")
         A.evaluate("window.handleBack()"); A.wait_for_selector(".ve-root", state="detached")
         print("video editor: ok")

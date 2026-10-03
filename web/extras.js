@@ -168,7 +168,7 @@ async function membersAdmin() {
   const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id).sort((a, b) => (a.banned - b.banned) || a.name.localeCompare(b.name, "ru"));
   const rows = people.map((p) => h("div", { class: `admin-row${p.banned ? " banned" : ""}` },
     avatarEl(p.id, "sm"),
-    h("div", { class: "mid" }, h("b", null, p.name), h("small", null, p.banned ? "⛔ В чёрном списке" : (S.online.has(p.id) ? "в сети" : lastSeen(p.last_seen) || "участник"))),
+    h("div", { class: "mid" }, h("b", null, p.name), h("small", null, p.banned ? "⛔ В чёрном списке" : (S.online.has(p.id) ? "в сети" : seenText(p) || "участник"))),
     h("button", { class: "icon-btn", title: "Действия", html: I.gear, onclick: () => { close(); memberActions(p); } })));
   close = sheet([
     h("h3", null, "Управление участниками"),

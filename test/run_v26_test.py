@@ -87,7 +87,7 @@ try:
         B.evaluate("(c) => Prefs.toggle('muted', c)", FAM)
         print("mute: ok")
         # 6) истории можно отключить в настройках
-        B.evaluate("AndroidBridge.fg = true"); B.click("#tabBtnSettings"); B.click("#tabSettings >> text=Уведомления и звуки")
+        B.evaluate("AndroidBridge.fg = true"); B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Настройки')"); B.click("#tabSettings >> text=Уведомления и звуки")
         B.click(".sheet .toggle-row >> text=Новые истории семьи"); assert B.evaluate("AndroidBridge.prefs.stories") is False
         B.click(".sheet-back", position={"x": 5, "y": 5}); B.evaluate("AndroidBridge.fg = false")
         before = len(notes()); A.evaluate("S.sb.from('stories').insert({ body: 'Вторая история', bg: '#3D8BFD' })"); B.wait_for_timeout(2600)
@@ -137,7 +137,7 @@ try:
         open(f"{SP}/sa.json", "w").write(_j.dumps({"type": "service_account", "project_id": "semya-push", "private_key": "-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n", "client_email": "fcm@semya-push.iam.gserviceaccount.com"}))
         open(f"{SP}/wrong.json", "w").write(_j.dumps({"hello": 1}))
         assert B.evaluate("AndroidBridge.fcm") is None and B.evaluate("AndroidBridge.fcmCalls") >= 1      # пока не настроено
-        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Мгновенные оповещения')")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Мгновенные оповещения')")
         A.wait_for_selector(".sheet >> text=Firebase ещё не подключён")
         inputs = A.locator(".sheet input[type=file]")
         inputs.nth(0).set_input_files(f"{SP}/wrong.json"); A.wait_for_selector("text=Это не тот файл")
@@ -158,7 +158,7 @@ try:
         print("fcm setup: ok")
         # не-администратор видит только состояние
         B.evaluate("AndroidBridge.fg = true")
-        B.click("#tabBtnSettings"); B.click("#tabSettings >> text=Уведомления и звуки"); B.click(".sheet >> text=Мгновенные оповещения")
+        B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Настройки')"); B.click("#tabSettings >> text=Уведомления и звуки"); B.click(".sheet >> text=Мгновенные оповещения")
         B.wait_for_selector(".sheet >> text=Этот телефон получает мгновенные оповещения"); assert B.locator(".sheet input[type=file]").count() == 0
         shot(B, "x3_B_fcm_status")
         while B.locator(".sheet-back").count(): B.locator(".sheet-back").last.click(position={"x": 5, "y": 5}); B.wait_for_timeout(350)
@@ -171,7 +171,7 @@ try:
         A.click(".call .cbtn.red"); B.wait_for_selector(".call", state="detached", timeout=8000)
         print("call wake: ok")
         # 10) выход — ключ устройства удалён
-        B.evaluate("AndroidBridge.fg = true"); B.click("#tabBtnSettings"); B.click("#tabSettings >> text=Выйти")
+        B.evaluate("AndroidBridge.fg = true"); B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Настройки')"); B.click("#tabSettings >> text=Выйти")
         B.click(".sheet .menu-item.danger"); B.wait_for_selector("text=Регистрация", timeout=8000)
         assert ids["Мама"] not in {d["user_id"] for d in db(A).get("devices", [])}
         print("logout unregister: ok")

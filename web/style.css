@@ -1259,3 +1259,92 @@ html, body { font: 15.5px/1.42 system-ui, -apple-system, "Segoe UI", Roboto, "He
 .ve-ml-add:disabled { opacity: .6; }
 .ve-now { font-weight: 600; }
 .ve-panel > * { flex: none; }                      /* строки панели не сжимаются — прокрутка вместо наложения */
+
+/* ═════════════ v3.2 ═════════════ */
+/* поиск значком слева в шапке */
+.side > .topbar { position: relative; }
+.top-search-btn { margin-left: -4px; }
+.top-search { position: absolute; inset: 0; display: flex; align-items: center; gap: 6px; padding: calc(6px + var(--safe-top)) 10px 6px; background: var(--panel); z-index: 3; animation: tsIn .18s ease-out; }
+.top-search input { flex: 1; min-width: 0; border: 0; outline: none; background: var(--bg); border-radius: 10px; padding: 9px 12px; color: var(--text); }
+@keyframes tsIn { from { opacity: 0; transform: translateX(-12px); } }
+/* меню открывается и закрывается */
+#tabMenu:not(.hidden) { animation: mnIn .2s ease-out; }
+#tabMenu.closing { animation: mnOut .16s ease-in forwards; }
+@keyframes mnIn { from { opacity: 0; transform: translateY(14px); } }
+@keyframes mnOut { to { opacity: 0; transform: translateY(14px); } }
+.bottom-tabs { grid-template-columns: repeat(4, 1fr); }
+/* конфиденциальность */
+.set-cap { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 16px 4px; }
+.pv-ico { width: 28px; text-align: center; font-size: 18px; }
+.pv-radio, .pv-person { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.pv-radio:last-child, .pv-person:last-child { border-bottom: 0; }
+.pv-radio input, .pv-person input { width: 18px; height: 18px; accent-color: var(--accent); }
+.pv-person span { flex: 1; }
+.pv-flags { padding: 4px 12px; }
+.pv-banner { padding: 14px 16px calc(14px + var(--safe-bottom)); text-align: center; color: var(--muted); background: var(--panel); border-top: 1px solid var(--line); font-size: 14px; }
+.link-btn { color: var(--accent); font-weight: 600; }
+.pv-emo { font-size: 20px; line-height: 1; }
+.btn.small { padding: 7px 12px; font-size: 13px; width: auto; }
+.menu-item.disabled { opacity: .5; }
+/* подарки */
+.gift-wallet { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.gift-wallet b { font-size: 22px; display: block; }
+.gift-wallet small, .gift-bonus-done { color: var(--muted); font-size: 12px; }
+.gift-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.gift-cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: 12px; }
+.gift-cell.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.gift-cell.sold { opacity: .45; }
+.gift-cell.hidden-gift { opacity: .55; }
+.gift-cell small { color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift-cost { font-size: 12px; color: var(--text); }
+.gift-ltd { position: absolute; top: 4px; left: 4px; font-style: normal; font-size: 9.5px; font-weight: 600; color: #fff; background: #8A57D6; border-radius: 6px; padding: 1px 5px; }
+.gift-pin { position: absolute; top: 2px; right: 4px; font-style: normal; font-size: 12px; }
+.gift-img.float { animation: giftFloat 2.6s ease-in-out infinite; }
+@keyframes giftFloat { 50% { transform: translateY(-4px) rotate(-3deg); } }
+.gift-detail { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 6px 0 10px; }
+.gift-detail h3 { margin: 4px 0 0; }
+.gift-detail small { color: var(--muted); }
+.gift-msg { font-style: italic; margin: 6px 0; }
+.gift-msg-in { width: 100%; box-sizing: border-box; margin: 10px 0 4px; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 12px; color: var(--text); }
+.gift-catalog { max-height: 46vh; overflow-y: auto; }
+.gift-reveal { position: fixed; inset: 0; z-index: 96; background: rgba(8, 10, 14, .78); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: #fff; text-align: center; padding: 24px; }
+.gift-reveal b { font-size: 20px; max-width: 320px; }
+.gift-reveal .pop { animation: giftPop .7s cubic-bezier(.2, 1.6, .4, 1) both; }
+.gift-rays { position: absolute; width: 420px; height: 420px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 214, 102, .45), transparent 65%); animation: giftRays 2s ease-in-out infinite alternate; }
+@keyframes giftPop { from { transform: scale(.2) rotate(-20deg); opacity: 0; } }
+@keyframes giftRays { to { transform: scale(1.15); opacity: .7; } }
+.pv-gifts { margin-top: 6px; }
+/* стикеры */
+.st-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 0 0 6px; border-bottom: 1px solid var(--line); margin-bottom: 6px; scrollbar-width: none; }
+.st-tabs button { flex: none; width: 40px; height: 36px; border-radius: 8px; font-size: 20px; }
+.st-tabs button.on { background: var(--accent-soft); }
+.st-store-btn { color: var(--accent); font-weight: 700; }
+.st-add { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 26px; color: var(--accent); border: 1.5px dashed var(--line) !important; border-radius: 12px; }
+.st-add small { font-size: 10.5px; color: var(--muted); }
+.sticker-grid button img { width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }
+.st-pack { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.st-pack-head { display: flex; align-items: center; gap: 10px; }
+.st-pack-head b { flex: none; }
+.st-pack-head small { flex: 1; color: var(--muted); }
+.st-pack-preview { display: flex; gap: 6px; margin-top: 6px; }
+.sticker-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
+.sticker-img { width: 150px; height: 150px; object-fit: contain; display: block; }
+.saved-av { background: var(--accent) !important; color: #fff; display: grid; place-items: center; }
+/* свёрнутый звонок */
+.call-min { position: absolute; top: calc(10px + var(--safe-top)); left: 10px; z-index: 5; width: 40px; height: 40px; border-radius: 50%; background: rgba(0, 0, 0, .28); color: #fff; display: grid; place-items: center; }
+.call-min svg { width: 22px; height: 22px; }
+.call.mini { inset: auto 12px calc(76px + var(--safe-bottom)) auto; width: 128px; height: 186px; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); z-index: 74; cursor: pointer; touch-action: none; }
+.call.mini .controls, .call.mini .call-min, .call.mini .who span, .call.mini video.local, .call.mini .g-head, .call.mini .cr-bar, .call.mini .call-react { display: none !important; }
+.call.mini .who { margin-top: 26px; transform: scale(.42); transform-origin: top center; }
+.call.mini.has-video .who { display: none; }
+.call.mini video.remote { width: 100%; height: 100%; object-fit: cover; }
+.call.mini::after { content: "нажмите — развернуть"; position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 10px; opacity: .85; }
+.call.mini.gcall .g-grid { transform: scale(.4); transform-origin: top left; width: 250%; }
+/* Android «картинка в картинке»: только видео собеседника */
+body.pip .call { inset: 0 !important; width: auto !important; height: auto !important; border-radius: 0 !important; }
+body.pip .call .controls, body.pip .call .call-min, body.pip .call .who, body.pip .call video.local, body.pip .asst-fab, body.pip .call::after { display: none !important; }
+body.pip .call video.remote { width: 100%; height: 100%; object-fit: cover; }
+/* фон звонка — фото звонящего хорошо видно (лёгкое размытие и затемнение для читаемости) */
+.call-bg.photo { filter: blur(5px) brightness(.62) saturate(1.1); transform: scale(1.06); background-size: cover; background-position: center 30%; }
+.call-bg.photo::after { background: linear-gradient(180deg, rgba(0,0,0,.35), transparent 30%, transparent 55%, rgba(0,0,0,.6)); }
+.topbar.searching > .title, .topbar.searching > .top-search-btn { visibility: hidden; }

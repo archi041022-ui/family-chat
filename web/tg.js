@@ -39,7 +39,7 @@ const Tg = {
   typing: new Map(),          // chatId -> Map(userId -> время)
 
   // текст сообщения без служебных знаков
-  text(body) { return body ? String(body).replace(/\u2062fx:[a-z]+/, "").replace(EDIT_MARK, "").replace(FWD_RE, "").split("\u2064")[0] : body; },
+  text(body) { return body ? String(body).replace("\u2061st", "").replace(/\u2062fx:[a-z]+/, "").replace(EDIT_MARK, "").replace(FWD_RE, "").split("\u2064")[0] : body; },
   original(body) { const i = body ? String(body).indexOf("\u2064") : -1; return i >= 0 ? String(body).slice(i + 1).replace(/\u2062fx:[a-z]+/, "").replace(EDIT_MARK, "") : null; },
   edited(body) { return !!body && String(body).endsWith(EDIT_MARK); },
   forwardedFrom(body) { const m = body && String(body).match(FWD_RE); return m ? m[1] : null; },
@@ -221,7 +221,7 @@ const Tg = {
   forward(m) {
     if (Protect.on(S.chats.find((c) => c.id === m.chat_id))) { toast("🛡 Пересылка из защищённого чата запрещена"); return; }
     let close;
-    const name = S.profiles.get(m.user_id)?.name || "участника";
+    const name = Privacy.can(m.user_id, "forwards") ? (S.profiles.get(m.user_id)?.name || "участника") : "Скрытый пользователь";
     const fwdName = this.forwardedFrom(m.body) || name;
     const go = async (chatId, userId) => {
       close();
@@ -341,7 +341,7 @@ const Tg = {
     const n = this.callRows().filter((r) => r.missed && new Date(r.m.created_at).getTime() > seen).length;
     const b = $("#callsBadge"); if (b) { b.textContent = n; b.classList.toggle("hidden", !n); }
   },
-  presenceText(p) { const on = S.online.has(p.id); return (on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно") + (p.status ? " · " + p.status : ""); },
+  presenceText(p) { const on = S.online.has(p.id); return (on ? "в сети" : seenText(p) || "был(а) давно") + (p.status ? " · " + p.status : ""); },
   // «в сети» / «был(а) …» в контактах обновляем на месте, не перерисовывая список
   refreshPresence() {
     for (const row of document.querySelectorAll("#tabContacts .contact-row[data-uid]")) {
@@ -380,6 +380,7 @@ const Tg = {
         item("#F2A541", I.pushpin, "Статус", () => openProfile(), { value: S.me.status || "нет" }),
         item("#9B5DE5", I.palette, "Эмодзи-статус", () => EStatus.sheet(), { value: EStatus.of(S.me.id) || "нет" })),
       group(
+        item("#3E4A5A", I.lock, "Конфиденциальность", () => Privacy.sheet()),
         item("#E0457B", I.bell, "Уведомления и звуки", () => this.notifSheet()),
         item("#2EAD6B", I.phone, "Звонки", () => this.callsSheet()),
         item("#2EAD6B", I.lock, "Вход по отпечатку", () => Lock.sheet(), { value: Lock.enabled() ? "вкл" : "выкл" }),
@@ -504,7 +505,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "3.1";
+const APP_VERSION = "3.2";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {
@@ -544,16 +545,21 @@ Object.assign(Tg, {
     ].filter(Boolean);
     close = sheet([
       h("div", { class: "pv-head" }, avatarEl(uid, "xl", p.avatar_path && S.urls.get(p.avatar_path) ? { onclick: () => lightbox(S.urls.get(p.avatar_path)) } : {}),
-        h("h2", null, p.name, EStatus.badge(uid, "lg")), h("small", { class: on ? "online" : "" }, me ? "это вы" : on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно")),
+        h("h2", null, p.name, EStatus.badge(uid, "lg")), h("small", { class: on ? "online" : "" }, me ? "это вы" : on ? "в сети" : seenText(p) || "был(а) давно")),
       me ? h("div", { class: "pv-actions" }, act(I.pen, "Изменить", () => openProfile()))
         : h("div", { class: "pv-actions" },
           act(I.chat, "Написать", () => openDm(uid)),
           act(I.phone, "Позвонить", () => Calls.start(uid, false)),
-          act(I.video, "Видео", () => Calls.start(uid, true))),
+          act(I.video, "Видео", () => Calls.start(uid, true)),
+          act("<span class='pv-emo'>🎁</span>", "Подарок", () => Privacy.can(uid, "gifts") ? Gifts.compose(uid) : toast(`${p.name} не принимает подарки`))),
       info.length > 2 || p.bio || p.family_role ? h("div", { class: "pv-info" }, info)
         : h("div", { class: "pv-info" }, info, h("p", { class: "sheet-note", style: { textAlign: "center", margin: "8px" } },
           me ? "Расскажите о себе: нажмите «Изменить» и заполните анкету." : "Пока ничего не рассказал(а) о себе.")),
+      h("div", { class: "pv-gifts-slot" }),
+      me ? null : h("button", { class: `menu-item${Privacy.isBlocked(uid) ? "" : " danger"}`, onclick: async () => { close(); await Privacy.block(uid, !Privacy.isBlocked(uid)); } },
+        h("span", null, "🚫"), Privacy.isBlocked(uid) ? "Разблокировать" : "Заблокировать"),
     ]);
+    Gifts.section(uid).then((el) => document.querySelector(".pv-gifts-slot")?.replaceWith(el)).catch(() => {});
   },
 });
 

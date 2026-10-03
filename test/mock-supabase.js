@@ -25,6 +25,8 @@
     if (table === "join_requests") { const ch = db.chats.find((x) => x.id === row.chat_id); return row.user_id === u || (ch && (ch.created_by === u || db.admin === u)); }
     if (table === "reactions") return isMember(db, row.chat_id, u);
     if (table === "notices") return row.user_id === u;
+    if (table === "user_stickers") return row.user_id === u;
+    if (table === "user_gifts") return row.to_user === u;
     if (table === "story_views") return row.viewer_id === u || db.stories.some((s) => s.id === row.story_id && s.user_id === u);
     return true;
   };
@@ -70,6 +72,15 @@
     }
     return out;
   };
+  const pvAllowed = (db, owner, viewer, key) => {
+    if (!owner || !viewer || owner === viewer) return true;
+    if ((db.blocks || []).some((b) => b.user_id === owner && b.blocked_id === viewer)) return false;
+    const r = (db.privacy || {})[owner]?.[key]; if (!r) return true;
+    return r.mode === "nobody" ? (r.allow || []).includes(viewer) : !(r.deny || []).includes(viewer);
+  };
+  const GIFTS = [["heart", "❤️", "Сердце", 15, null, "Любовь"], ["rose", "🌹", "Роза", 25, null, "Любовь"], ["cake", "🎂", "Торт", 50, null, "Праздник"],
+    ["teddy", "🧸", "Мишка", 50, null, "Милое"], ["crown", "👑", "Корона", 500, 5, "Особое"], ["gem", "💎", "Бриллиант", 1000, 3, "Особое"], ["rocket", "🚀", "Ракета", 30, 1, "Особое"]];
+  const wallet = (db, u) => { db.wallets = db.wallets || {}; return (db.wallets[u] = db.wallets[u] || { balance: 100, bonus_day: null }); };
   const emitNotices = (list) => list.forEach((n) => emit("notices", "INSERT", n));
   window.__mockDevicePull = (key) => {   // как фоновая служба Android: забрать по ключу устройства
     const db = load(); const d = (db.devices || []).find((x) => x.key === key); if (!d) return [];
@@ -109,6 +120,11 @@
           const ch = db.chats.find((x) => x.id === r.chat_id);
           const owner = ch && (ch.created_by === u || db.admin === u);
           if (ch?.is_channel && !ch.members_can_post && !owner) return { data: null, error: { message: "rls" } };
+          if (ch && !ch.is_group && !String(ch.dm_key || "").startsWith("saved:")) {
+            const other = db.chat_members.find((m) => m.chat_id === ch.id && m.user_id !== u)?.user_id;
+            if (other && !pvAllowed(db, other, u, "messages")) return { data: null, error: { message: "PRIVACY_MESSAGES" } };
+            if (other && ["audio", "video_note"].includes(r.media_type) && !pvAllowed(db, other, u, "voice")) return { data: null, error: { message: "PRIVACY_VOICE" } };
+          }
           r.approved = !(ch?.moderated) || owner;
           Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), deleted: false, body: r.body ?? null,
             media_path: r.media_path ?? null, media_type: r.media_type ?? null, media_name: r.media_name ?? null, reply_to: r.reply_to ?? null });
@@ -122,6 +138,7 @@
         if (this.t === "tasks") Object.assign(r, { id: uid(), owner_id: u, created_at: new Date().toISOString(), done: false, done_at: null,
           remind: r.remind !== false, chat_id: r.chat_id ?? null, assignee_id: r.assignee_id ?? null, due_at: r.due_at ?? null, note: r.note ?? null });
         if (this.t === "stories") Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 864e5).toISOString(), body: r.body ?? null, media_path: r.media_path ?? null, media_type: r.media_type ?? null, bg: r.bg ?? null });
+        if (this.t === "user_stickers") { if (!String(r.path || "").startsWith(`stickers/${u}/`)) return { data: null, error: { message: "rls" } }; Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), emoji: r.emoji ?? null }); }
         if (this.t === "story_views") {
           if (db.story_views.some((x) => x.story_id === r.story_id && x.viewer_id === u)) return { data: null, error: { code: "23505" } };
           Object.assign(r, { viewer_id: u, emoji: null, viewed_at: new Date().toISOString() });
@@ -329,6 +346,50 @@
             if (args.ok) nn = [addNotice(db, { user_id: args.target, kind: "joined", chat_id: args.cid, ref: args.cid, actor: u, title: "🎉 Заявка одобрена", body: "Вас приняли в «" + (db.chats.find((x) => x.id === args.cid)?.title || "группу") + "»" })];
             save(db); emit("join_requests", "DELETE", r); emitNotices(nn); return { data: "OK", error: null };
           }
+          if (name === "privacy_get") return { data: { data: (db.privacy || {})[u] || {}, blocked: (db.blocks || []).filter((b) => b.user_id === u).map((b) => b.blocked_id) }, error: null };
+          if (name === "privacy_save") { db.privacy = db.privacy || {}; db.privacy[u] = JSON.parse(JSON.stringify(args.data || {})); save(db); return { data: "OK", error: null }; }
+          if (name === "block_user") {
+            db.blocks = (db.blocks || []).filter((b) => !(b.user_id === u && b.blocked_id === args.target));
+            if (args.block) db.blocks.push({ user_id: u, blocked_id: args.target, created_at: new Date().toISOString() });
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "privacy_view") return { data: db.profiles.filter((p) => p.id !== u).map((p) => ({ user_id: p.id, r: Object.fromEntries(
+            ["last_seen", "photo", "bio", "birthday", "phone", "forwards", "calls", "voice", "messages", "groups", "gifts", "gifts_show"].map((k) => [k, pvAllowed(db, p.id, u, k)])
+              .concat([["read", (db.privacy || {})[p.id]?.read !== false], ["blocked_me", (db.blocks || []).some((b) => b.user_id === p.id && b.blocked_id === u)]])) })), error: null };
+          if (name === "saved_chat") {
+            let c = db.chats.find((x) => x.dm_key === "saved:" + u);
+            if (!c) { c = { id: uid(), is_group: false, dm_key: "saved:" + u, title: "Избранное", created_by: u, last_message_at: new Date().toISOString() }; db.chats.push(c); db.chat_members.push({ chat_id: c.id, user_id: u, last_read_at: new Date().toISOString() }); save(db); }
+            return { data: c.id, error: null };
+          }
+          if (name === "gifts_home") {
+            const w = wallet(db, u); save(db); const today = new Date().toISOString().slice(0, 10);
+            return { data: { balance: w.balance, bonus: w.bonus_day !== today, catalog: GIFTS.map(([id, emoji, nm, price, total, category]) => ({ id, emoji, name: nm, price, total, category,
+              left: total == null ? null : Math.max(0, total - (db.user_gifts || []).filter((g) => g.gift_id === id).length) })) }, error: null };
+          }
+          if (name === "claim_bonus") { const w = wallet(db, u), today = new Date().toISOString().slice(0, 10); if (w.bonus_day === today) return { data: -1, error: null }; w.bonus_day = today; w.balance += 20; save(db); return { data: w.balance, error: null }; }
+          if (name === "send_gift") {
+            const t = GIFTS.find((g) => g[0] === args.gift); if (!t) return { data: "NO_GIFT", error: null };
+            if (!args.target || args.target === u) return { data: "BAD", error: null };
+            if (!pvAllowed(db, args.target, u, "gifts")) return { data: "PRIVACY", error: null };
+            db.user_gifts = db.user_gifts || [];
+            if (t[4] != null && db.user_gifts.filter((g) => g.gift_id === t[0]).length >= t[4]) return { data: "SOLD_OUT", error: null };
+            const w = wallet(db, u); if (w.balance < t[3]) return { data: "NO_STARS", error: null };
+            w.balance -= t[3];
+            const g = { id: uid(), gift_id: t[0], from_user: u, to_user: args.target, message: args.msg || null, anonymous: !!args.anon, hidden: false, pinned: false, converted: false, price: t[3], created_at: new Date().toISOString() };
+            db.user_gifts.push(g);
+            const nn = [addNotice(db, { user_id: args.target, kind: "gift", actor: args.anon ? null : u, title: "🎁 Вам подарок!", body: (args.anon ? "Тайный даритель" : pname(db, u)) + ` дарит вам «${t[2]}» ${t[1]}` })];
+            save(db); emit("user_gifts", "INSERT", g); emitNotices(nn); return { data: "OK", error: null };
+          }
+          if (name === "gifts_of") {
+            const list = (db.user_gifts || []).filter((g) => g.to_user === args.uid && !g.converted && (args.uid === u || (!g.hidden && pvAllowed(db, args.uid, u, "gifts_show"))));
+            return { data: list.sort((a, b) => (b.pinned - a.pinned) || (b.created_at > a.created_at ? 1 : -1)).map((g) => { const t = GIFTS.find((x) => x[0] === g.gift_id); const hideFrom = g.anonymous && args.uid !== u;
+              return { id: g.id, gift_id: g.gift_id, emoji: t[1], name: t[2], price: g.price, message: hideFrom ? null : g.message, from: hideFrom ? null : g.from_user, from_name: hideFrom ? null : pname(db, g.from_user),
+                anonymous: g.anonymous, hidden: g.hidden, pinned: g.pinned, created_at: g.created_at, limited: t[4] != null, convert: Math.floor(g.price * 8 / 10) }; }), error: null };
+          }
+          if (name === "gift_update") { const g = (db.user_gifts || []).find((x) => x.id === args.gid && x.to_user === u); if (!g) return { data: "NO_GIFT", error: null };
+            if (args.hide != null) g.hidden = args.hide; if (args.pin != null) g.pinned = args.pin; save(db); return { data: "OK", error: null }; }
+          if (name === "gift_convert") { const g = (db.user_gifts || []).find((x) => x.id === args.gid && x.to_user === u && !x.converted); if (!g) return { data: -1, error: null };
+            g.converted = true; g.hidden = true; const w = wallet(db, u); w.balance += Math.floor(g.price * 8 / 10); save(db); return { data: w.balance, error: null }; }
           if (name === "claim_notices") {
             const mine = (db.notices || []).filter((n) => n.user_id === u); db.notices = (db.notices || []).filter((n) => n.user_id !== u); save(db);
             return { data: mine, error: null };
@@ -375,7 +436,7 @@
           }
           if (name === "create_group") {
             const c = { id: uid(), is_group: true, title: args.title, created_by: u, last_message_at: new Date().toISOString() }; db.chats.push(c);
-            for (const x of [u, ...args.members]) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
+            for (const x of [u, ...args.members]) if (x === u || pvAllowed(db, x, u, "groups")) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
             save(db); return { data: c.id, error: null };
           }
         },

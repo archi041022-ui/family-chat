@@ -593,6 +593,7 @@ async function enter(user) {
   S.me = me; S.sessionEmail = user.email || "";
   Prefs.apply();
   if (Lock.enabled()) Lock.show();
+  await Privacy.load();
   await loadProfiles();
   await loadChats();
   await Stories.load();
@@ -620,8 +621,8 @@ async function enter(user) {
 // ───────────── Загрузка данных ─────────────
 async function loadProfiles() {
   const { data } = await S.sb.from("profiles").select("*");
-  for (const p of data || []) S.profiles.set(p.id, p);
-  await signUrls((data || []).map((p) => p.avatar_path).filter(Boolean));
+  for (const p of data || []) S.profiles.set(p.id, Privacy.mask(p));           // скрываем то, что человек не разрешил видеть
+  await signUrls((data || []).map((p) => S.profiles.get(p.id)?.avatar_path).filter(Boolean));
 }
 async function loadChats() {
   const [{ data: chats }, { data: mem }, { data: recent }] = await Promise.all([
@@ -660,13 +661,13 @@ function buildShell() {
   app.append(
     h("aside", { class: "side", id: "side" },
       h("div", { class: "topbar" },
-        avatarEl(S.me.id, "sm", { onclick: () => showTab("settings"), style: { cursor: "pointer" }, title: "Настройки" }),
+        h("button", { class: "icon-btn top-search-btn", title: "Поиск", onclick: () => TopSearch.open(), html: I.search }),   // поиск — значком слева
         h("div", { class: "title" }, h("b", { id: "sideTitle" }, CFG.appName || "Семья"), h("small", { id: "conn" }, "в сети")),
-        h("button", { class: "icon-btn", title: "Поиск", onclick: () => { showTab("chats"); const i = $("#chatSearch"); i?.focus(); }, html: I.search }),
-        h("button", { class: "icon-btn", title: "Профиль", onclick: () => showTab("settings"), html: I.pen })),
+        h("div", { class: "top-search hidden", id: "topSearch" },
+          h("button", { class: "icon-btn", title: "Закрыть поиск", onclick: () => TopSearch.close(), html: I.back }),
+          h("input", { id: "chatSearch", placeholder: "Поиск по чатам и людям", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } }))),
       h("div", { class: "tab-body", id: "tabChats" },
         h("div", { id: "storyStrip", class: "story-top" }),                         // истории — вверху, как в Telegram
-        h("div", { class: "search" }, h("input", { id: "chatSearch", placeholder: "Поиск", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } })),
         h("div", { class: "folders", id: "folders" }),
         h("div", { class: "chat-list", id: "chatList" }, h("div", { id: "chatItems" })),
         h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.pen })),
@@ -680,8 +681,7 @@ function buildShell() {
         tab("Menu", MI.grid, "Меню", "storiesBadge"),                               // всё, что не настройки (как в VK)
         tab("Chats", I.chat, "Чаты", "chatsBadge"),
         tab("Contacts", I.user, "Контакты"),
-        tab("Calls", I.calls, "Звонки", "callsBadge"),
-        tab("Settings", I.gear, "Настройки"))),
+        tab("Calls", I.calls, "Звонки", "callsBadge"))),                       // настройки — в «Меню»
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
   Pull.attach($("#chatList"), async () => { await Promise.all([resync(), Stories.load().then(() => Stories.renderAll()), Tasks.load(), Joins.load(), loadProfiles()]); renderChatList(); });
   Pull.attach($("#tabContacts"), async () => { await loadProfiles(); Tg.renderContacts(); });
@@ -723,6 +723,7 @@ function avatarEl(userId, size = "", extra = {}) {
   return el;
 }
 function chatAvatar(c, size = "") {
+  if (Saved.is(c.id)) return h("div", { class: `avatar ${size} saved-av` }, "🔖");
   if (!c.is_group) { const o = otherUser(c); if (o) return avatarEl(o, size); }
   const gu = c.avatar_path && S.urls.get(c.avatar_path);
   if (gu) return h("div", { class: `avatar ${size}`, style: { background: `center/cover url("${gu}")` } });
@@ -734,6 +735,7 @@ function previewText(m) {
   if (m.deleted) return "Сообщение удалено";
   const who = m.user_id === S.me.id ? "Вы: " : "";
   if (m.media_type === "location") return who + "📍 Геолокация";
+  if (Stickers.isSticker(m)) return who + "🎟 Стикер";
   const kind = { image: "📷 Фото", video: "🎬 Видео", audio: "🎤 Голосовое", file: "📎 Файл", video_note: "⭕ Видеосообщение" }[m.media_type];
   const body = Tg.text(m.body);
   return who + (kind ? kind + (body ? " · " + body : "") : (body || ""));
@@ -745,7 +747,6 @@ function renderChatList() {
   Tg.renderFolders();
   const ub = Updates.banner(); if (ub) list.append(ub);
   const f = S.folder || "all";
-  if (!S.filter) list.append(QuickBar.el());
   const totalUnread = [...S.unread.entries()].filter(([id]) => !Prefs.muted(id)).reduce((a, [, b]) => a + b, 0);
   const cb = $("#chatsBadge"); if (cb) { cb.textContent = totalUnread > 99 ? "99+" : totalUnread; cb.classList.toggle("hidden", !totalUnread); }
   const time = (c) => new Date(S.lastByChat.get(c.id)?.created_at || c.last_message_at || 0).getTime();
@@ -773,7 +774,6 @@ function renderChatList() {
       continue;
     }
     const c = r.c;
-    if (c.id === FAMILY_CHAT && !S.filter) continue;          // «Семья» — в панели сверху
     const title = chatTitle(c);
     const unread = S.unread.get(c.id) || 0;
     const reqs = Joins.toMe(c.id).length;
@@ -787,7 +787,7 @@ function renderChatList() {
     let tick = null;
     if (last && last.user_id === S.me.id && !last.deleted) {
       const others = (S.members.get(c.id) || []).filter((x) => x.user_id !== S.me.id);
-      const read = others.some((x) => new Date(x.last_read_at) >= new Date(last.created_at));
+      const read = others.some((x) => Privacy.readOk(x.user_id) && new Date(x.last_read_at) >= new Date(last.created_at));
       tick = h("span", { class: `list-tick${read ? " read" : ""}`, html: read ? I.ticks : I.tick });
     }
     const item = h("button", { class: `chat-item${S.current === c.id ? " on" : ""}${pinned ? " pinned" : ""}`, "data-chat": c.id, onclick: () => openChat(c.id) },
@@ -832,6 +832,12 @@ async function openChat(chatId) {
     Channels.canPost(c) ? composer() : Channels.readerBar(c));
   app.append(view);
   SwipeBack.attach(view, () => closeChat(), { edge: 36 });                   // от левого края — назад к списку
+  if (other && (!Privacy.can(other, "messages") || Privacy.blockedMe(other) || Privacy.isBlocked(other))) {
+    const nm = S.profiles.get(other)?.name || "Пользователь";
+    view.querySelector(".composer")?.replaceWith(h("div", { class: "pv-banner" }, Privacy.isBlocked(other)
+      ? h("span", null, `🚫 ${nm} в вашем чёрном списке. `, h("button", { class: "link-btn", onclick: async () => { await Privacy.block(other, false); closeChat(); openChat(chatId); } }, "Разблокировать"))
+      : `🔒 ${nm} ограничил(а) личные сообщения`));
+  }
   if (c.is_channel) view.classList.add("channel");
   Protect.apply(c);
   Tg.scrollButton(view);
@@ -874,10 +880,12 @@ function updateChatSub() {
     const n = (S.members.get(c.id) || []).length;
     const on = (S.members.get(c.id) || []).filter((m) => S.online.has(m.user_id) && m.user_id !== S.me.id).length;
     el.textContent = `${n} ${plural(n, "участник", "участника", "участников")}${on ? `, ${on} в сети` : ""}`;
+  } else if (Saved.is(c.id)) {
+    el.textContent = "заметки, ссылки и файлы для себя";
   } else {
     const o = otherUser(c);
     const st = S.profiles.get(o)?.status;
-    el.textContent = (S.online.has(o) ? "в сети" : lastSeen(S.profiles.get(o)?.last_seen)) + (st ? " · " + st : "");
+    el.textContent = (S.online.has(o) ? "в сети" : seenText(S.profiles.get(o))) + (st ? " · " + st : "");
   }
 }
 function lastSeen(t) {
@@ -958,7 +966,8 @@ function messageEl(m, c, firstInRun, tail) {
   if (m.deleted) bubble.append(h("div", { class: "text" }, "Сообщение удалено"));
   else {
     const url = m.media_path && S.urls.get(m.media_path);
-    if (m.media_type === "image") bubble.append(h("img", { class: "photo", src: url || "", loading: "lazy", alt: "Фото", onclick: () => lightbox(url) }));
+    if (Stickers.isSticker(m)) { bubble.classList.add("sticker-bubble"); bubble.append(h("img", { class: "sticker-img", src: url || "", loading: "lazy", alt: "Стикер", draggable: false })); }
+    else if (m.media_type === "image") bubble.append(h("img", { class: "photo", src: url || "", loading: "lazy", alt: "Фото", onclick: () => lightbox(url) }));
     else if (m.media_type === "video") bubble.append(h("video", { src: url || "", controls: true, preload: "metadata", playsinline: true }));
     else if (m.media_type === "audio") bubble.append(h("audio", { src: url || "", controls: true, preload: "metadata", controlsList: "nodownload" }), Voice2Text.el(m));
     else if (m.media_type === "file") bubble.append(h("a", { class: "file", href: url || "#", target: "_blank", rel: "noopener", download: m.media_name || "" },
@@ -986,7 +995,7 @@ function messageEl(m, c, firstInRun, tail) {
   if (fxKind) Effects.maybePlay(m);
   if (out && !m.deleted) {
     const others = (S.members.get(m.chat_id) || []).filter((x) => x.user_id !== S.me.id);
-    const read = others.some((x) => new Date(x.last_read_at) >= new Date(m.created_at));
+    const read = others.some((x) => Privacy.readOk(x.user_id) && new Date(x.last_read_at) >= new Date(m.created_at));
     meta.append(h("span", { class: "ticks", title: read ? "Прочитано" : "Доставлено" }, read ? "✓✓" : "✓"));
   }
   if (m.pending) meta.textContent = "⏳";
@@ -1051,6 +1060,8 @@ function messageMenu(m) {
     if (!prot && !String(m.id).startsWith("tmp-") && (m.body || m.media_path) && m.media_type !== "location")
       items.push(h("button", { class: "menu-item", onclick: () => { close(); Tg.forward(m); } }, h("span", { html: I.forward }), "Переслать"));
     if (!prot && (m.body || (m.media_path && S.urls.get(m.media_path)))) items.push(h("button", { class: "menu-item", onclick: () => { close(); shareOut(m); } }, h("span", { html: I.share }), "Поделиться"));
+    if (!prot && !String(m.id).startsWith("tmp-") && !Saved.is(m.chat_id) && m.media_type !== "location") items.push(h("button", { class: "menu-item", onclick: () => { close(); Saved.add(m); } }, h("span", null, "🔖"), "В избранное"));
+    if (!prot) items.push(...Stickers.menuItems(m, () => close()));
     if (prot) items.push(h("div", { class: "sheet-note prot-note" }, "🛡 Защищённый чат: копирование, пересылка и сохранение запрещены"));
     if (!prot && m.media_path && S.urls.get(m.media_path)) items.push(h("a", { class: "menu-item", href: S.urls.get(m.media_path), target: "_blank", rel: "noopener", download: m.media_name || "", onclick: () => close() }, h("span", { html: I.download }), "Сохранить файл"));
     if (!String(m.id).startsWith("tmp-")) items.push(h("button", { class: "menu-item", onclick: () => { close(); Select.start(m); } }, h("span", { html: I.ticks }), "Выбрать несколько"));
@@ -1312,7 +1323,8 @@ async function postMessage(fields, chatId = S.current) {
   if (error) {
     if (i >= 0) list.splice(i, 1);
     if (S.current === chatId) renderMessages(false);
-    toast("Не отправлено. Проверьте интернет."); return null;
+    const pm = String(error.message || "");
+    toast(/PRIVACY_VOICE/.test(pm) ? "🔒 Получатель ограничил голосовые сообщения" : /PRIVACY/.test(pm) ? "🔒 Получатель ограничил личные сообщения" : "Не отправлено. Проверьте интернет."); return null;
   }
   FX.carry(temp.id, data.id);
   if (list.some((x) => x.id === data.id)) { if (i >= 0) list.splice(i, 1); } // уже пришло по realtime
@@ -1328,7 +1340,7 @@ async function sendFile(f, opts = {}) {
   if (f.size > 50 * 1024 * 1024) { toast("Файл больше 50 МБ — слишком большой"); return; }
   let type = opts.asType || (f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "file");
   let blob = f, ext = (f.name.split(".").pop() || "bin").toLowerCase();
-  if (type === "image" && !/gif|svg/.test(f.type)) {
+  if (type === "image" && !/gif|svg/.test(f.type) && !opts.sticker) {
     try { blob = await compressImage(f); ext = "jpg"; } catch { /* отправим как есть */ }
   }
   const path = `${chatId}/${crypto.randomUUID()}.${ext.replace(/[^a-z0-9]/g, "").slice(0, 6) || "bin"}`;
@@ -1338,10 +1350,10 @@ async function sendFile(f, opts = {}) {
   setTimeout(() => { if (bar) bar.style.width = "0"; }, 400);
   if (error) { toast("Не удалось загрузить файл: " + (error.message || "")); return; }
   await signUrls([path]);
-  const caption = $("#input")?.value.trim();
+  const caption = opts.sticker ? null : $("#input")?.value.trim();
   const withCaption = caption && (type === "image" || type === "video");
   if (withCaption) { $("#input").value = ""; $("#input").dispatchEvent(new Event("input")); }
-  await postMessage({ media_path: path, media_type: type, media_name: f.name.slice(0, 120), body: withCaption ? caption : null });
+  await postMessage({ media_path: path, media_type: type, media_name: f.name.slice(0, 120), body: opts.sticker ? STICKER_MARK : withCaption ? caption : null });
 }
 
 function compressImage(file, max = 1600, quality = 0.85) {
@@ -1519,7 +1531,7 @@ const Live = { channel: null, presence: null, active: true, bgTimer: null,
   async leave() { clearTimeout(this.bgTimer); try { await this.presence?.untrack(); } catch { /* */ } },
 };
 // кто «в сети»: есть отметка присутствия не в фоне (у старых версий приложения отметки нет — считаем в сети)
-const onlineFrom = (state) => new Set(Object.entries(state || {}).filter(([, metas]) => (metas || []).some((m) => m.active !== false)).map(([k]) => k));
+const onlineFrom = (state) => new Set(Object.entries(state || {}).filter(([k, metas]) => (metas || []).some((m) => m.active !== false) && Privacy.can(k, "last_seen")).map(([k]) => k));
 function subscribe() {
   Live.channel = S.sb.channel("db-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => onNewMessage(p.new))
@@ -1540,6 +1552,7 @@ function subscribe() {
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "join_requests" }, (p) => Joins.onChange({ new: p.new, eventType: "INSERT" }))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "join_requests" }, (p) => Joins.onChange({ old: p.old, eventType: "DELETE" }))
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "notices" }, () => Push.soon())
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "user_gifts" }, (p) => Gifts.onNew(p.new))
     .subscribe((status) => {
       const el = $("#conn"); if (el) el.textContent = status === "SUBSCRIBED" ? "в сети" : "подключение…";
       if (status === "SUBSCRIBED" && S.resync) { S.resync = false; resync(); }
@@ -1559,6 +1572,7 @@ function subscribe() {
     .on("broadcast", { event: "profile" }, async () => { await loadProfiles(); renderChatList(); })
     .on("broadcast", { event: "typing" }, ({ payload }) => Tg.onTyping(payload))
     .on("broadcast", { event: "joinreq" }, () => Joins.load())
+    .on("broadcast", { event: "privacy" }, () => Privacy.refresh())
     .on("broadcast", { event: "chats" }, async () => {
       const before = new Set(S.chats.map((c) => c.id));
       await loadChats(); renderChatList(); Joins.checkAccepted(before);
@@ -1585,7 +1599,7 @@ function onProfileChange(np) {
     return;
   }
   const old = S.profiles.get(np.id) || {};
-  S.profiles.set(np.id, { ...old, ...np });
+  S.profiles.set(np.id, Privacy.mask({ ...old, ...np }));
   if (np.id === S.me.id) Object.assign(S.me, np);
   if (np.avatar_path && !S.urls.has(np.avatar_path)) signUrls([np.avatar_path]).then(renderChatList);
   renderChatList(); updateChatSub(); Stories.renderAll(); Tg.refreshPresence();
@@ -1593,10 +1607,17 @@ function onProfileChange(np) {
 const appVisible = () => (window.AndroidBridge?.isForeground ? window.AndroidBridge.isForeground() : document.visibilityState === "visible");
 const TABS = { menu: "Меню", chats: "Чаты", contacts: "Контакты", calls: "Звонки", stories: "Истории и статусы", settings: "Настройки", invite: "Пригласить" };
 function showTab(t) {
+  if (t === "menu" && S.tab === "menu") {                         // повторное нажатие «Меню» — закрыть
+    const m = $("#tabMenu"); m?.classList.add("closing");
+    setTimeout(() => { m?.classList.remove("closing"); showTab(S.prevTab && S.prevTab !== "menu" ? S.prevTab : "chats"); }, 160);
+    return;
+  }
+  if (t === "menu" && S.tab !== "menu") S.prevTab = S.tab;
+  if (t !== "chats") TopSearch.close?.();
   for (const k of Object.keys(TABS)) {
     const id = k[0].toUpperCase() + k.slice(1);
     $(`#tab${id}`)?.classList.toggle("hidden", t !== k);
-    $(`#tabBtn${id}`)?.classList.toggle("on", t === k || ((t === "invite" || t === "stories") && k === "menu"));
+    $(`#tabBtn${id}`)?.classList.toggle("on", t === k || ((t === "invite" || t === "stories" || t === "settings") && k === "menu"));
   }
   S.tab = t;
   const st = $("#sideTitle"); if (st) st.textContent = t === "chats" ? (CFG.appName || "Семья") : TABS[t];
@@ -1805,6 +1826,7 @@ const Calls = {
 
   async start(userId, video) {
     if (this.pc || this.ui) { toast("Вы уже в звонке"); return; }
+    if (!Privacy.can(userId, "calls")) { toast(`${S.profiles.get(userId)?.name || "Пользователь"} ограничил(а) звонки`); return; }
     if (!window.RTCPeerConnection || !navigator.mediaDevices) { toast("Звонки не поддерживаются на этом устройстве"); return; }
     this.peer = userId; this.video = video; this.role = "caller"; this.callId = crypto.randomUUID(); this.connected = false;
     try { this.local = await this.media(video); }
@@ -1835,6 +1857,7 @@ const Calls = {
     if (p.kind === "offer") {
       if (p.callId && p.callId === this.callId) return;                 // повтор того же вызова
       if (p.callId && this.ended?.has(p.callId)) return;                // уже отклонён или завершён
+      if (!Privacy.allows(p.from, "calls")) { this.send(p.from, { kind: "privacy", callId: p.callId }).catch?.(() => {}); return; }   // мои правила: этому человеку звонить нельзя
       if (this.pc || this.ui) { this.send(p.from, { kind: "busy", callId: p.callId }); return; }
       this.peer = p.from; this.video = !!p.video; this.callId = p.callId; this.role = "callee"; this.offer = p.sdp; this.pendingIce = []; this.connected = false;
       if (!S.profiles.has(p.from)) await loadProfiles();
@@ -1857,6 +1880,7 @@ const Calls = {
         break;
       case "decline": toast("Звонок отклонён"); this.hangup(false, "declined"); break;
       case "busy": toast("Абонент занят"); this.hangup(false, "busy"); break;
+      case "privacy": this.hangup(false, "privacy"); toast("Пользователь ограничил звонки"); break;
       case "hangup": this.hangup(false, "remote"); break;
       case "video": this.ui?.classList.toggle("has-video", !!p.on && this.hasRemoteVideo()); break;
       case "react": CallReact.show(this.ui, String(p.emoji || "").slice(0, 8), S.profiles.get(this.peer)?.name?.split(" ")[0]); break;
@@ -1899,7 +1923,7 @@ const Calls = {
     const dur = this.connected ? (Date.now() - this.startedAt) / 1000 : 0;
     const wasCaller = this.role === "caller", peer = this.peer, video = this.video;
     this.reset();
-    if (wasCaller && peer) { // запись о звонке в переписке
+    if (wasCaller && peer && reason !== "privacy" && Privacy.can(peer, "messages")) { // запись о звонке в переписке
       const { data: id } = await S.sb.rpc("get_or_create_dm", { other: peer });
       if (id) {
         if (!S.chats.find((c) => c.id === id)) { await loadChats(); renderChatList(); }
@@ -1933,7 +1957,9 @@ const Calls = {
     callBackdrop(this.ui, this.peer);
     document.body.append(this.ui);
     this.ringtone();
-    if (window.AndroidBridge?.incomingCall2) window.AndroidBridge.incomingCall2(p?.name || "Звонок", !!this.video);
+    const photo = p?.avatar_path ? S.urls.get(p.avatar_path) || null : null;
+    if (window.AndroidBridge?.incomingCall3) window.AndroidBridge.incomingCall3(p?.name || "Звонок", !!this.video, photo);
+    else if (window.AndroidBridge?.incomingCall2) window.AndroidBridge.incomingCall2(p?.name || "Звонок", !!this.video);
     else if (window.AndroidBridge?.incomingCall) window.AndroidBridge.incomingCall(p?.name || "Звонок");
     else if (!appVisible() && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(p?.name || "Звонок", { body: this.video ? "Входящий видеозвонок" : "Входящий звонок", icon: "icon-192.png", requireInteraction: true }); } catch { /* */ }
@@ -1957,6 +1983,7 @@ const Calls = {
     const scrBtn = h("button", { class: "cbtn scr-btn", html: I.screen, onclick: () => (this.screen ? this.stopScreen() : this.startScreen()) });
     const canShare = !!(window.AndroidBridge?.startScreenShare || navigator.mediaDevices?.getDisplayMedia);
     this.ui = h("div", { class: `call${this.role === "caller" ? " ringing" : ""}` }, remoteV, localV,
+      h("button", { class: "call-min", title: "Свернуть звонок", onclick: (e) => { e.stopPropagation(); MiniCall.toggle(this.ui); }, html: I.down }),
       h("div", { class: "who" }, avatarEl(this.peer, "xl"), h("b", null, p?.name || ""), h("span", { class: "status" }, status)),
       h("div", { class: "controls" },
         h("div", { class: "cbtn-wrap" }, micBtn, "Микрофон"),

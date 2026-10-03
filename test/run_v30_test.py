@@ -78,7 +78,7 @@ try:
         C.evaluate("sessionStorage.removeItem('bgStart'); AndroidBridge.fg = true; window.onAppForeground()")
         A.wait_for_function("(id) => S.online.has(id)", arg=ids["Сын"], timeout=5000); print("background service page: ok")
         # 6) выход из аккаунта — сразу не в сети
-        C.click("#tabBtnSettings"); C.click("#tabSettings >> text=Выйти"); C.click(".sheet .menu-item.danger")
+        C.evaluate("S.tab === 'menu' || showTab('menu')"); C.click("#tabMenu .mn-tile:has-text('Настройки')"); C.click("#tabSettings >> text=Выйти"); C.click(".sheet .menu-item.danger")
         A.wait_for_function("(id) => !S.online.has(id)", arg=ids["Сын"], timeout=5000); print("logout → offline: ok")
         # 7) браузер: вкладку скрыли
         B.evaluate("AndroidBridge.fg = true; window.onAppForeground()")

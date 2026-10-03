@@ -55,7 +55,7 @@ try:
         B.click(".back-btn")
         print("welcome: ok")
         # анкета «О себе»
-        A.click(".back-btn"); A.click("button[title='Профиль']"); A.click("#tabSettings >> text=Изменить профиль")
+        A.click(".back-btn"); A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Настройки')"); A.click("#tabSettings >> text=Изменить профиль")
         A.click(".sheet .status-presets >> text=Папа")
         A.fill(".sheet textarea", "Люблю рыбалку и шашлык")
         import datetime
@@ -101,7 +101,7 @@ try:
         A.evaluate("() => { window.AndroidBridge.downloadUpdate = (u) => { window.__dl = u; [10, 55, 100].forEach((p, i) => setTimeout(() => window.onUpdateProgress(p), 200 * (i + 1))); }; window.AndroidBridge.notify = () => {}; }")
         A.evaluate("Prefs.set('autoUpdate', false)")
         A.evaluate("Updates.check(true)"); A.click("#tabBtnChats"); A.wait_for_selector(".upd-banner >> text=Доступна новая версия 2.3"); shot(A, "w7_A_update_banner")
-        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('О приложении')"); A.wait_for_selector(".sheet .upd-dl.has"); A.wait_for_selector(".sheet .toggle-row.switch >> text=Автообновление")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('О приложении')"); A.wait_for_selector(".sheet .upd-dl.has"); A.wait_for_selector(".sheet .toggle-row.switch >> text=Автообновление")
         A.click(".sheet .upd-dl"); A.wait_for_selector(".sheet .upd-progress:not(.hidden)"); shot(A, "w8_A_about_download")
         assert A.evaluate("window.__dl").endswith("build-9/Semya.apk")
         A.wait_for_function("Updates.progress === 100"); A.click(".sheet-back", position={"x": 5, "y": 5})

@@ -51,8 +51,8 @@ try:
         assert A.locator("#chatItems .chat-item[data-user]:has-text('Мама')").count() == 0      # стала обычной перепиской
         print("all people listed: ok")
         # папки
-        A.click("#folders >> text=Группы"); assert A.locator("#chatItems .chat-item:not(.quick-pill)").count() == 0   # «Семья» — в панели сверху
-        assert A.locator("#chatItems .quick-bar .family-pill").count() == 1
+        A.click("#folders >> text=Группы"); assert A.locator("#chatItems .chat-item:has-text('Семья')").count() == 1   # «Семья» — обычная строка в списке
+        assert A.locator("#chatItems .quick-bar").count() == 0
         A.click("#folders >> text=Личные"); assert A.locator("#chatItems .chat-item:not(.quick-pill):has-text('Семья')").count() == 0
         A.click("#folders >> text=Все")
         print("folders: ok")
@@ -115,7 +115,7 @@ try:
         A.click("#tabBtnCalls"); A.wait_for_selector("#tabCalls .call-row >> text=Исходящий видеозвонок"); shot(A, "t6_A_calls")
         print("calls tab: ok")
         # настройки
-        A.click("#tabBtnSettings"); A.wait_for_selector("#tabSettings .set-profile >> text=Папа"); shot(A, "t7_A_settings")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Настройки')"); A.wait_for_selector("#tabSettings .set-profile >> text=Папа"); shot(A, "t7_A_settings")
         A.click("#tabSettings >> text=Звонки"); A.wait_for_selector(".sheet >> text=В браузере звонки"); A.click(".sheet-back", position={"x": 5, "y": 5})
         A.click("#tabSettings >> text=Уведомления и звуки"); A.click(".sheet .toggle-row >> text=Звук новых сообщений")
         assert A.evaluate("Prefs.get('sound')") is False

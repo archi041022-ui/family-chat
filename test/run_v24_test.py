@@ -53,7 +53,7 @@ try:
         A.reload(); A.wait_for_selector("#chatList .chat-item")
         name = lambda n: f"#chatItems .chat-item:has(.name:text-is('{n}'))"
         # ── 5. эмодзи-статус
-        A.click("#tabBtnSettings"); A.click("#tabSettings >> text=Эмодзи-статус"); A.click(".es-grid button >> nth=1")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Настройки')"); A.click("#tabSettings >> text=Эмодзи-статус"); A.click(".es-grid button >> nth=1")
         B.wait_for_selector("#chatItems .chat-item[data-user] .estatus", timeout=8000); shot(B, "x1_B_emoji_status")
         A.click("#tabBtnChats")
         print("emoji status: ok")
@@ -111,14 +111,14 @@ try:
         print("voice transcription UI: ok")
         A.click(".back-btn"); B.click(".back-btn")
         # ── 8. задачи и ассистент
-        A.click(".tasks-item"); A.wait_for_selector("#taskInput")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Мои задачи')"); A.wait_for_selector("#taskInput")
         A.fill("#taskInput", "Купить хлеб завтра в 18"); A.press("#taskInput", "Enter")
         A.wait_for_selector(".task-row >> text=Купить хлеб"); A.wait_for_selector(".task-row small >> text=завтра в 18:00")
         A.click("button[title='Попросить ассистента']"); A.wait_for_selector("#asstInput"); A.fill("#asstInput", "Поручи маме купить молоко сегодня в 20:00"); A.click("#asstMic")
         A.wait_for_selector(".sheet >> text=Поручил: Мама")
         B.wait_for_selector("text=поручил(а) вам: Купить молоко", timeout=8000)
         A.click(".sheet-back", position={"x": 5, "y": 5})
-        B.click(".tasks-item"); B.wait_for_selector(".task-row >> text=Купить молоко"); shot(B, "x8_B_tasks")
+        B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Мои задачи')"); B.wait_for_selector(".task-row >> text=Купить молоко"); shot(B, "x8_B_tasks")
         B.click(".task-row:has-text('Купить молоко') .task-check"); B.wait_for_timeout(800)
         A.wait_for_function("Tasks.list.some(t => t.title === 'Купить молоко' && t.done)", timeout=8000)
         A.evaluate("Tasks.add({ title: 'Позвонить бабушке', due_at: new Date(Date.now() - 1000).toISOString() }).then(() => Tasks.tick())")
@@ -132,7 +132,7 @@ try:
         # ── 1. вход по отпечатку (мост Android подменён)
         A.evaluate("""() => { window.__unlocks = 0; window.AndroidBridge = Object.assign(window.AndroidBridge || {}, { lockAvailable: () => true,
             unlock: () => { window.__unlocks++; setTimeout(() => window.onUnlock(true, 'ok'), 100); } }); }""")
-        A.click("#tabBtnSettings"); A.click("#tabSettings >> text=Вход по отпечатку"); A.click(".sheet .toggle-row:has-text('Вход по отпечатку или лицу')")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Настройки')"); A.click("#tabSettings >> text=Вход по отпечатку"); A.click(".sheet .toggle-row:has-text('Вход по отпечатку или лицу')")
         A.wait_for_function("Prefs.get('bioLock') === true"); A.click(".sheet .seg >> text=Сразу"); A.click(".sheet-back", position={"x": 5, "y": 5})
         A.evaluate("() => { window.onAppBackground(); }"); A.wait_for_timeout(50)
         A.evaluate("() => { window.AndroidBridge.unlock = () => { window.__unlocks++; window.__pending = true; }; window.onAppForeground(); }")

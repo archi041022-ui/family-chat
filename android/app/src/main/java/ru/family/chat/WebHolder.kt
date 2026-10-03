@@ -33,6 +33,7 @@ object WebHolder {
     val activity: MainActivity? get() = activityRef?.get()
 
     @Volatile var foreground = false
+    @Volatile var inCall = false
 
     fun exists() = web != null
 
@@ -127,6 +128,8 @@ object WebHolder {
         @JavascriptInterface fun incomingCall(name: String) = Notifier.incomingCall(ctx, name, false)
 
         @JavascriptInterface fun incomingCall2(name: String, video: Boolean) = Notifier.incomingCall(ctx, name, video)
+
+        @JavascriptInterface fun incomingCall3(name: String, video: Boolean, photo: String?) = Notifier.incomingCall(ctx, name, video, photo)
 
         /** Состояние разрешений, от которых зависят звонки — для экрана «Настройки → Звонки». */
         @JavascriptInterface fun callHealth(): String {
@@ -321,6 +324,12 @@ object WebHolder {
 
         @JavascriptInterface fun stopScreenShare() = ChatService.screenStop(ctx)
 
-        @JavascriptInterface fun callState(active: Boolean, video: Boolean) = ChatService.callState(ctx, active, video)
+        @JavascriptInterface fun callState(active: Boolean, video: Boolean) {
+            ChatService.callState(ctx, active, video)
+            inCall = active                                          // во время звонка при выходе — «картинка в картинке»
+            activity?.let { a -> a.runOnUiThread { a.updatePip() } }
+        }
+        /** Свернуть приложение в маленькое окно звонка (кнопка в интерфейсе). */
+        @JavascriptInterface fun enterPip(): Boolean { val a = activity ?: return false; a.runOnUiThread { a.enterPip() }; return true }
     }
 }

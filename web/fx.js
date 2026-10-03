@@ -216,15 +216,7 @@ const Emoji = {
     const show = (k) => {
       tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
       body.innerHTML = "";
-      if (k === "stickers") {
-        body.append(h("p", { class: "sheet-note" }, "Нажмите — отправится анимированный стикер"),
-          h("div", { class: "sticker-grid" }, STICKERS.map((e) => {
-            const img = h("img", { src: this.anim(e), alt: e, loading: "lazy" });
-            img.onerror = () => img.replaceWith(h("span", { class: "st-fallback" }, e));
-            return h("button", { onclick: () => { close(); this.remember(e); FX.sendAnim(); postMessage({ body: e }); } }, img);
-          })));
-        return;
-      }
+      if (k === "stickers") { body.append(Stickers.pane(() => close())); return; }   // наборы, избранные, свои стикеры
       if (k === "gif") {
         const file = h("input", { type: "file", accept: "image/gif,image/webp,video/mp4", class: "hidden" });
         file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); FX.sendAnim(); await sendFile(f); };
@@ -591,6 +583,10 @@ function callBackdrop(el, userId, chat) {
   if (!url && chat?.avatar_path) url = S.urls.get(chat.avatar_path);
   const bg = h("div", { class: `call-bg${url ? " photo" : ""}` });
   if (url) bg.style.backgroundImage = `url("${url}")`;
+  else {                                                  // ссылка на фото ещё не готова — получаем и ставим фон
+    const path = (userId && S.profiles.get(userId)?.avatar_path) || chat?.avatar_path;
+    if (path) signUrls([path]).then(() => { const u = S.urls.get(path); if (u && bg.isConnected) { bg.classList.add("photo"); bg.style.backgroundImage = `url("${u}")`; } }).catch(() => {});
+  }
   // без фото — цвет оформления приложения
   el.prepend(bg);
 }

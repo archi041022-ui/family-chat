@@ -8,6 +8,11 @@ const MI = {
   scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5.5A1.5 1.5 0 015.5 4H8M16 4h2.5A1.5 1.5 0 0120 5.5V8M20 16v2.5a1.5 1.5 0 01-1.5 1.5H16M8 20H5.5A1.5 1.5 0 014 18.5V16"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>',
   megaphone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4a1 1 0 001 1h2l6 4V5L7 9H5a1 1 0 00-1 1z"/><path d="M17 9a4 4 0 010 6"/></svg>',
   compass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>',
+  gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8S10.5 3.5 8 4.5 9 8 12 8zM12 8s1.5-4.5 4-3.5S15 8 12 8z"/></svg>',
+  sticker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h6.5z"/><path d="M12.5 20c0-4.5 3-7.5 7.5-7.5"/><path d="M9 10h.01M15 10h.01M9 14.5s1 1.5 3 1.5"/></svg>',
+  bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5h11a1 1 0 011 1v16l-6.5-4-6.5 4v-16a1 1 0 011-1z"/></svg>',
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-4.5v-6h-5v6H5a1 1 0 01-1-1z"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 018 0v2.5"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
 };
 
@@ -19,18 +24,22 @@ const Menu = {
       h("span", { class: "mn-ico", style: { background: bg }, html: icon }), h("span", { class: "mn-lbl" }, label),
       badge ? h("i", { class: "mn-badge" }, badge > 99 ? "99+" : String(badge)) : null);
     const section = (title, ...tiles) => h("section", { class: "mn-sec" }, h("div", { class: "mn-cap" }, title), h("div", { class: "mn-grid" }, ...tiles.filter(Boolean)));
-    const tasks = Tasks.active().length, unseen = Stories.order().unseen.length;
-    box.append(
+    const tasks = Tasks.active().length, unseen = Stories.order().unseen.length, famUnread = S.unread.get(FAMILY_CHAT) || 0;
+    box.append(...[                                    // пустые разделы (например, «Администратор») не выводим
       h("button", { class: "mn-profile", onclick: () => showTab("settings") }, avatarEl(S.me.id, "lg"),
         h("div", { class: "mid" }, h("b", null, S.me.name), h("small", null, "Профиль и настройки")), h("span", { class: "chev", html: MI.chev })),
       section("Сервисы",
         tile("#4F6BED", I.bot, "Ассистент", () => Assistant.open()),
         tile("#2E9E62", I.ticks, "Мои задачи", () => Tasks.open(), tasks),
+        tile("#E5A00D", MI.gift, "Подарки", () => Gifts.open()),
+        tile("#D9466F", MI.sticker, "Стикеры", () => Stickers.store()),
         tile("#D9466F", MI.film, "Видеоредактор", () => VideoEditor.open()),
         tile("#D98A1E", MI.scan, "Сканер → PDF", () => Camera.open("doc")),
         tile("#8A57D6", I.story, "Истории и статусы", () => showTab("stories"), unseen),
         tile("#14919B", I.video, "Видеочат семьи", () => GroupCall.start(FAMILY_CHAT, true))),
       section("Общение",
+        tile("#E8664F", MI.home, "Семья", () => openChat(FAMILY_CHAT), famUnread),
+        tile("#3E7BE6", MI.bookmark, "Избранное", () => Saved.open()),
         tile("#3E7BE6", MI.compass, "Группы и каналы", () => Joins.directory()),
         tile("#3E7BE6", I.group, "Создать группу", () => newGroupSheet()),
         tile("#3E7BE6", MI.megaphone, "Создать канал", () => Channels.create()),
@@ -39,11 +48,14 @@ const Menu = {
         tile("#5F6B7A", I.shield, "Участники", () => membersAdmin()),
         tile("#5F6B7A", I.key, "Сброс пароля", () => adminResetSheet()),
         tile("#5F6B7A", I.bell, "Мгновенные оповещения", () => FcmSetup.sheet())) : null,
+      section("Настройки",
+        tile("#5F6B7A", I.gear, "Настройки", () => showTab("settings")),
+        tile("#3E4A5A", MI.lock, "Конфиденциальность", () => Privacy.sheet()),
+        tile("#5F6B7A", I.bell, "Уведомления", () => Tg.notifSheet())),
       section("Приложение",
         tile("#5F6B7A", I.download, "Обновления", () => Updates.sheet(), Updates.latest ? 1 : 0),
-        tile("#5F6B7A", I.info, "О приложении", () => Tg.aboutSheet()),
-        tile("#5F6B7A", I.gear, "Настройки", () => showTab("settings"))),
-    );
+        tile("#5F6B7A", I.info, "О приложении", () => Tg.aboutSheet())),
+    ].filter(Boolean));
   },
 };
 
@@ -156,3 +168,97 @@ const StoryTop = {
     }, { passive: true });
   },
 };
+
+
+// ───────── Поиск значком в левом верхнем углу ─────────
+const TopSearch = {
+  open() {
+    showTab("chats");
+    const box = $("#topSearch"); if (!box) return;
+    box.classList.remove("hidden"); box.parentNode.classList.add("searching");
+    const i = $("#chatSearch"); setTimeout(() => i?.focus(), 30);
+  },
+  close() {
+    const box = $("#topSearch"); if (!box || box.classList.contains("hidden")) return;
+    box.classList.add("hidden"); box.parentNode.classList.remove("searching");
+    const i = $("#chatSearch"); if (i && i.value) { i.value = ""; S.filter = ""; renderChatList(); }
+  },
+};
+
+// ───────── Избранное: сохранённые сообщения (чат с самим собой) ─────────
+const Saved = {
+  id: null,
+  is(chatId) { const c = S.chats.find((x) => x.id === chatId); return !!c && String(c.dm_key || "").startsWith("saved:"); },
+  async ensure() {
+    const c = S.chats.find((x) => String(x.dm_key || "") === "saved:" + S.me.id);
+    if (c) return (this.id = c.id);
+    const { data, error } = await S.sb.rpc("saved_chat");
+    if (error || !data) { toast("Не удалось открыть «Избранное»"); return null; }
+    await loadChats(); renderChatList(); return (this.id = data);
+  },
+  async open() { const id = await this.ensure(); if (id) openChat(id); },
+  async add(m) {
+    const id = await this.ensure(); if (!id) return;
+    const author = S.profiles.get(m.user_id)?.name;
+    const head = m.user_id !== S.me.id && author ? `↪️ Переслано от ${Privacy.can(m.user_id, "forwards") ? author : "Скрытый пользователь"}\n` : "";
+    const text = m.body ? Tg.text(m.body) : "";
+    const body = Stickers.isSticker(m) ? STICKER_MARK : (head + (text || "")).trim() || null;
+    const r = await postMessage({ body, media_path: m.media_path || null, media_type: m.media_type || null, media_name: m.media_name || null }, id);
+    if (r) toast("🔖 Сохранено в «Избранное»");
+  },
+};
+
+// ───────── Голосовые по очереди ─────────
+// Одновременно играет только одно голосовое (или кружок); когда оно закончилось — включается следующее.
+const VoiceQueue = {
+  init() {
+    if (this.on) return; this.on = true;
+    document.addEventListener("play", (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLMediaElement) || !el.closest(".messages")) return;
+      for (const x of document.querySelectorAll(".messages audio, .messages video")) if (x !== el && !x.paused) x.pause();
+    }, true);
+    document.addEventListener("ended", (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLAudioElement) || !el.closest(".messages")) return;
+      const all = [...document.querySelectorAll(".messages audio")];
+      const next = all[all.indexOf(el) + 1];
+      if (next) { try { next.currentTime = 0; } catch { /* */ } next.play().catch(() => {}); next.closest(".msg")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    }, true);
+  },
+};
+VoiceQueue.init();
+
+// ───────── Свернуть звонок ─────────
+// В приложении — маленькое окно поверх чатов (можно двигать, нажать — развернуть).
+// На Android при выходе из приложения во время видеозвонка — окно «картинка в картинке».
+const MiniCall = {
+  toggle(ui) {
+    if (!ui) return;
+    const mini = !ui.classList.contains("mini");
+    ui.classList.toggle("mini", mini);
+    if (mini) {
+      ui.style.left = ""; ui.style.top = "";
+      if (!ui._miniBound) {
+        ui._miniBound = true;
+        let sx, sy, ox, oy, moved = false, down = false;
+        ui.addEventListener("pointerdown", (e) => {
+          if (!ui.classList.contains("mini")) return;
+          down = true; moved = false; sx = e.clientX; sy = e.clientY; const r = ui.getBoundingClientRect(); ox = r.left; oy = r.top;
+        });
+        ui.addEventListener("pointermove", (e) => {
+          if (!down || !ui.classList.contains("mini")) return;
+          const dx = e.clientX - sx, dy = e.clientY - sy; if (!moved && Math.hypot(dx, dy) < 8) return;
+          moved = true; ui.style.left = Math.max(4, Math.min(innerWidth - ui.offsetWidth - 4, ox + dx)) + "px"; ui.style.top = Math.max(4, Math.min(innerHeight - ui.offsetHeight - 4, oy + dy)) + "px"; ui.style.right = "auto"; ui.style.bottom = "auto";
+        });
+        ui.addEventListener("pointerup", (e) => {
+          if (!down) return; down = false;
+          if (ui.classList.contains("mini") && !moved && !e.target.closest(".cbtn.red")) MiniCall.toggle(ui);    // нажали — развернуть
+        });
+      }
+    } else { ui.style.left = ui.style.top = ui.style.right = ui.style.bottom = ""; }
+  },
+  // Android: переход в «картинку в картинке» и обратно
+  onPip(on) { document.body.classList.toggle("pip", !!on); },
+};
+window.onPip = (on) => MiniCall.onPip(on);

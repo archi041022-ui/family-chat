@@ -47,7 +47,7 @@ try:
         A.reload(); A.wait_for_selector("#chatList .chat-item"); A.wait_for_timeout(500)
         # ── меню внизу слева
         tabs = A.evaluate("[...document.querySelectorAll('.bottom-tabs button')].map(b => b.id)")
-        assert tabs == ["tabBtnMenu", "tabBtnChats", "tabBtnContacts", "tabBtnCalls", "tabBtnSettings"], tabs
+        assert tabs == ["tabBtnMenu", "tabBtnChats", "tabBtnContacts", "tabBtnCalls"], tabs
         A.click("#tabBtnMenu"); A.wait_for_selector("#tabMenu .mn-tile")
         tiles = A.evaluate("[...document.querySelectorAll('#tabMenu .mn-lbl')].map(x => x.textContent)")
         for t in ["Ассистент", "Мои задачи", "Видеоредактор", "Сканер → PDF", "Истории и статусы", "Группы и каналы", "Пригласить в семью", "Обновления", "О приложении", "Участники"]:
@@ -55,17 +55,17 @@ try:
         shot(A, "u1_menu")
         A.click("#tabMenu .mn-tile:has-text('Видеоредактор')"); A.wait_for_selector(".ve-cam"); A.evaluate("window.handleBack()"); A.wait_for_selector(".ve-root", state="detached")
         A.click("#tabMenu .mn-tile:has-text('Истории и статусы')"); A.wait_for_selector("#tabStories:not(.hidden)"); assert "on" in A.get_attribute("#tabBtnMenu", "class")
-        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Мои задачи')"); A.wait_for_selector(".tasks-view"); A.click(".back-btn")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Мои задачи')"); A.wait_for_selector(".tasks-view"); A.click(".back-btn")
         print("menu: ok")
         # в настройках — только настройки
-        A.click("#tabBtnSettings"); st = A.inner_text("#tabSettings")
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Настройки')"); st = A.inner_text("#tabSettings")
         for gone in ["Мои задачи", "Пригласить в семью", "Скачать обновления", "Управление участниками"]: assert gone not in st, gone
         for keep in ["Уведомления и звуки", "Оформление и цвета", "Выйти", "Плавающий значок ассистента"]: assert keep in st, keep
         shot(A, "u2_settings"); print("settings only settings: ok")
         # ── истории — вверху, над поиском; при прокрутке сворачиваются
         A.click("#tabBtnChats")
-        order = A.evaluate("(() => { const k = [...document.querySelector('#tabChats').children].map(e => e.id || e.className); return k.indexOf('storyStrip') < k.indexOf('search'); })()")
-        assert order, "истории не над поиском"
+        order = A.evaluate("(() => [document.querySelector('#tabChats').firstElementChild.id, !!document.querySelector('#tabChats .search'), document.querySelector('.side > .topbar').firstElementChild.className])()")
+        assert order == ["storyStrip", False, "icon-btn top-search-btn"], order          # истории — первыми; поиск — значком слева в шапке
         A.wait_for_selector("#storyStrip .story-cell >> text=Мама")
         A.evaluate("document.querySelector('#chatItems').style.minHeight = '3000px'")
         A.evaluate("const l = document.querySelector('#chatList'); l.scrollTop = 200; l.dispatchEvent(new Event('scroll'))"); A.wait_for_timeout(400)
@@ -86,7 +86,7 @@ try:
         assert "hidden" in A.get_attribute(".asst-fab", "class")              # при открытом ассистенте прячется
         A.click(".back-btn"); A.wait_for_timeout(500); assert "hidden" not in A.get_attribute(".asst-fab", "class")
         A.reload(); A.wait_for_selector(".asst-fab:not(.hidden)"); bb3 = A.locator(".asst-fab").bounding_box(); assert bb3["x"] < 20, bb3   # место запомнилось
-        A.click("#tabBtnSettings"); A.click("#tabSettings .toggle-row:has-text('Плавающий значок ассистента')"); A.wait_for_timeout(600)
+        A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Настройки')"); A.click("#tabSettings .toggle-row:has-text('Плавающий значок ассистента')"); A.wait_for_timeout(600)
         assert "hidden" in A.get_attribute(".asst-fab", "class")
         A.click("#tabSettings .toggle-row:has-text('Плавающий значок ассистента')"); A.wait_for_timeout(600)
         assert "hidden" not in A.get_attribute(".asst-fab", "class")
@@ -105,7 +105,7 @@ try:
         swipe(".tasks-view", 330, 60); A.wait_for_selector(".tasks-view", state="detached", timeout=3000)
         print("tasks swipe back: ok")
         # от левого края — назад из чата
-        A.click("#chatItems .family-pill"); A.wait_for_selector("#chatView .composer")
+        A.click("#chatItems .chat-item[data-chat='00000000-0000-0000-0000-000000000001']"); A.wait_for_selector("#chatView .composer")
         swipe("#chatView", 10, 260); A.wait_for_selector("#chatView", state="detached", timeout=3000)
         print("chat edge swipe: ok")
         b.close()

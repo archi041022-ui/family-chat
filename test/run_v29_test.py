@@ -90,7 +90,7 @@ try:
         hang(); print("foreground: ok")
         # 6) групповой видеочат: приглашение звенит, «Войти» останавливает (и повторные приглашения тоже не звенят)
         B.evaluate("AndroidBridge.fg = false")
-        A.click("#tabBtnChats"); A.click("#chatItems .quick-bar .family-pill"); A.wait_for_selector("#input")
+        A.click("#tabBtnChats"); A.click("#chatItems .chat-item[data-chat='00000000-0000-0000-0000-000000000001']"); A.wait_for_selector("#input")
         A.evaluate("GroupCall.start('00000000-0000-0000-0000-000000000001', false)")
         B.wait_for_selector(".gc-invite", timeout=8000); B.wait_for_timeout(300); assert ringing()
         B.click(".gc-invite .cbtn.green"); B.wait_for_timeout(9000)    # повтор приглашения через 7 с

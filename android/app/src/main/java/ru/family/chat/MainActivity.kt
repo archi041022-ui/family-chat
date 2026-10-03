@@ -77,6 +77,31 @@ class MainActivity : Activity() {
         WebHolder.js("window.onAppForeground && window.onAppForeground()")
     }
 
+    // ── «Картинка в картинке»: во время звонка приложение сворачивается в маленькое окно, разговор продолжается
+    private fun pipParams(): android.app.PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT < 26) return null
+        val b = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(9, 16))
+        if (Build.VERSION.SDK_INT >= 31) { b.setAutoEnterEnabled(WebHolder.inCall); b.setSeamlessResizeEnabled(true) }
+        return b.build()
+    }
+    fun updatePip() {
+        if (Build.VERSION.SDK_INT < 26) return
+        try { pipParams()?.let { setPictureInPictureParams(it) } } catch (_: Throwable) {}
+    }
+    fun enterPip() {
+        if (Build.VERSION.SDK_INT < 26 || !WebHolder.inCall) return
+        try { pipParams()?.let { enterPictureInPictureMode(it) } } catch (_: Throwable) {}
+    }
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // до Android 12 автоматического входа нет — входим сами, когда пользователь уходит на рабочий стол
+        if (Build.VERSION.SDK_INT in 26..30 && WebHolder.inCall && !isInPictureInPictureMode) enterPip()
+    }
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        WebHolder.js("window.onPip && window.onPip($isInPictureInPictureMode)")
+    }
+
     override fun onPause() {
         super.onPause()
         WebHolder.foreground = false

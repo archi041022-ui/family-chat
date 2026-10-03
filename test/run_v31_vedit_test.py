@@ -45,7 +45,7 @@ try:
         playing = lambda: A.evaluate("[...window.__media].filter(m => !m.paused && m.isConnected !== undefined).length")
         register(A, "papa", "Папа"); A.wait_for_selector("#chatList .chat-item")
         def open_editor(files):
-            A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Видеоредактор')"); A.wait_for_selector(".ve-cam")
+            A.evaluate("S.tab === 'menu' || showTab('menu')"); A.click("#tabMenu .mn-tile:has-text('Видеоредактор')"); A.wait_for_selector(".ve-cam")
             with A.expect_file_chooser() as fc: A.click(".ve-gallery")
             fc.value.set_files([f"{V}/{f}" for f in files]); A.wait_for_selector(".ve-edit .ve-canvas", timeout=10000)
         # ── 1) музыка из интернета и остановка звука

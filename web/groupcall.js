@@ -284,6 +284,7 @@ const GroupCall = {
     this.localTile.querySelector("video").muted = true;
     this.grid.append(this.localTile);
     this.ui = h("div", { class: "call gcall" },
+      h("button", { class: "call-min", title: "Свернуть звонок", onclick: (e) => { e.stopPropagation(); MiniCall.toggle(this.ui); }, html: I.down }),
       h("div", { class: "g-head" }, h("b", null, c ? chatTitle(c) : "Видеочат"), h("span", { class: "status" }, "Ожидание участников…")),
       this.grid,
       h("div", { class: "controls" },
