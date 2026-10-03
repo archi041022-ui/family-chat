@@ -42,7 +42,7 @@ try:
           window.AndroidBridge = { fg: true, notes: [], prefs: null, alive: 0, reset: false,
             isForeground() { return this.fg; }, notify(t, x, c) { if (!this.fg) this.notes.push([t, x, c]); else (this.fgNotes = this.fgNotes || []).push([t, x, c]); },
             pushKey(u, a) { this.cfg = [u, a]; return '%s'.repeat(40); }, pushPrefs(j) { this.prefs = JSON.parse(j); },
-            pushAlive() { this.alive = Date.now(); }, pushReset() { this.reset = true; }, loggedIn() {}, loggedOut() {}, takeShared() { return ''; } }; })()"""
+            pushAlive() { this.alive = Date.now(); }, pushReset() { this.reset = true; }, fcmInit(j) { this.fcm = j ? JSON.parse(j) : null; this.fcmCalls = (this.fcmCalls || 0) + 1; }, fcmStatus() { return JSON.stringify({ configured: !!this.fcm, token: !!this.fcm, error: '' }); }, loggedIn() {}, loggedOut() {}, takeShared() { return ''; } }; })()"""
         B.add_init_script(BRIDGE % "b"); C.add_init_script(BRIDGE % "c")
         for pg, nm in ((A, "A"), (B, "B"), (C, "C")):
             pg.on("pageerror", lambda e, nm=nm: errors.append(f"{nm}: {e}"))
@@ -127,6 +127,49 @@ try:
         B.evaluate("Push.claim()"); B.wait_for_timeout(500)
         assert sum("Пропущенное" in x for x in notes()) == 1, notes()
         print("missed realtime recovered: ok")
+        # 11) Firebase: администратор загружает два файла в приложении, телефоны получают настройки
+        import json as _j
+        SP = "/tmp/fc-fcm"; os.makedirs(SP, exist_ok=True)
+        gs = {"project_info": {"project_number": "123456789", "project_id": "semya-push"}, "client": [
+            {"client_info": {"mobilesdk_app_id": "1:123456789:android:abc", "android_client_info": {"package_name": "ru.other"}}, "api_key": [{"current_key": "X"}]},
+            {"client_info": {"mobilesdk_app_id": "1:123456789:android:def", "android_client_info": {"package_name": "ru.family.chat"}}, "api_key": [{"current_key": "AIzaTEST"}]}]}
+        open(f"{SP}/google-services.json", "w").write(_j.dumps(gs))
+        open(f"{SP}/sa.json", "w").write(_j.dumps({"type": "service_account", "project_id": "semya-push", "private_key": "-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n", "client_email": "fcm@semya-push.iam.gserviceaccount.com"}))
+        open(f"{SP}/wrong.json", "w").write(_j.dumps({"hello": 1}))
+        assert B.evaluate("AndroidBridge.fcm") is None and B.evaluate("AndroidBridge.fcmCalls") >= 1      # пока не настроено
+        A.click("#tabBtnSettings"); A.click("#tabSettings >> text=Мгновенные оповещения")
+        A.wait_for_selector(".sheet >> text=Firebase ещё не подключён")
+        inputs = A.locator(".sheet input[type=file]")
+        inputs.nth(0).set_input_files(f"{SP}/wrong.json"); A.wait_for_selector("text=Это не тот файл")
+        inputs = A.locator(".sheet input[type=file]"); inputs.nth(0).set_input_files(f"{SP}/google-services.json")
+        A.wait_for_selector(".sheet >> text=google-services.json (semya-push)")
+        A.locator(".sheet input[type=file]").nth(1).set_input_files(f"{SP}/sa.json")
+        A.wait_for_selector(".sheet >> text=Ключ сервисного аккаунта (fcm)")
+        shot(A, "x1_A_fcm_files")
+        A.click(".sheet .btn.wide:has-text('Сохранить')"); A.wait_for_selector("text=Firebase подключён")
+        A.wait_for_selector(".sheet >> text=Firebase подключён (проект semya-push)", timeout=6000)
+        A.click(".sheet .btn:has-text('Проверить на моём телефоне')"); A.wait_for_function("window.__pushTests === 1")
+        shot(A, "x2_A_fcm_on"); A.click(".sheet-back", position={"x": 5, "y": 5})
+        stored = db(A)["fcm"]
+        assert stored["client"] == {"app_id": "1:123456789:android:def", "api_key": "AIzaTEST", "project_id": "semya-push", "sender_id": "123456789"}, stored
+        B.reload(); B.wait_for_selector("#chatList .chat-item"); B.wait_for_timeout(800)
+        assert B.evaluate("AndroidBridge.fcm.project_id") == "semya-push"
+        assert B.evaluate("Push.on && !!FcmSetup") is True
+        print("fcm setup: ok")
+        # не-администратор видит только состояние
+        B.evaluate("AndroidBridge.fg = true")
+        B.click("#tabBtnSettings"); B.click("#tabSettings >> text=Уведомления и звуки"); B.click(".sheet >> text=Мгновенные оповещения")
+        B.wait_for_selector(".sheet >> text=Этот телефон получает мгновенные оповещения"); assert B.locator(".sheet input[type=file]").count() == 0
+        shot(B, "x3_B_fcm_status")
+        while B.locator(".sheet-back").count(): B.locator(".sheet-back").last.click(position={"x": 5, "y": 5}); B.wait_for_timeout(350)
+        # звонок будит телефон получателя, но в уведомлениях «звонок» текстом не появляется
+        B.evaluate("AndroidBridge.fg = false"); w0 = db(A).get("wakes", 0)
+        A.click("#tabBtnContacts"); A.click("#tabContacts .contact-row:has-text('Мама') button[title='Позвонить']")
+        B.wait_for_selector(".call.ringing", timeout=8000); B.wait_for_timeout(2000)
+        assert db(A).get("wakes", 0) == w0 + 1, db(A).get("wakes")
+        assert not any("Входящий звонок" in x for x in notes()), notes()
+        A.click(".call .cbtn.red"); B.wait_for_selector(".call", state="detached", timeout=8000)
+        print("call wake: ok")
         # 10) выход — ключ устройства удалён
         B.evaluate("AndroidBridge.fg = true"); B.click("#tabBtnSettings"); B.click("#tabSettings >> text=Выйти")
         B.click(".sheet .menu-item.danger"); B.wait_for_selector("text=Регистрация", timeout=8000)

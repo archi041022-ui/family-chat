@@ -11,8 +11,8 @@ android {
         applicationId = "ru.family.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "2.6"
+        versionCode = 18
+        versionName = "2.7"
     }
 
     // Постоянный ключ подписи: новые версии ставятся поверх старой
@@ -41,4 +41,6 @@ android {
 dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.core:core-ktx:1.13.1")
+    // мгновенные оповещения; настройки Firebase приходят с сервера семьи, файл google-services.json не нужен
+    implementation("com.google.firebase:firebase-messaging:24.1.0")
 }

@@ -267,6 +267,7 @@ const Push = {
     try { this.key = window.AndroidBridge.pushKey(CFG.supabaseUrl, CFG.supabaseKey); } catch { this.key = null; }
     if (this.key) { try { await S.sb.rpc("register_device", { key: this.key }); } catch { /* повторим при следующем входе */ } }
     this.syncPrefs();
+    FcmSetup.apply();
     this.soon(1500);
   },
   syncPrefs() {
@@ -297,6 +298,7 @@ const Push = {
     return true;
   },
   show(n) {
+    if (n.kind === "call" || n.kind === "test") return;   // служебные: только будят телефон
     if (n.kind === "message") { if (this.shown.has(n.ref)) return; this.mark(n.ref); }
     if (!this.allowed(n)) return;
     const visible = appVisible();
@@ -310,3 +312,74 @@ const Push = {
     window.AndroidBridge.notify(n.title, text, n.chat_id || null);
   },
 };
+
+// ───────── Мгновенные оповещения (Firebase) ─────────
+// Ключи Firebase загружает администратор семьи; приложение получает с сервера только открытую часть.
+const FcmSetup = {
+  async apply() {
+    if (!window.AndroidBridge?.fcmInit || !S.me) return;
+    try { const { data } = await S.sb.rpc("push_config"); window.AndroidBridge.fcmInit(data ? JSON.stringify(data) : null); } catch { /* */ }
+  },
+  phone() { try { return window.AndroidBridge?.fcmStatus ? JSON.parse(window.AndroidBridge.fcmStatus()) : null; } catch { return null; } },
+  parseClient(g) {
+    const pr = g?.project_info, cl = (g?.client || []).find((c) => c.client_info?.android_client_info?.package_name === "ru.family.chat");
+    if (!pr || !cl) return null;
+    const out = { app_id: cl.client_info.mobilesdk_app_id, api_key: cl.api_key?.[0]?.current_key, project_id: pr.project_id, sender_id: String(pr.project_number || "") };
+    return Object.values(out).every(Boolean) ? out : null;
+  },
+  readJson(file) { return file.text().then((t) => JSON.parse(t)); },
+  async sheet() {
+    const box = h("div");
+    let client = null, service = null;
+    const draw = async () => {
+      const { data: st } = await S.sb.rpc("push_status");
+      const ph = this.phone();
+      box.innerHTML = "";
+      const row = (ok, text) => h("div", { class: `health${ok ? " ok" : " bad"}` }, h("span", null, ok ? "✓" : "•"), h("span", null, text));
+      box.append(
+        row(!!st?.configured, st?.configured ? `Firebase подключён (проект ${st.project})` : "Firebase ещё не подключён"),
+        row((st?.people || 0) > 0, `Телефонов с мгновенными оповещениями: ${st?.devices || 0} (людей: ${st?.people || 0})`),
+        ph ? row(!!ph.token, ph.token ? "Этот телефон получает мгновенные оповещения" : (st?.configured ? "Этот телефон ещё не получил адрес Firebase" + (ph.error ? ` (${ph.error})` : "") : "Этот телефон: ждёт подключения")) : null,
+      );
+      if (!S.isAdmin) { box.append(h("p", { class: "sheet-note" }, "Подключает администратор семьи. Остальным ничего делать не нужно — после подключения достаточно открыть приложение.")); return; }
+      const pick = (label, onfile) => {
+        const inp = h("input", { type: "file", accept: "*/*", style: { display: "none" }, onchange: async (e) => { const f = e.target.files[0]; if (f) await onfile(f); e.target.value = ""; } });
+        return [h("button", { class: "menu-item", onclick: () => inp.click() }, h("span", { html: I.download }), label), inp];
+      };
+      const status = h("p", { class: "sheet-note" }, client && service ? "Оба файла выбраны — нажмите «Сохранить»." : "Выберите два файла из Firebase (как их получить — в инструкции).");
+      box.append(
+        h("h4", null, "Подключение"),
+        ...pick(client ? `✓ google-services.json (${client.project_id})` : "1. Выбрать google-services.json", async (f) => {
+          try { client = this.parseClient(await this.readJson(f)); } catch { client = null; }
+          if (!client) toast("Это не тот файл: нужен google-services.json для приложения ru.family.chat", 5000);
+          draw();
+        }),
+        ...pick(service ? `✓ Ключ сервисного аккаунта (${service.client_email.split("@")[0]})` : "2. Выбрать ключ сервисного аккаунта (.json)", async (f) => {
+          try { const j = await this.readJson(f); service = j?.type === "service_account" && j.private_key && j.client_email ? j : null; } catch { service = null; }
+          if (!service) toast("Это не тот файл: нужен ключ сервисного аккаунта Firebase (.json)", 5000);
+          draw();
+        }),
+        status,
+        h("button", { class: "btn wide", disabled: !(client && service), onclick: async () => {
+          const { data } = await S.sb.rpc("set_push_config", { client, service });
+          const msg = { OK: "✅ Firebase подключён", PROJECT_MISMATCH: "Файлы из разных проектов Firebase", BAD_CLIENT: "Неверный google-services.json", BAD_SERVICE: "Неверный ключ сервисного аккаунта", NOT_ADMIN: "Только для администратора" }[data] || "Не удалось сохранить";
+          toast(msg, 4000);
+          if (data === "OK") { client = service = null; await this.apply(); setTimeout(draw, 2500); }
+        } }, "Сохранить"),
+        st?.configured ? h("button", { class: "btn wide ghost", onclick: async () => {
+          this.apply();
+          const { data, error } = await S.sb.functions.invoke("push", { body: {} });
+          if (error) return toast("Функция push на сервере не отвечает", 5000);
+          if (data?.sent) toast("Сигнал отправлен — сейчас придёт уведомление «✅ Мгновенные оповещения работают»", 5000);
+          else toast(data?.reason === "NO_DEVICES" ? "Этот телефон ещё не зарегистрирован — откройте приложение заново и повторите" : "Ошибка: " + (data?.errors?.[0] || data?.reason || "нет ответа"), 7000);
+        } }, "Проверить на моём телефоне") : null,
+        st?.configured ? h("button", { class: "menu-item danger", onclick: async () => { await S.sb.rpc("set_push_config", { client: null, service: null }); toast("Мгновенные оповещения отключены"); draw(); } }, "Отключить Firebase") : null,
+      );
+    };
+    sheet([h("h3", null, "⚡ Мгновенные оповещения"),
+      h("p", { class: "sheet-note" }, "Через Firebase телефон просыпается сразу, даже если приложение выгружено: сообщения, истории и звонки приходят мгновенно. Текст сообщений через Google не передаётся."),
+      box]);
+    draw();
+  },
+};
+window.onPushTest = () => toast("✅ Мгновенные оповещения работают на этом телефоне", 5000);

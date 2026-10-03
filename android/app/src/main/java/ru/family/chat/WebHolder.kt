@@ -185,6 +185,9 @@ object WebHolder {
         @JavascriptInterface fun pushPrefs(json: String) = Push.setPrefs(ctx, json)
         @JavascriptInterface fun pushAlive() { Push.alive = System.currentTimeMillis() }
         @JavascriptInterface fun pushReset() = Push.reset(ctx)
+        /** Мгновенные оповещения (Firebase): настройки с сервера семьи и состояние на этом телефоне. */
+        @JavascriptInterface fun fcmInit(json: String?) = android.os.Handler(android.os.Looper.getMainLooper()).post { Fcm.configure(ctx, json) }
+        @JavascriptInterface fun fcmStatus(): String = Fcm.status(ctx)
 
         @JavascriptInterface fun loggedOut() {
             Push.reset(ctx)

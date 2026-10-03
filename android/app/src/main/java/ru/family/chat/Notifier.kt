@@ -53,8 +53,8 @@ object Notifier {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
-    fun message(ctx: Context, title: String, text: String, chatId: String?, id: Int = (chatId ?: title).hashCode(), sound: Boolean = true) {
-        if (WebHolder.foreground || !allowed(ctx)) return
+    fun message(ctx: Context, title: String, text: String, chatId: String?, id: Int = (chatId ?: title).hashCode(), sound: Boolean = true, force: Boolean = false) {
+        if ((WebHolder.foreground && !force) || !allowed(ctx)) return
         val n = NotificationCompat.Builder(ctx, CH_MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)

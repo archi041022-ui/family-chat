@@ -82,7 +82,7 @@ const GroupCall = {
     if (this.active) { if (this.chatId !== chatId) toast("Вы уже в видеочате"); return; }
     if (Calls.pc || Calls.ui) { toast("Сначала завершите звонок"); return; }
     if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) { toast("Звонки не поддерживаются на этом устройстве"); return; }
-    this.closeInvite();
+    this.pendingInvite = null; this.closeInvite();
     this.active = true; this.chatId = chatId; this.video = video; this.startedAt = 0;
     const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     try { this.local = await navigator.mediaDevices.getUserMedia({ audio, video: video ? this.vconstraints() : false }); }
@@ -106,7 +106,10 @@ const GroupCall = {
   },
   async invite(chatId = this.chatId) {
     const ids = (S.members.get(chatId) || []).map((m) => m.user_id).filter((u) => u !== S.me.id && !S.profiles.get(u)?.banned);
-    for (const u of ids) Calls.send(u, { kind: "ginvite", chatId, video: this.video, name: S.me.name, callId: "g-" + chatId }).catch(() => {});
+    const send = () => { if (this.chatId !== chatId || !this.active) return; for (const u of ids) Calls.send(u, { kind: "ginvite", chatId, video: this.video, name: S.me.name, callId: "g-" + chatId }).catch(() => {}); };
+    send();
+    // телефоны с выгруженным приложением будим и повторяем приглашение, пока они подключаются
+    if (ids.length) { S.sb.rpc("wake_call", { targets: ids, video: !!this.video }).then(() => {}, () => {}); setTimeout(send, 7000); setTimeout(send, 15000); }
     if (!this.invited) { this.invited = true; await postMessage({ body: GC_MARK }, chatId).catch(() => {}); }
     else toast("Приглашение отправлено");
   },
@@ -392,6 +395,7 @@ const GroupCall = {
   // ── приглашение
   async onInvite(p) {
     if (this.active || Calls.pc || Calls.ui || this.inviteUi) return;
+    if (Date.now() - (this.declined?.get(p.chatId) || 0) < 30000) return;   // повтор приглашения после «Отклонить»
     let c = S.chats.find((x) => x.id === p.chatId);
     if (!c) { await loadChats(); renderChatList(); c = S.chats.find((x) => x.id === p.chatId); }
     if (!c) return;
@@ -415,6 +419,7 @@ const GroupCall = {
   closeInvite() {
     clearTimeout(this.inviteTimer);
     if (!this.inviteUi) return;
+    if (this.pendingInvite) (this.declined = this.declined || new Map()).set(this.pendingInvite.chatId, Date.now());
     this.inviteUi.remove(); this.inviteUi = null; this.pendingInvite = null;
     Calls.stopRing(); window.AndroidBridge?.cancelCall?.();
   },

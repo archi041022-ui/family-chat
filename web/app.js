@@ -1792,6 +1792,7 @@ const Calls = {
     await this.pc.setLocalDescription(offer);
     const callId = this.callId;
     await this.send(userId, { kind: "offer", sdp: offer.sdp, video, name: S.me.name });
+    S.sb.rpc("wake_call", { targets: [userId], video: !!video }).then(() => {}, () => {});   // разбудить телефон, если приложение выгружено
     // Повторяем вызов каждые 3 секунды, пока не ответят: если телефон собеседника спал и только
     // проснулся, он всё равно получит звонок — уже со всеми адресами соединения внутри.
     clearInterval(this.resendTimer);

@@ -335,6 +335,18 @@
             db.devices = (db.devices || []).filter((d) => d.key !== args.key); db.devices.push({ key: args.key, user_id: u }); save(db); return { data: "OK", error: null };
           }
           if (name === "unregister_device") { db.devices = (db.devices || []).filter((d) => !(d.key === args.key && d.user_id === u)); save(db); return { data: "OK", error: null }; }
+          if (name === "push_config") return { data: db.fcm?.client || null, error: null };
+          if (name === "push_status") return { data: { configured: !!db.fcm, project: db.fcm?.client.project_id || null, devices: (db.devices || []).filter((d) => d.token).length, people: new Set((db.devices || []).filter((d) => d.token).map((d) => d.user_id)).size, mine: 0 }, error: null };
+          if (name === "set_push_config") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            if (!args.client && !args.service) { delete db.fcm; save(db); return { data: "OFF", error: null }; }
+            if (args.service?.project_id !== args.client?.project_id) return { data: "PROJECT_MISMATCH", error: null };
+            db.fcm = { client: args.client, service: args.service }; save(db); return { data: "OK", error: null };
+          }
+          if (name === "wake_call") {
+            const nn = (args.targets || []).filter((t) => t !== u).map((t) => addNotice(db, { user_id: t, kind: "call", actor: u, title: pname(db, u), body: args.video ? "Входящий видеозвонок" : "Входящий звонок" }));
+            db.wakes = (db.wakes || 0) + nn.length; save(db); emitNotices(nn); return { data: "OK", error: null };
+          }
           if (name === "create_channel") {
             const c = { id: uid(), is_group: true, is_channel: true, is_private: args.private !== false, protected: false, title: args.title, description: args.description || null, created_by: u, last_message_at: new Date().toISOString() };
             db.chats.push(c);
@@ -374,6 +386,7 @@
         }) },
         channel: (name) => new Channel(name),
         functions: { async invoke(fn, { body }) {
+          if (fn === "push") { window.__pushTests = (window.__pushTests || 0) + 1; return { data: { ok: true, sent: 1 }, error: null }; }
           await new Promise((r) => setTimeout(r, 300));
           const last = body.messages.at(-1).content;
           window.__asstCalls = (window.__asstCalls || 0) + 1; window.__asstLast = body;

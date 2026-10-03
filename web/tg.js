@@ -387,7 +387,8 @@ const Tg = {
         item("#2EAD6B", I.invite, "Пригласить в семью", () => showTab("invite"))),
       S.isAdmin ? group(
         item("#E8664F", I.shield, "Управление участниками", () => membersAdmin()),
-        item("#6C7A89", I.group, "Сбросить пароль участнику", () => adminResetSheet())) : null,
+        item("#6C7A89", I.group, "Сбросить пароль участнику", () => adminResetSheet()),
+        item("#F2A541", I.bell, "Мгновенные оповещения", () => FcmSetup.sheet())) : null,
       group(
         item("#2EAD6B", I.download, "Скачать обновления", () => Updates.sheet(), { value: Updates.latest ? "🔴 Есть новая версия" : "" }),
         item("#3D8BFD", I.info, "О приложении", () => this.aboutSheet(), { value: this.version() }),
@@ -409,6 +410,7 @@ const Tg = {
       this.toggle("Реакции на мои сообщения и истории", "nReacts"),
       this.toggle("Звук отправки в открытом чате", "inAppSound"),
       h("button", { class: "menu-item", onclick: () => Snd.sheet() }, h("span", { html: I.bell }), h("span", null, "Мелодии звонка и уведомлений", h("small", { class: "sub" }, `Звонок: ${Snd.title("ring")} · Сообщения: ${Snd.title("msg")}`))),
+      h("button", { class: "menu-item", onclick: () => FcmSetup.sheet() }, h("span", { html: I.bell }), "⚡ Мгновенные оповещения"),
       window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => window.AndroidBridge.openSettings("notifications") }, h("span", { html: I.gear }), "Системные настройки уведомлений") : null,
       h("p", { class: "sheet-note" }, "Отключить звук у отдельного чата: долгое нажатие на чат → «Без звука»."),
     ]);
@@ -500,7 +502,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "2.6";
+const APP_VERSION = "2.7";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

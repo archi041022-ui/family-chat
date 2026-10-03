@@ -53,25 +53,40 @@ object Push {
     /** Страница давно не отвечала — значит, оповещения забираем сами. */
     fun webStale() = System.currentTimeMillis() - alive > 50_000
 
+    @Volatile private var again = false
+
+    /** Вызов функции сервера по открытому ключу (без входа). Возвращает ответ или null. */
+    fun rpc(ctx: Context, name: String, body: JSONObject): String? {
+        val p = prefs(ctx.applicationContext)
+        val url = p.getString("url", null); val anon = p.getString("anon", null)
+        if (url.isNullOrEmpty() || anon.isNullOrEmpty()) return null
+        return try {
+            val c = URL("$url/rest/v1/rpc/$name").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"; c.connectTimeout = 15_000; c.readTimeout = 20_000; c.doOutput = true
+            c.setRequestProperty("apikey", anon)
+            c.setRequestProperty("Authorization", "Bearer $anon")
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toString().toByteArray()) }
+            val r = if (c.responseCode == 200) c.inputStream.bufferedReader().use { it.readText() } else null
+            c.disconnect(); r
+        } catch (_: Throwable) { null }
+    }
+
+    fun deviceKey(ctx: Context): String? = prefs(ctx.applicationContext).getString("key", null)
+
     /** Забрать оповещения с сервера и показать (в отдельном потоке). */
     fun poll(ctx: Context, done: (() -> Unit)? = null) {
         val app = ctx.applicationContext
-        val p = prefs(app)
-        val key = p.getString("key", null); val url = p.getString("url", null); val anon = p.getString("anon", null)
-        if (key.isNullOrEmpty() || url.isNullOrEmpty() || anon.isNullOrEmpty() || !busy.compareAndSet(false, true)) { done?.invoke(); return }
+        val key = deviceKey(app)
+        if (key.isNullOrEmpty()) { done?.invoke(); return }
+        if (!busy.compareAndSet(false, true)) { again = true; done?.invoke(); return }   // идёт забор — повторим сразу после
         Thread {
             try {
-                val c = URL("$url/rest/v1/rpc/device_pull").openConnection() as HttpURLConnection
-                c.requestMethod = "POST"; c.connectTimeout = 15_000; c.readTimeout = 20_000; c.doOutput = true
-                c.setRequestProperty("apikey", anon)
-                c.setRequestProperty("Authorization", "Bearer $anon")
-                c.setRequestProperty("Content-Type", "application/json")
-                c.outputStream.use { it.write(JSONObject().put("key", key).toString().toByteArray()) }
-                if (c.responseCode == 200) {
-                    val text = c.inputStream.bufferedReader().use { it.readText() }
-                    show(app, JSONArray(text))
-                }
-                c.disconnect()
+                do {
+                    again = false
+                    val text = rpc(app, "device_pull", JSONObject().put("key", key))
+                    if (text != null) show(app, JSONArray(text))
+                } while (again)
             } catch (_: Throwable) {
             } finally { busy.set(false); done?.invoke() }
         }.start()
@@ -87,9 +102,12 @@ object Push {
         val reacts = opts.optBoolean("reactions", true)
         data class G(var title: String, var text: String, var n: Int, val chat: String?)
         val groups = LinkedHashMap<String, G>()
+        var call = false
         for (i in 0 until list.length()) {
             val o = list.optJSONObject(i) ?: continue
             val kind = o.optString("kind")
+            if (kind == "call") { call = true; continue }          // звонок: только будим мессенджер, экран звонка покажет он сам
+            if (kind == "test") continue
             val chat = o.optString("chat_id").takeIf { it.isNotEmpty() && it != "null" }
             if (!stories && (kind == "story" || kind == "story_react")) continue
             if (!reacts && (kind == "reaction" || kind == "story_react")) continue
@@ -100,6 +118,7 @@ object Push {
             val g = groups[gk]
             if (g == null) groups[gk] = G(title, body, 1, chat) else { g.title = title; g.text = body; g.n++ }
         }
+        if (call) Fcm.wakeForCall(ctx)
         var first = true
         for ((gk, g) in groups) {
             val text = if (g.n > 1) "${g.text}\n…и ещё ${g.n - 1}" else g.text
