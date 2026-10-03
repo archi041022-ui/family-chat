@@ -465,7 +465,6 @@ const Tasks = {
       if (isNew && row.assignee_id === S.me.id && row.owner_id !== S.me.id) {
         const who = S.profiles.get(row.owner_id)?.name || "Кто-то";
         toast(`📝 ${who} поручил(а) вам: ${row.title}`, 5000);
-        if (window.AndroidBridge?.notify && !appVisible()) window.AndroidBridge.notify("📝 Новая задача от: " + who, row.title, null);
       }
     }
     this.badge(); if (S.tasksOpen) this.render();

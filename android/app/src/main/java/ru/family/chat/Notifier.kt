@@ -53,9 +53,8 @@ object Notifier {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
-    fun message(ctx: Context, title: String, text: String, chatId: String?) {
+    fun message(ctx: Context, title: String, text: String, chatId: String?, id: Int = (chatId ?: title).hashCode(), sound: Boolean = true) {
         if (WebHolder.foreground || !allowed(ctx)) return
-        val id = (chatId ?: title).hashCode()
         val n = NotificationCompat.Builder(ctx, CH_MSG)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(title)
@@ -66,7 +65,7 @@ object Notifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .build()
-        try { NotificationManagerCompat.from(ctx).notify(id, n); Sounds.message(ctx) } catch (_: SecurityException) {}
+        try { NotificationManagerCompat.from(ctx).notify(id, n); if (sound) Sounds.message(ctx) } catch (_: SecurityException) {}
     }
 
     /**

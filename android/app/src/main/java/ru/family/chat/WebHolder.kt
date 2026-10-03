@@ -180,7 +180,14 @@ object WebHolder {
             if (!ChatService.running) ChatService.start(ctx)
         }
 
+        /** Надёжные оповещения: ключ этого устройства для забора оповещений в фоне. */
+        @JavascriptInterface fun pushKey(url: String, anon: String): String = Push.key(ctx, url, anon)
+        @JavascriptInterface fun pushPrefs(json: String) = Push.setPrefs(ctx, json)
+        @JavascriptInterface fun pushAlive() { Push.alive = System.currentTimeMillis() }
+        @JavascriptInterface fun pushReset() = Push.reset(ctx)
+
         @JavascriptInterface fun loggedOut() {
+            Push.reset(ctx)
             ctx.getSharedPreferences("family", Context.MODE_PRIVATE).edit().putBoolean("logged_in", false).apply()
             ChatService.stop(ctx)
         }

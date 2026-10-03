@@ -82,6 +82,10 @@
         </provider>
 
         <service
+            android:name=".PushJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
             android:name=".ChatService"
             android:exported="false"
             android:foregroundServiceType="specialUse|microphone|camera|mediaProjection">

@@ -13,11 +13,14 @@ const Prefs = {
     if (this.data && this.uid === S.me?.id) return this.data;
     this.uid = S.me?.id;
     try { this.data = JSON.parse(localStorage.getItem(this.key()) || "{}"); } catch { this.data = {}; }
-    this.data = Object.assign({ pinned: [], muted: [], sound: true, vibrate: true, preview: true, inAppSound: true, fontSize: 16, pattern: true, enterSend: false }, this.data);
+    this.data = Object.assign({ pinned: [], muted: [], sound: true, vibrate: true, preview: true, inAppSound: true, fontSize: 16, pattern: true, enterSend: false, nStories: true, nReacts: true }, this.data);
     return this.data;
   },
   get(k) { return this.load()[k]; },
-  set(k, v) { this.load()[k] = v; try { localStorage.setItem(this.key(), JSON.stringify(this.data)); } catch { /* */ } },
+  set(k, v) {
+    this.load()[k] = v; try { localStorage.setItem(this.key(), JSON.stringify(this.data)); } catch { /* */ }
+    if (["muted", "preview", "nStories", "nReacts"].includes(k) && typeof Push !== "undefined") Push.syncPrefs();
+  },
   pinned(id) { return this.load().pinned.includes(id); },
   muted(id) { return this.load().muted.includes(id); },
   toggle(list, id) {
@@ -402,6 +405,8 @@ const Tg = {
       this.toggle("Звук новых сообщений", "sound"),
       this.toggle("Вибрация", "vibrate"),
       this.toggle("Показывать текст сообщения", "preview", "Иначе в уведомлении будет «Новое сообщение»"),
+      this.toggle("Новые истории семьи", "nStories", "Оповещение, когда кто-то выложил историю"),
+      this.toggle("Реакции на мои сообщения и истории", "nReacts"),
       this.toggle("Звук отправки в открытом чате", "inAppSound"),
       h("button", { class: "menu-item", onclick: () => Snd.sheet() }, h("span", { html: I.bell }), h("span", null, "Мелодии звонка и уведомлений", h("small", { class: "sub" }, `Звонок: ${Snd.title("ring")} · Сообщения: ${Snd.title("msg")}`))),
       window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => window.AndroidBridge.openSettings("notifications") }, h("span", { html: I.gear }), "Системные настройки уведомлений") : null,
@@ -457,7 +462,7 @@ const Tg = {
     close = sheet([
       h("h3", null, "Выйти из аккаунта?"),
       h("button", { class: "menu-item danger", onclick: async () => {
-        close(); await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
+        close(); await Push.logout(); await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
       } }, h("span", { html: I.logout }), "Выйти"),
       h("button", { class: "menu-item", onclick: () => close() }, h("span", { html: I.close }), "Отмена"),
     ]);
@@ -495,7 +500,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "2.5";
+const APP_VERSION = "2.6";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

@@ -24,10 +24,57 @@
     }
     if (table === "join_requests") { const ch = db.chats.find((x) => x.id === row.chat_id); return row.user_id === u || (ch && (ch.created_by === u || db.admin === u)); }
     if (table === "reactions") return isMember(db, row.chat_id, u);
+    if (table === "notices") return row.user_id === u;
     if (table === "story_views") return row.viewer_id === u || db.stories.some((s) => s.id === row.story_id && s.user_id === u);
     return true;
   };
   const emit = (table, event, row) => { const msg = { table, event, row }; bc.postMessage(msg); dispatch(msg); };
+  // серверные оповещения (как триггеры 010_notices.sql)
+  const ntext = (m) => {
+    const t = String(m.body || "").replace(/\u2063/g, "").replace(/\u2062fx:[a-z]+/g, "").replace(/^↪️ Переслано от [^\n]*\n?/, "").split("\u2064")[0].trim();
+    const k = { image: "📷 Фото", video: "🎬 Видео", audio: "🎤 Голосовое", file: "📎 Файл", video_note: "⭕ Видеосообщение" }[m.media_type];
+    if (m.media_type === "location") return "📍 Геолокация";
+    return (k ? k + (t ? " · " : "") : "") + t;
+  };
+  const pname = (db, id) => db.profiles.find((p) => p.id === id)?.name || "Кто-то";
+  const addNotice = (db, n) => { db.notices = db.notices || []; db.nseq = (db.nseq || 0) + 1; const r = { id: db.nseq, created_at: new Date().toISOString(), chat_id: null, ref: null, actor: null, body: null, ...n }; db.notices.push(r); return r; };
+  const noticesFor = (db, table, r, old) => {
+    const out = [];
+    if (table === "messages" && !r.deleted) {
+      const c = db.chats.find((x) => x.id === r.chat_id); if (!c) return out;
+      const who = pname(db, r.user_id), ttl = c.is_group ? (c.title || "Группа") : who, txt = ntext(r) || "Новое сообщение";
+      const members = db.chat_members.filter((m) => m.chat_id === c.id && m.user_id !== r.user_id).map((m) => m.user_id);
+      if (!old && r.approved !== false) for (const x of members) out.push(addNotice(db, { user_id: x, kind: "message", chat_id: c.id, ref: r.id, actor: r.user_id, title: ttl, body: c.is_group && (!c.is_channel || r.user_id !== c.created_by) ? who + ": " + txt : txt }));
+      else if (!old) for (const x of members.filter((x) => x === c.created_by || x === db.admin)) out.push(addNotice(db, { user_id: x, kind: "pending", chat_id: c.id, ref: r.id, actor: r.user_id, title: "⏳ На одобрение: " + ttl, body: who + ": " + txt }));
+      else if (old.approved === false && r.approved) {
+        for (const x of members.filter((x) => x !== me()?.id)) out.push(addNotice(db, { user_id: x, kind: "message", chat_id: c.id, ref: r.id, actor: r.user_id, title: ttl, body: c.is_channel ? txt : who + ": " + txt }));
+        out.push(addNotice(db, { user_id: r.user_id, kind: "approved", chat_id: c.id, ref: r.id, actor: me()?.id, title: "✅ Опубликовано в «" + ttl + "»", body: txt }));
+      }
+    }
+    if (table === "stories" && !old) for (const p of db.profiles.filter((p) => p.id !== r.user_id && !p.banned))
+      out.push(addNotice(db, { user_id: p.id, kind: "story", ref: r.id, actor: r.user_id, title: "📸 " + pname(db, r.user_id) + " — новая история", body: (r.body || "").slice(0, 120) || (r.media_type === "video" ? "🎬 Видео" : "📷 Фото") }));
+    if (table === "story_views" && r.emoji && r.emoji !== old?.emoji) {
+      const st = db.stories.find((x) => x.id === r.story_id);
+      if (st && st.user_id !== r.viewer_id) out.push(addNotice(db, { user_id: st.user_id, kind: "story_react", ref: st.id, actor: r.viewer_id, title: pname(db, r.viewer_id), body: r.emoji + " — реакция на вашу историю" }));
+    }
+    if (table === "reactions" && !old) {
+      const m = db.messages.find((x) => x.id === r.message_id);
+      if (m && m.user_id !== r.user_id && !m.deleted) out.push(addNotice(db, { user_id: m.user_id, kind: "reaction", chat_id: m.chat_id, ref: m.id, actor: r.user_id, title: pname(db, r.user_id), body: r.emoji + " к вашему сообщению: " + (ntext(m) || "…").slice(0, 80) }));
+    }
+    if (table === "tasks" && r.assignee_id && r.assignee_id !== r.owner_id && (!old || old.assignee_id !== r.assignee_id))
+      out.push(addNotice(db, { user_id: r.assignee_id, kind: "task", chat_id: r.chat_id, ref: r.id, actor: r.owner_id, title: "📝 Новая задача от: " + pname(db, r.owner_id), body: r.title }));
+    if (table === "join_requests" && !old) {
+      const c = db.chats.find((x) => x.id === r.chat_id);
+      if (c) for (const x of db.chat_members.filter((m) => m.chat_id === c.id && m.user_id !== r.user_id && (m.user_id === c.created_by || m.user_id === db.admin)).map((m) => m.user_id))
+        out.push(addNotice(db, { user_id: x, kind: "join", chat_id: c.id, ref: c.id, actor: r.user_id, title: "🙋 Заявка: " + (c.title || "группа"), body: pname(db, r.user_id) + " просит вступить" }));
+    }
+    return out;
+  };
+  const emitNotices = (list) => list.forEach((n) => emit("notices", "INSERT", n));
+  window.__mockDevicePull = (key) => {   // как фоновая служба Android: забрать по ключу устройства
+    const db = load(); const d = (db.devices || []).find((x) => x.key === key); if (!d) return [];
+    const mine = (db.notices || []).filter((n) => n.user_id === d.user_id); db.notices = (db.notices || []).filter((n) => n.user_id !== d.user_id); save(db); return mine;
+  };
 
   class Q {
     constructor(table) { this.t = table; this.f = []; this.op = "select"; this.ord = null; this.lim = null; this.one = null; this.ret = false; }
@@ -80,13 +127,14 @@
           Object.assign(r, { viewer_id: u, emoji: null, viewed_at: new Date().toISOString() });
         }
         if (!db[this.t]) db[this.t] = [];
-        db[this.t].push(r); save(db); emit(this.t, "INSERT", r);
+        db[this.t].push(r); const nn = noticesFor(db, this.t, r, null); save(db); emit(this.t, "INSERT", r); emitNotices(nn);
         return { data: this.one ? r : [r], error: null };
       }
       if (this.op === "update") {
         const rows = tb.filter((r) => this.f.every((f) => f(r)));
-        rows.forEach((r) => { Object.assign(r, this.val); emit(this.t, "UPDATE", r); });
-        save(db); return { data: rows, error: null };
+        const nn = [];
+        rows.forEach((r) => { const before = { ...r }; Object.assign(r, this.val); nn.push(...noticesFor(db, this.t, r, before)); emit(this.t, "UPDATE", r); });
+        save(db); emitNotices(nn); return { data: rows, error: null };
       }
       if (this.op === "delete") {
         const rows = tb.filter((r) => this.f.every((f) => f(r)));
@@ -247,7 +295,7 @@
           if (name === "moderate_message") {
             const m = db.messages.find((x) => x.id === args.mid); if (!m) return { data: "NO_MESSAGE", error: null };
             if (!chatOwner(m.chat_id)) return { data: "NOT_OWNER", error: null };
-            if (args.ok) { m.approved = true; save(db); emit("messages", "UPDATE", m); }
+            if (args.ok) { const before = { ...m }; m.approved = true; const nn = noticesFor(db, "messages", m, before); save(db); emit("messages", "UPDATE", m); emitNotices(nn); }
             else { db.messages = db.messages.filter((x) => x !== m); save(db); emit("messages", "DELETE", m); }
             return { data: "OK", error: null };
           }
@@ -262,7 +310,7 @@
             if (isMember(db, c.id, u)) return { data: "MEMBER", error: null };
             if (c.is_channel && !c.is_private) { db.chat_members.push({ chat_id: c.id, user_id: u, last_read_at: new Date(0).toISOString() }); save(db); return { data: "JOINED", error: null }; }
             if (!c.listed) return { data: "PRIVATE", error: null };
-            if (!db.join_requests.some((r) => r.chat_id === c.id && r.user_id === u)) { const r = { chat_id: c.id, user_id: u, created_at: new Date().toISOString() }; db.join_requests.push(r); save(db); emit("join_requests", "INSERT", r); }
+            if (!db.join_requests.some((r) => r.chat_id === c.id && r.user_id === u)) { const r = { chat_id: c.id, user_id: u, created_at: new Date().toISOString() }; db.join_requests.push(r); const nn = noticesFor(db, "join_requests", r, null); save(db); emit("join_requests", "INSERT", r); emitNotices(nn); }
             return { data: "REQUESTED", error: null };
           }
           if (name === "cancel_join") {
@@ -273,9 +321,20 @@
             if (!chatOwner(args.cid)) return { data: "NOT_OWNER", error: null };
             const r = db.join_requests.find((x) => x.chat_id === args.cid && x.user_id === args.target); if (!r) return { data: "NO_REQUEST", error: null };
             db.join_requests = db.join_requests.filter((x) => x !== r);
+            let nn = [];
             if (args.ok && !isMember(db, args.cid, args.target)) db.chat_members.push({ chat_id: args.cid, user_id: args.target, last_read_at: new Date(0).toISOString() });
-            save(db); emit("join_requests", "DELETE", r); return { data: "OK", error: null };
+            if (args.ok) nn = [addNotice(db, { user_id: args.target, kind: "joined", chat_id: args.cid, ref: args.cid, actor: u, title: "🎉 Заявка одобрена", body: "Вас приняли в «" + (db.chats.find((x) => x.id === args.cid)?.title || "группу") + "»" })];
+            save(db); emit("join_requests", "DELETE", r); emitNotices(nn); return { data: "OK", error: null };
           }
+          if (name === "claim_notices") {
+            const mine = (db.notices || []).filter((n) => n.user_id === u); db.notices = (db.notices || []).filter((n) => n.user_id !== u); save(db);
+            return { data: mine, error: null };
+          }
+          if (name === "register_device") {
+            if (!u) return { data: "NO_AUTH", error: null }; if (!args.key || args.key.length < 32) return { data: "BAD_KEY", error: null };
+            db.devices = (db.devices || []).filter((d) => d.key !== args.key); db.devices.push({ key: args.key, user_id: u }); save(db); return { data: "OK", error: null };
+          }
+          if (name === "unregister_device") { db.devices = (db.devices || []).filter((d) => !(d.key === args.key && d.user_id === u)); save(db); return { data: "OK", error: null }; }
           if (name === "create_channel") {
             const c = { id: uid(), is_group: true, is_channel: true, is_private: args.private !== false, protected: false, title: args.title, description: args.description || null, created_by: u, last_message_at: new Date().toISOString() };
             db.chats.push(c);

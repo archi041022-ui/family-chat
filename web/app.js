@@ -611,6 +611,7 @@ async function enter(user) {
   Updates.start();
   Tasks.start();
   Joins.load();
+  Push.setup();
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -1516,9 +1517,11 @@ function subscribe() {
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks" }, (p) => Tasks.onChange({ old: p.old, eventType: "DELETE" }))
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "join_requests" }, (p) => Joins.onChange({ new: p.new, eventType: "INSERT" }))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "join_requests" }, (p) => Joins.onChange({ old: p.old, eventType: "DELETE" }))
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "notices" }, () => Push.soon())
     .subscribe((status) => {
       const el = $("#conn"); if (el) el.textContent = status === "SUBSCRIBED" ? "в сети" : "подключение…";
       if (status === "SUBSCRIBED" && S.resync) { S.resync = false; resync(); }
+      if (status === "SUBSCRIBED") Push.soon(2000);
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") S.resync = true;
     });
   Live.presence = S.sb.channel("family-presence", { config: { presence: { key: S.me.id } } })
@@ -1546,13 +1549,13 @@ function subscribe() {
     if (window.AndroidBridge) return; // в приложении это сообщает сам Android
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
-  window.onAppForeground = () => { Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); };
+  window.onAppForeground = () => { Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); Push.soon(500); };
   window.onAppBackground = () => { Lock.onBg(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }
 function onProfileChange(np) {
   if (np.id === S.me?.id && np.banned) {
-    S.sb.auth.signOut().finally(() => { window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload(); });
+    Push.logout().finally(() => S.sb.auth.signOut()).finally(() => { window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload(); });
     return;
   }
   const old = S.profiles.get(np.id) || {};
@@ -1589,6 +1592,8 @@ async function onNewMessage(m) {
     toast(`⏳ Новое сообщение ждёт одобрения в «${ch ? chatTitle(ch) : "чате"}»`, 4500);
   }
   if (m.body === WELCOME_MARK && m.user_id !== S.me.id) Welcome.celebrate(m);
+  // оповещение по этому сообщению уже могло прийти с сервера — не повторяем
+  const dup = Push.shown.has(m.id); Push.mark(m.id);
   if (Tg.isCallMsg(m) && !(S.callLog || []).some((x) => x.id === m.id)) {
     (S.callLog = S.callLog || []).unshift(m);
     Tg.updateCallsBadge(); if (S.tab === "calls") Tg.renderCalls();
@@ -1607,7 +1612,7 @@ async function onNewMessage(m) {
     if (m.user_id !== S.me.id) markRead(m.chat_id);
   } else if (m.user_id !== S.me.id) {
     S.unread.set(m.chat_id, (S.unread.get(m.chat_id) || 0) + 1);
-    notify(m);
+    if (!dup) notify(m);
   }
   renderChatList();
 }
@@ -1701,6 +1706,9 @@ window.__keepAlive = (urgent) => {
   try {
     if (typeof rt.isConnected === "function" && !rt.isConnected()) { rt.connect(); S.resync = true; }
     else if (typeof rt.sendHeartbeat === "function") rt.sendHeartbeat();
+    // страница на связи — фоновая служба не дублирует; раз в минуту забираем оповещения сами
+    if (typeof rt.isConnected !== "function" || rt.isConnected()) window.AndroidBridge?.pushAlive?.();
+    if ((S.kaTicks = (S.kaTicks || 0) + 1) % 3 === 0) Push.claim();
   } catch { /* */ }
   if (urgent) setTimeout(() => Calls.tryAutoAnswer(), 500);
   try { if (typeof Tasks !== "undefined") Tasks.tick(); } catch { /* */ }

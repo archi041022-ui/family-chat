@@ -35,6 +35,7 @@ try:
         ctx.add_init_script("window.__noWelcome = true")
         import base64
         tile = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO4dOkSAATsAm3jYRpjAAAAAElFTkSuQmCC")
+        ctx.route("https://api.github.com/**", lambda r: r.abort())   # проверка обновлений в тесте не ходит в сеть
         ctx.route("https://tile.openstreetmap.org/**", lambda r: r.fulfill(status=200, content_type="image/png", body=tile))
         import json as _j
         ctx.route("https://geocoding-api.open-meteo.com/**", lambda r: r.fulfill(status=200, content_type="application/json", body=_j.dumps({"results": [{"name": "Казань", "latitude": 55.79, "longitude": 49.12}]})))

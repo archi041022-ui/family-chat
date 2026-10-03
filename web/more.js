@@ -111,7 +111,6 @@ const Joins = {
       if (r.user_id !== S.me.id && c) {
         const who = S.profiles.get(r.user_id)?.name || "Кто-то";
         toast(`🙋 ${who} просит вступить в «${chatTitle(c)}»`, 5000);
-        if (window.AndroidBridge?.notify && !appVisible()) window.AndroidBridge.notify(`🙋 Заявка: ${chatTitle(c)}`, `${who} просит вступить`, c.id);
       }
     }
     renderChatList();
@@ -185,7 +184,6 @@ const Joins = {
         this.mine.delete(id);
         this.list = this.list.filter((x) => !(x.chat_id === id && x.user_id === S.me.id));
         toast(`🎉 Вас приняли в «${chatTitle(c)}»`, 5000);
-        if (window.AndroidBridge?.notify && !appVisible()) window.AndroidBridge.notify("🎉 Заявка одобрена", `Вас приняли в «${chatTitle(c)}»`, c.id);
       }
     }
   },
@@ -252,5 +250,63 @@ const CallReact = {
     host.append(layer);
     navigator.vibrate?.(15);
     setTimeout(() => layer.remove(), 3200);
+  },
+};
+
+// ───────── Надёжные оповещения ─────────
+// Сервер сам записывает оповещение каждому получателю (сообщения, публикации, истории, реакции, задачи, заявки).
+// Приложение забирает их сразу; если страница уснула, их забирает фоновая служба Android по ключу устройства.
+// Каждое оповещение выдаётся один раз — повторов не бывает.
+const Push = {
+  shown: new Set(), timer: null, key: null, busy: false,
+  get on() { return !!window.AndroidBridge?.pushKey; },
+  /** уже показано по живому событию (сообщение пришло через realtime) */
+  mark(ref) { if (!ref) return; this.shown.add(ref); if (this.shown.size > 3000) this.shown = new Set([...this.shown].slice(-1500)); },
+  async setup() {
+    if (!this.on || !S.me) return;
+    try { this.key = window.AndroidBridge.pushKey(CFG.supabaseUrl, CFG.supabaseKey); } catch { this.key = null; }
+    if (this.key) { try { await S.sb.rpc("register_device", { key: this.key }); } catch { /* повторим при следующем входе */ } }
+    this.syncPrefs();
+    this.soon(1500);
+  },
+  syncPrefs() {
+    if (!this.on || !S.me) return;
+    try {
+      window.AndroidBridge.pushPrefs?.(JSON.stringify({ muted: Prefs.get("muted") || [], preview: Prefs.get("preview") !== false,
+        stories: Prefs.get("nStories") !== false, reactions: Prefs.get("nReacts") !== false }));
+    } catch { /* */ }
+  },
+  async logout() {
+    try { if (this.key) await Promise.race([S.sb.rpc("unregister_device", { key: this.key }), new Promise((r) => setTimeout(r, 2500))]); } catch { /* */ }
+    try { window.AndroidBridge?.pushReset?.(); } catch { /* */ }
+    this.key = null;
+  },
+  soon(ms = 1200) { if (!this.on) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.claim(), ms); },
+  async claim() {
+    if (!this.on || !S.me || this.busy) return;
+    this.busy = true;
+    try {
+      const { data } = await S.sb.rpc("claim_notices");
+      for (const n of data || []) { try { this.show(n); } catch (e) { console.warn("notice", e); } }
+    } catch { /* сеть — заберём позже */ } finally { this.busy = false; }
+  },
+  allowed(n) {
+    if (Prefs.get("nStories") === false && (n.kind === "story" || n.kind === "story_react")) return false;
+    if (Prefs.get("nReacts") === false && (n.kind === "reaction" || n.kind === "story_react")) return false;
+    if (n.chat_id && Prefs.muted(n.chat_id) && (n.kind === "message" || n.kind === "reaction")) return false;
+    return true;
+  },
+  show(n) {
+    if (n.kind === "message") { if (this.shown.has(n.ref)) return; this.mark(n.ref); }
+    if (!this.allowed(n)) return;
+    const visible = appVisible();
+    if (visible) {
+      // в открытом приложении сообщения, заявки и задачи и так видны — подсказываем только о новом
+      if (n.kind === "story" || n.kind === "story_react" || n.kind === "reaction" || n.kind === "approved") toast(`${n.title}: ${n.body || ""}`, 4500);
+      if (n.kind === "story") Stories.load?.().then(() => Stories.renderAll?.()).catch(() => {});
+      return;
+    }
+    const text = n.kind === "message" && !Prefs.get("preview") ? "Новое сообщение" : (n.body || "");
+    window.AndroidBridge.notify(n.title, text, n.chat_id || null);
   },
 };

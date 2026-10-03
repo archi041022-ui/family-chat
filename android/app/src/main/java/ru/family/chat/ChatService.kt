@@ -39,9 +39,12 @@ class ChatService : Service() {
     // Проверка связи с сервером каждые 20 секунд: если соединение уснуло — мессенджер переподключается,
     // поэтому входящие звонки доходят и при выключенном экране.
     private val handler = Handler(Looper.getMainLooper())
+    private var ticks = 0
     private val keepAlive = object : Runnable {
         override fun run() {
             WebHolder.js("window.__keepAlive && window.__keepAlive()")
+            // страница не отвечает (уснула или выгружена) — оповещения забираем сами, раз в минуту
+            if (++ticks % 3 == 0 && Push.webStale()) Push.poll(this@ChatService)
             handler.postDelayed(this, KEEPALIVE_MS)
         }
     }
