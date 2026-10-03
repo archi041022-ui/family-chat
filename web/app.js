@@ -1153,6 +1153,7 @@ function attachMenu(fileInput) {
     h("button", { class: "menu-item", onclick: () => { close(); Camera.open("photo"); } }, h("span", { html: I.camera }), "Сделать фото"),
     h("button", { class: "menu-item", onclick: () => { close(); Camera.open("doc"); } }, h("span", null, "📄"), "Сканер документов → PDF"),
     h("button", { class: "menu-item", onclick: () => { close(); VideoRec.open(); } }, h("span", { html: I.video }), "Записать видео"),
+    h("button", { class: "menu-item", onclick: () => { close(); VideoEditor.open({ chat: S.current }); } }, h("span", null, "🎬"), "Видеоредактор"),
     h("button", { class: "menu-item", onclick: () => { close(); VideoNote.open(); } }, h("span", { html: I.circle }), "Видеосообщение (кружок)"),
     h("button", { class: "menu-item", onclick: () => { close(); sendLocation(); } }, h("span", { html: I.pin }), "Моя геолокация"),
     h("button", { class: "menu-item", onclick: () => pick("*/*") }, h("span", { html: I.file }), "Файл или документ"),
@@ -1261,6 +1262,7 @@ window.handleBack = function () {
   if (Stories.closeViewer) { Stories.closeViewer(); return true; }
   if (Calls.ui || GroupCall.ui || GroupCall.inviteUi) return true;   // во время звонка жест ничего не закрывает
   const sh = [...document.querySelectorAll(".sheet-back")].pop(); if (sh) { sh._close ? sh._close() : sh.remove(); return true; }
+  if (VideoEditor.root) { VideoEditor.back(); return true; }
   if (S.current || S.assistantOpen) { closeChat(true); return true; }
   if ($("#tabChats")?.classList.contains("hidden")) { showTab("chats"); return true; }
   return false;

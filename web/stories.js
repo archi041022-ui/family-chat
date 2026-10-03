@@ -131,6 +131,8 @@ const Stories = {
     };
     close = sheet([
       h("h3", null, "Новая история"),
+      h("button", { class: "menu-item", onclick: () => { close(); VideoEditor.open(); } }, h("span", null, "🎬"), "Снять и смонтировать видео", h("small", { class: "sub" }, "Видеоредактор: фильтры, текст, музыка, эффекты")),
+      h("button", { class: "menu-item", onclick: () => { close(); VideoEditor.open({ pick: true }); } }, h("span", null, "✂️"), "Смонтировать из галереи"),
       h("button", { class: "menu-item", onclick: () => file.click() }, h("span", { html: I.clip }), "Фото или видео из галереи"),
       h("button", { class: "menu-item", onclick: () => { close(); this.textEditor(); } }, h("span", { html: I.pen }), "Текст на цветном фоне"),
       file,
@@ -253,7 +255,9 @@ const Stories = {
       if (s.media_type === "image") stage.append(h("img", { src: S.urls.get(s.media_path) || "", alt: "" }));
       else if (s.media_type === "video") {
         const v = h("video", { src: S.urls.get(s.media_path) || "", autoplay: true, playsinline: true });
-        v.onloadedmetadata = () => { if (isFinite(v.duration) && v.duration > 0) dur = Math.min(v.duration, 60) * 1000; };
+        v.onloadedmetadata = () => { if (isFinite(v.duration) && v.duration > 0) dur = Math.min(v.duration, 60) * 1000; else dur = 60000; };
+        v.ondurationchange = () => { if (isFinite(v.duration) && v.duration > 0) dur = Math.min(v.duration, 60) * 1000; };
+        v.onended = () => { dur = Math.max(1, elapsed + (Date.now() - started)); };   // ролик кончился — к следующей истории
         stage.append(v);
       } else stage.append(h("div", { class: "sv-text", style: { background: s.bg || STORY_BG[0] } }, s.body));
       if (s.body && s.media_type) stage.append(h("div", { class: "sv-caption" }, s.body));

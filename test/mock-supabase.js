@@ -379,7 +379,10 @@
         storage: { from: () => ({
           async upload(path, blob) {
             const url = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
-            const db = load(); db.files[path] = url; save(db); return { data: { path }, error: null };
+            const db = load();
+            if (blob.size > 400000) { db.files[path] = URL.createObjectURL(blob); window.__bigFiles = (window.__bigFiles || {}); window.__bigFiles[path] = blob; }   // большие файлы — в памяти страницы
+            else db.files[path] = url;
+            save(db); return { data: { path }, error: null };
           },
           async remove() { return { data: [], error: null }; },
           async createSignedUrls(paths) { const db = load(); return { data: paths.map((p) => ({ path: p, signedUrl: db.files[p] })) }; },
