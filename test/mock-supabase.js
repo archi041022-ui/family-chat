@@ -162,7 +162,8 @@
             x.cb(msg.event === "DELETE" ? { old: msg.row } : { new: msg.row });
           }
         } else if (msg.channel === this.name) {
-          if (msg.kind === "presence") { this.state[msg.key] = [{}]; for (const x of this.h) if (x.type === "presence") x.cb(); }
+          if (msg.kind === "presence") { this.state[msg.key] = [msg.meta || {}]; for (const x of this.h) if (x.type === "presence") x.cb(); }
+          if (msg.kind === "presence-leave") { delete this.state[msg.key]; for (const x of this.h) if (x.type === "presence") x.cb(); }
           if (msg.kind === "broadcast" && msg.sender !== sessionId)
             for (const x of this.h) if (x.type === "broadcast" && x.filter.event === msg.event) x.cb({ payload: msg.payload });
         }
@@ -173,10 +174,12 @@
     }
     async send({ event, payload }) { const msg = { channel: this.name, kind: "broadcast", event, payload, sender: sessionId }; bc.postMessage(msg); dispatch(msg); return "ok"; }
     presenceState() { return this.state; }
-    async track() {
+    async untrack() { const key = me()?.id; window.__presMeta = null; delete this.state[key]; bc.postMessage({ channel: this.name, kind: "presence-leave", key }); }
+    async track(meta) {
       const key = me()?.id;
-      this.state[key] = [{}];
-      const msg = { channel: this.name, kind: "presence", key }; bc.postMessage(msg);
+      window.__presMeta = meta || {};
+      this.state[key] = [window.__presMeta];
+      const msg = { channel: this.name, kind: "presence", key, meta: window.__presMeta }; bc.postMessage(msg);
       for (const x of this.h) if (x.type === "presence") x.cb();
       bc.postMessage({ channel: this.name, kind: "presence-req" });
     }
@@ -400,6 +403,6 @@
   };
   // ответ на запрос присутствия
   bc.addEventListener("message", (e) => {
-    if (e.data.kind === "presence-req" && me()) bc.postMessage({ channel: "family-presence", kind: "presence", key: me().id });
+    if (e.data.kind === "presence-req" && me() && window.__presMeta !== null) bc.postMessage({ channel: "family-presence", kind: "presence", key: me().id, meta: window.__presMeta || {} });
   });
 })();

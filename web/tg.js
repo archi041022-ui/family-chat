@@ -288,10 +288,10 @@ const Tg = {
       box.querySelector(".list-caption"));
     for (const p of people) {
       const on = S.online.has(p.id);
-      box.append(h("div", { class: "contact-row", "data-name": p.name.toLowerCase(), onclick: () => openDm(p.id) },
+      box.append(h("div", { class: "contact-row", "data-name": p.name.toLowerCase(), "data-uid": p.id, onclick: () => openDm(p.id) },
         avatarEl(p.id, "", { onclick: (e) => { e.stopPropagation(); this.profileView(p.id); } }),
         h("div", { class: "mid" }, h("b", null, p.name, EStatus.badge(p.id), p.family_role ? h("span", { class: "role-chip" }, p.family_role) : null),
-          h("small", { class: on ? "online" : "" }, (on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно") + (p.status ? " · " + p.status : ""))),
+          h("small", { class: `cstat${on ? " online" : ""}` }, this.presenceText(p))),
         h("button", { class: "icon-btn", title: "Позвонить", html: I.phone, onclick: (e) => { e.stopPropagation(); Calls.start(p.id, false); } }),
         h("button", { class: "icon-btn", title: "Видеозвонок", html: I.video, onclick: (e) => { e.stopPropagation(); Calls.start(p.id, true); } })));
     }
@@ -340,6 +340,14 @@ const Tg = {
     const seen = S.missedSeen || +(localStorage.getItem("missedSeen:" + S.me?.id) || 0);
     const n = this.callRows().filter((r) => r.missed && new Date(r.m.created_at).getTime() > seen).length;
     const b = $("#callsBadge"); if (b) { b.textContent = n; b.classList.toggle("hidden", !n); }
+  },
+  presenceText(p) { const on = S.online.has(p.id); return (on ? "в сети" : lastSeen(p.last_seen) || "был(а) давно") + (p.status ? " · " + p.status : ""); },
+  // «в сети» / «был(а) …» в контактах обновляем на месте, не перерисовывая список
+  refreshPresence() {
+    for (const row of document.querySelectorAll("#tabContacts .contact-row[data-uid]")) {
+      const p = S.profiles.get(row.dataset.uid), s = row.querySelector(".cstat"); if (!p || !s) continue;
+      s.textContent = this.presenceText(p); s.classList.toggle("online", S.online.has(p.id));
+    }
   },
   isCallMsg(m) { return !!m?.body && !m.media_type && (m.body.startsWith("📞") || m.body === GC_MARK); },
   newCallSheet() {
@@ -464,7 +472,7 @@ const Tg = {
     close = sheet([
       h("h3", null, "Выйти из аккаунта?"),
       h("button", { class: "menu-item danger", onclick: async () => {
-        close(); await Push.logout(); await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
+        close(); await Live.leave(); await Push.logout(); await S.sb.auth.signOut(); window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload();
       } }, h("span", { html: I.logout }), "Выйти"),
       h("button", { class: "menu-item", onclick: () => close() }, h("span", { html: I.close }), "Отмена"),
     ]);
@@ -502,7 +510,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "2.9";
+const APP_VERSION = "3.0";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

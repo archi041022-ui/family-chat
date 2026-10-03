@@ -1497,9 +1497,23 @@ function openProfile() {
 }
 
 // ───────────── Мгновенная доставка ─────────────
-const Live = { channel: null, presence: null,
+const Live = { channel: null, presence: null, active: true, bgTimer: null,
   broadcast(event, payload) { this.presence?.send({ type: "broadcast", event, payload }); },
+  // «в сети» — только пока приложение открыто на экране. Соединение в фоне остаётся (звонки, оповещения),
+  // но в присутствии отмечаем active: false — у родных вы показываетесь «был(а) …».
+  setActive(on) {
+    clearTimeout(this.bgTimer);
+    if (this.active === on) return;
+    this.active = on;
+    this.presence?.track({ at: Date.now(), active: on }).catch?.(() => {});
+    if (S.me) S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {});
+  },
+  // свернули — через пару секунд (чтобы не мигать при выборе фото, разрешениях и т. п.)
+  background() { clearTimeout(this.bgTimer); this.bgTimer = setTimeout(() => this.setActive(false), 2500); },
+  async leave() { clearTimeout(this.bgTimer); try { await this.presence?.untrack(); } catch { /* */ } },
 };
+// кто «в сети»: есть отметка присутствия не в фоне (у старых версий приложения отметки нет — считаем в сети)
+const onlineFrom = (state) => new Set(Object.entries(state || {}).filter(([, metas]) => (metas || []).some((m) => m.active !== false)).map(([k]) => k));
 function subscribe() {
   Live.channel = S.sb.channel("db-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => onNewMessage(p.new))
@@ -1528,9 +1542,9 @@ function subscribe() {
     });
   Live.presence = S.sb.channel("family-presence", { config: { presence: { key: S.me.id } } })
     .on("presence", { event: "sync" }, () => {
-      S.online = new Set(Object.keys(Live.presence.presenceState()));
+      S.online = onlineFrom(Live.presence.presenceState());
       if ([...S.online].some((u) => !S.profiles.has(u))) loadProfiles().then(renderChatList);
-      renderChatList(); updateChatSub();
+      renderChatList(); updateChatSub(); Tg.refreshPresence();
     })
     .on("broadcast", { event: "read" }, ({ payload }) => {
       const m = (S.members.get(payload.chat_id) || []).find((x) => x.user_id === payload.user_id);
@@ -1545,26 +1559,30 @@ function subscribe() {
       if (S.current && !S.chats.some((c) => c.id === S.current)) { closeChat(); toast("Вас больше нет в этой группе"); }
       else if (S.current) updateChatSub();
     })
-    .subscribe(async (status) => { if (status === "SUBSCRIBED") await Live.presence.track({ at: Date.now() }); });
+    .subscribe(async (status) => {
+      if (status !== "SUBSCRIBED") return;
+      Live.active = appVisible();          // служба Android запускает страницу и в фоне — тогда сразу «не в сети»
+      await Live.presence.track({ at: Date.now(), active: Live.active });
+    });
   // при возврате в приложение — догружаем пропущенное
   document.addEventListener("visibilitychange", () => {
     if (window.AndroidBridge) return; // в приложении это сообщает сам Android
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
-  window.onAppForeground = () => { Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); Push.soon(500); };
-  window.onAppBackground = () => { Lock.onBg(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
+  window.onAppForeground = () => { Live.setActive(true); Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); Push.soon(500); };
+  window.onAppBackground = () => { Lock.onBg(); Live.background(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }
 function onProfileChange(np) {
   if (np.id === S.me?.id && np.banned) {
-    Push.logout().finally(() => S.sb.auth.signOut()).finally(() => { window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload(); });
+    Live.leave().finally(() => Push.logout()).finally(() => S.sb.auth.signOut()).finally(() => { window.AndroidBridge?.loggedOut?.(); location.hash = ""; location.reload(); });
     return;
   }
   const old = S.profiles.get(np.id) || {};
   S.profiles.set(np.id, { ...old, ...np });
   if (np.id === S.me.id) Object.assign(S.me, np);
   if (np.avatar_path && !S.urls.has(np.avatar_path)) signUrls([np.avatar_path]).then(renderChatList);
-  renderChatList(); updateChatSub(); Stories.renderAll();
+  renderChatList(); updateChatSub(); Stories.renderAll(); Tg.refreshPresence();
 }
 const appVisible = () => (window.AndroidBridge?.isForeground ? window.AndroidBridge.isForeground() : document.visibilityState === "visible");
 const TABS = { chats: "Чаты", contacts: "Контакты", calls: "Звонки", stories: "Истории", settings: "Настройки", invite: "Пригласить" };
