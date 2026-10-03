@@ -44,7 +44,7 @@ try:
         V = "/tmp/fc-ve"
         register(A, "papa", "Папа"); A.wait_for_selector("#chatList .chat-item")
         # статус → «Снять и смонтировать видео»
-        A.click("#tabBtnStories"); A.evaluate("Stories.create()")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Истории')"); A.evaluate("Stories.create()")
         A.click(".sheet >> text=Снять и смонтировать видео")
         A.wait_for_selector(".ve-cam .ve-rec"); A.wait_for_function("document.querySelector('.ve-cam-video').videoWidth > 0", timeout=8000)
         shot(A, "v1_camera")
@@ -88,7 +88,7 @@ try:
         # музыка
         A.click(".ve-tools [data-t=music]")
         with A.expect_file_chooser() as fc: A.click(".ve-panel .menu-item:has-text('Выбрать музыку')")
-        fc.value.set_files(f"{V}/music.ogg"); A.wait_for_selector(".ve-panel >> text=Музыка: music")
+        fc.value.set_files(f"{V}/music.ogg"); A.wait_for_selector(".ve-panel .ve-now >> text=music")
         A.wait_for_timeout(1200); A.evaluate("VideoEditor.player.pause()")
         # порядок: фото — вперёд
         A.click(".ve-clip >> nth=3"); A.click(".ve-tools [data-t=order]"); A.click(".ve-panel button:has-text('Раньше')")

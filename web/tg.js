@@ -13,7 +13,7 @@ const Prefs = {
     if (this.data && this.uid === S.me?.id) return this.data;
     this.uid = S.me?.id;
     try { this.data = JSON.parse(localStorage.getItem(this.key()) || "{}"); } catch { this.data = {}; }
-    this.data = Object.assign({ pinned: [], muted: [], sound: true, vibrate: true, preview: true, inAppSound: true, fontSize: 16, pattern: true, enterSend: false, nStories: true, nReacts: true }, this.data);
+    this.data = Object.assign({ pinned: [], muted: [], sound: true, vibrate: true, preview: true, inAppSound: true, fontSize: 16, pattern: true, enterSend: false, nStories: true, nReacts: true, asstFab: true }, this.data);
     return this.data;
   },
   get(k) { return this.load()[k]; },
@@ -390,16 +390,10 @@ const Tg = {
         item("#E0457B", I.bell, "Мелодии", () => Snd.sheet(), { value: Snd.title("ring") }),
         item("#3D8BFD", I.data, "Данные и память", () => this.dataSheet())),
       group(
-        item("#E8664F", I.bot, "Мой ассистент", () => { if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; } Assistant.settingsSheet(); }),
-        item("#00A6A6", I.ticks, "Мои задачи", () => Tasks.open(), { value: Tasks.active().length ? String(Tasks.active().length) : "" }),
-        item("#2EAD6B", I.invite, "Пригласить в семью", () => showTab("invite"))),
-      S.isAdmin ? group(
-        item("#E8664F", I.shield, "Управление участниками", () => membersAdmin()),
-        item("#6C7A89", I.group, "Сбросить пароль участнику", () => adminResetSheet()),
-        item("#F2A541", I.bell, "Мгновенные оповещения", () => FcmSetup.sheet())) : null,
+        item("#4F6BED", I.bot, "Ассистент: голос и поведение", () => { if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; } Assistant.settingsSheet(); }),
+        h("div", { class: "set-toggle" }, this.toggle("Плавающий значок ассистента", "asstFab", "Маленький значок поверх экрана, можно двигать пальцем", () => AsstFab.sync()))),
+      h("p", { class: "set-note" }, "Ассистент, задачи, видеоредактор, приглашения, обновления — в разделе «Меню» (внизу слева)."),
       group(
-        item("#2EAD6B", I.download, "Скачать обновления", () => Updates.sheet(), { value: Updates.latest ? "🔴 Есть новая версия" : "" }),
-        item("#3D8BFD", I.info, "О приложении", () => this.aboutSheet(), { value: this.version() }),
         item("#E5484D", I.logout, "Выйти", () => this.logoutSheet(), { danger: true })),
     );
   },
@@ -510,7 +504,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "3.0";
+const APP_VERSION = "3.1";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

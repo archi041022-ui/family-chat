@@ -135,7 +135,7 @@ const app = $("#app");
 
 // ───────────── Оформление (цвет темы и светлая/тёмная) ─────────────
 const THEMES = [
-  ["coral", "Коралл", "#E8664F", "#F2A541"], ["ocean", "Океан", "#2F80ED", "#00B4D8"], ["forest", "Лес", "#23985B", "#8DBA2B"],
+  ["strict", "Строгая", "#2F6FDB", "#2F6FDB"], ["coral", "Коралл", "#E8664F", "#F2A541"], ["ocean", "Океан", "#2F80ED", "#00B4D8"], ["forest", "Лес", "#23985B", "#8DBA2B"],
   ["lavender", "Лаванда", "#8B5CF6", "#EC4899"], ["sunset", "Закат", "#F06418", "#E5374B"], ["sky", "Небо", "#0EA5E9", "#6366F1"],
   ["rose", "Роза", "#E11D74", "#F59E0B"], ["graphite", "Графит", "#4B5A70", "#0EA5E9"],
 ];
@@ -143,17 +143,18 @@ const Theme = {
   get(k, d) { try { return localStorage.getItem("ui:" + k) || d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem("ui:" + k, v); } catch { /* */ } },
   apply() {
-    const t = this.get("theme", "coral"), m = this.get("mode", "auto");
+    const t = this.get("theme", "strict"), m = this.get("mode", "auto");
     const root = document.documentElement;
-    if (t === "coral") delete root.dataset.theme; else root.dataset.theme = t;
+    if (t === "strict") delete root.dataset.theme; else root.dataset.theme = t;
     if (m === "auto") delete root.dataset.mode; else root.dataset.mode = m;
-    const color = (THEMES.find((x) => x[0] === t) || THEMES[0])[2];
+    // шапка теперь цвета панели — строка состояния в тон ей
+    const color = (getComputedStyle(root).getPropertyValue("--panel") || "").trim() || "#FFFFFF";
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
     try { window.AndroidBridge?.setBarColor?.(color); } catch { /* */ }
   },
   sheet() {
     let close;
-    const cur = () => this.get("theme", "coral");
+    const cur = () => this.get("theme", "strict");
     const grid = h("div", { class: "theme-grid" }, THEMES.map(([id, name, c1, c2]) =>
       h("button", { class: `theme-sw${cur() === id ? " on" : ""}`, onclick: (e) => {
         this.set("theme", id); this.apply();
@@ -664,20 +665,22 @@ function buildShell() {
         h("button", { class: "icon-btn", title: "Поиск", onclick: () => { showTab("chats"); const i = $("#chatSearch"); i?.focus(); }, html: I.search }),
         h("button", { class: "icon-btn", title: "Профиль", onclick: () => showTab("settings"), html: I.pen })),
       h("div", { class: "tab-body", id: "tabChats" },
+        h("div", { id: "storyStrip", class: "story-top" }),                         // истории — вверху, как в Telegram
         h("div", { class: "search" }, h("input", { id: "chatSearch", placeholder: "Поиск", oninput: (e) => { S.filter = e.target.value.toLowerCase(); renderChatList(); } })),
         h("div", { class: "folders", id: "folders" }),
-        h("div", { class: "chat-list", id: "chatList" }, h("div", { id: "storyStrip" }), h("div", { id: "chatItems" })),
+        h("div", { class: "chat-list", id: "chatList" }, h("div", { id: "chatItems" })),
         h("button", { class: "fab", title: "Новый чат", onclick: newChatSheet, html: I.pen })),
+      h("div", { class: "tab-body hidden", id: "tabMenu" }),
       h("div", { class: "tab-body hidden", id: "tabContacts" }),
       h("div", { class: "tab-body hidden", id: "tabCalls" }),
       h("div", { class: "tab-body hidden", id: "tabStories" }),
       h("div", { class: "tab-body hidden", id: "tabSettings" }),
       h("div", { class: "tab-body hidden", id: "tabInvite" }),
       h("nav", { class: "bottom-tabs" },
+        tab("Menu", MI.grid, "Меню", "storiesBadge"),                               // всё, что не настройки (как в VK)
         tab("Chats", I.chat, "Чаты", "chatsBadge"),
         tab("Contacts", I.user, "Контакты"),
         tab("Calls", I.calls, "Звонки", "callsBadge"),
-        tab("Stories", I.story, "Истории", "storiesBadge"),
         tab("Settings", I.gear, "Настройки"))),
     h("div", { class: "placeholder", id: "placeholder" }, "Выберите чат слева"));
   Pull.attach($("#chatList"), async () => { await Promise.all([resync(), Stories.load().then(() => Stories.renderAll()), Tasks.load(), Joins.load(), loadProfiles()]); renderChatList(); });
@@ -686,6 +689,8 @@ function buildShell() {
   Pull.attach($("#tabStories"), async () => { await Stories.refreshAndRender(); });
   renderChatList();
   Stories.renderAll();
+  StoryTop.attach($("#chatList"), $("#storyStrip"));
+  AsstFab.init();
   // В браузере «назад» (кнопка или свайп) сначала закрывает окна внутри мессенджера, а не уходит со страницы
   if (!window.__popBound) {
     window.__popBound = true;
@@ -826,6 +831,7 @@ async function openChat(chatId) {
     h("div", { id: "replyBox" }),
     Channels.canPost(c) ? composer() : Channels.readerBar(c));
   app.append(view);
+  SwipeBack.attach(view, () => closeChat(), { edge: 36 });                   // от левого края — назад к списку
   if (c.is_channel) view.classList.add("channel");
   Protect.apply(c);
   Tg.scrollButton(view);
@@ -1570,7 +1576,7 @@ function subscribe() {
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
   window.onAppForeground = () => { Live.setActive(true); Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); Push.soon(500); };
-  window.onAppBackground = () => { Lock.onBg(); Live.background(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
+  window.onAppBackground = () => { Lock.onBg(); Live.background(); VideoEditor.onBackground(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }
 function onProfileChange(np) {
@@ -1585,12 +1591,12 @@ function onProfileChange(np) {
   renderChatList(); updateChatSub(); Stories.renderAll(); Tg.refreshPresence();
 }
 const appVisible = () => (window.AndroidBridge?.isForeground ? window.AndroidBridge.isForeground() : document.visibilityState === "visible");
-const TABS = { chats: "Чаты", contacts: "Контакты", calls: "Звонки", stories: "Истории", settings: "Настройки", invite: "Пригласить" };
+const TABS = { menu: "Меню", chats: "Чаты", contacts: "Контакты", calls: "Звонки", stories: "Истории и статусы", settings: "Настройки", invite: "Пригласить" };
 function showTab(t) {
   for (const k of Object.keys(TABS)) {
     const id = k[0].toUpperCase() + k.slice(1);
     $(`#tab${id}`)?.classList.toggle("hidden", t !== k);
-    $(`#tabBtn${id}`)?.classList.toggle("on", t === k || (t === "invite" && k === "settings"));
+    $(`#tabBtn${id}`)?.classList.toggle("on", t === k || ((t === "invite" || t === "stories") && k === "menu"));
   }
   S.tab = t;
   const st = $("#sideTitle"); if (st) st.textContent = t === "chats" ? (CFG.appName || "Семья") : TABS[t];
@@ -1599,6 +1605,7 @@ function showTab(t) {
   if (t === "contacts") Tg.renderContacts();
   if (t === "calls") Tg.renderCalls();
   if (t === "settings") Tg.renderSettings();
+  if (t === "menu") Menu.render();
 }
 async function resync() {
   await loadChats(); renderChatList();
@@ -1915,6 +1922,7 @@ const Calls = {
 
   // ── интерфейс звонка
   showIncoming() {
+    VideoEditor.onBackground();                         // звонок — музыка и видео редактора на паузу
     const p = S.profiles.get(this.peer);
     this.ui?.remove();
     this.ui = h("div", { class: "call ringing" },

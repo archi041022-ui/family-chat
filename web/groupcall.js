@@ -407,6 +407,7 @@ const GroupCall = {
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.closeInvite() }), "Отклонить"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn green", html: p.video ? I.video : I.phone, onclick: () => this.join(p.chatId, !!p.video) }), "Войти")));
     callBackdrop(this.inviteUi, null, c);
+    VideoEditor.onBackground();
     document.body.append(this.inviteUi);
     Calls.ringtone();
     this.pendingInvite = p;

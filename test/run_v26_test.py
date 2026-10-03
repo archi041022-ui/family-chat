@@ -137,7 +137,7 @@ try:
         open(f"{SP}/sa.json", "w").write(_j.dumps({"type": "service_account", "project_id": "semya-push", "private_key": "-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n", "client_email": "fcm@semya-push.iam.gserviceaccount.com"}))
         open(f"{SP}/wrong.json", "w").write(_j.dumps({"hello": 1}))
         assert B.evaluate("AndroidBridge.fcm") is None and B.evaluate("AndroidBridge.fcmCalls") >= 1      # пока не настроено
-        A.click("#tabBtnSettings"); A.click("#tabSettings >> text=Мгновенные оповещения")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Мгновенные оповещения')")
         A.wait_for_selector(".sheet >> text=Firebase ещё не подключён")
         inputs = A.locator(".sheet input[type=file]")
         inputs.nth(0).set_input_files(f"{SP}/wrong.json"); A.wait_for_selector("text=Это не тот файл")

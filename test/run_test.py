@@ -103,9 +103,9 @@ try:
         A.goto(URL); B.goto(URL); A.wait_for_selector("#chatItems .chat-item"); B.wait_for_selector("#chatItems .chat-item")
         A.click("button[title='Профиль']"); A.click("#tabSettings >> text=Изменить профиль")
         A.click(".status-presets >> text=💼 На работе"); A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
-        B.click("#tabBtnStories"); B.wait_for_selector("#tabStories >> text=💼 На работе"); shot(B, "13_B_statuses")
+        B.click("#tabBtnMenu"); B.click("#tabMenu .mn-tile:has-text('Истории')"); B.wait_for_selector("#tabStories >> text=💼 На работе"); shot(B, "13_B_statuses")
         # текстовая история
-        A.click("#tabBtnStories"); A.click(".add-story"); A.click("text=Текст на цветном фоне")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Истории')"); A.click(".add-story"); A.click("text=Текст на цветном фоне")
         A.fill(".story-text-input", "С днём рождения, сынок! 🎂"); A.click("text=Опубликовать на 24 часа")
         B.wait_for_selector("#storiesBadge:not(.hidden)"); B.wait_for_timeout(300); shot(B, "14_B_stories_tab")
         B.click("#tabStories .story-row >> nth=1"); B.wait_for_selector(".story-viewer .sv-text"); B.wait_for_timeout(700); shot(B, "15_B_story_view")
@@ -156,7 +156,7 @@ try:
         A.go_back(); A.wait_for_timeout(600)
         print("dbg after:", A.evaluate("[history.length, JSON.stringify(history.state), !!document.querySelector('#chatView'), location.href]"))
         assert A.locator("#chatView").count() == 0 and "index.html" in A.url, A.url
-        A.click("#tabBtnStories"); A.click("#tabStories .story-row >> nth=0"); A.wait_for_selector(".story-viewer")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Истории')"); A.click("#tabStories .story-row >> nth=0"); A.wait_for_selector(".story-viewer")
         A.go_back(); A.wait_for_timeout(400)
         assert A.locator(".story-viewer").count() == 0 and "index.html" in A.url
         A.click("#tabBtnChats")
@@ -219,7 +219,7 @@ try:
         A.click("button[title='Профиль']"); A.click("text=Оформление и цвета"); A.click(".theme-sw >> text=Коралл"); A.click(".segmented >> text=Авто"); A.click(".sheet .btn.wide"); A.click("#tabBtnChats")
         print("circle button: ok")
         # управление участниками: блокировка и удаление
-        A.click("button[title='Профиль']"); A.click("text=Управление участниками")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Участники')")
         A.wait_for_selector(".admin-row >> text=Мама"); shot(A, "31_A_admin")
         A.click(".admin-row:has-text('Мама') button"); A.click(".sheet >> text=Добавить в чёрный список")
         A.click(".confirm-row .btn.danger"); A.wait_for_timeout(800)
@@ -227,12 +227,12 @@ try:
         B.fill("input[autocomplete=username]", "mama"); B.fill("input[type=password]", "secret123"); B.click("button[type=submit]")
         B.wait_for_selector("text=Доступ закрыт администратором семьи"); shot(B, "32_B_banned")
         print("ban: ok")
-        A.click("button[title='Профиль']"); A.click("text=Управление участниками")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Участники')")
         A.click(".admin-row:has-text('Мама') button"); A.click(".sheet >> text=Убрать из чёрного списка"); A.wait_for_timeout(500)
         B.click("button[type=submit]"); B.wait_for_selector("#chatItems .chat-item")
         print("unban: ok")
         # раздел «Пригласить»
-        A.click("button[title='Профиль']"); A.click("#tabSettings >> text=Пригласить в семью"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Пригласить в семью')"); A.wait_for_selector(".invite-code >> text=SEMYA-4825"); A.wait_for_timeout(300); shot(A, "24_A_invite")
         A.evaluate("() => { window.AndroidBridge = window.AndroidBridge || {}; window.AndroidBridge.shareText = (t) => { window.__inv = t; }; }")
         A.click("text=Поделиться приглашением")
         inv = A.evaluate("window.__inv") or ""
@@ -256,10 +256,10 @@ try:
         B.fill("input[type=password]", "newpass1"); B.click("button[type=submit]"); B.wait_for_selector("#chatItems .chat-item")
         print("word reset: ok")
         # администратор (Папа) сбрасывает пароль Маме
-        A.click("button[title='Профиль']"); A.click("text=Сбросить пароль участнику"); A.click(".sheet .menu-item >> text=Мама")
+        A.click("#tabBtnMenu"); A.click("#tabMenu .mn-tile:has-text('Сброс пароля')"); A.click(".sheet .menu-item >> text=Мама")
         A.wait_for_selector(".sheet >> text=Логин: mama"); A.fill(".sheet input", "admin777"); A.click(".sheet .btn.wide")
         A.wait_for_selector("text=Пароль: admin777"); shot(A, "19_A_admin_reset")
-        assert B.locator("text=Сбросить пароль участнику").count() == 0
+        B.click("#tabBtnMenu"); assert B.locator("#tabMenu .mn-tile:has-text('Сброс пароля')").count() == 0 and A.locator("#tabMenu .mn-tile:has-text('Сброс пароля')").count() == 1
         print("admin reset: ok")
         # широкий экран
         W = ctx.new_page(); W.set_viewport_size({"width": 1280, "height": 800}); W.goto(URL)

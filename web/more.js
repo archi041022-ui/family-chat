@@ -13,7 +13,6 @@ const QuickBar = {
       h("span", { class: "qp-ico" }, icon), h("span", { class: "name" }, label),
       badge ? h("i", { class: `qp-badge${extra.muted ? " muted" : ""}` }, badge > 99 ? "99+" : badge) : null);
     return h("div", { class: "quick-bar" },
-      pill(`assistant-item${S.assistantOpen ? " on" : ""}`, "🤖", "Ассистент", 0, () => Assistant.open()),
       pill(`tasks-item${S.tasksOpen ? " on" : ""}`, "✅", "Задачи", overdue || tasks, () => Tasks.open(), { muted: !overdue }),
       fam ? pill(`family-pill${S.current === fam.id ? " on" : ""}`, "🏠", chatTitle(fam), famUnread, () => openChat(fam.id), { "data-chat": fam.id }) : null);
   },

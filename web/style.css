@@ -1122,3 +1122,140 @@ input, textarea { font: inherit; color: inherit; }
 .ve-prog i { display: block; height: 100%; width: 0; background: #FE2C55; transition: width .2s; }
 .ve-result { width: 100%; max-height: 46vh; border-radius: 12px; background: #000; }
 .ve-root ~ .sheet-back { z-index: 76; }   /* окна поверх редактора */
+
+/* ═════════════ v3.1: строгое оформление ═════════════
+   Нейтральная палитра, без градиентов, светлая шапка, единые скругления и отступы. */
+:root {
+  --accent: #2F6FDB; --accent2: #2F6FDB;
+  --bg: #F2F3F5; --panel: #FFFFFF; --text: #16181B; --muted: #767C85; --line: #E4E6EA; --bubble-in: #FFFFFF;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 2px 8px rgba(16, 24, 40, .05);
+  --radius: 12px;
+  --pattern: rgba(0, 0, 0, .025);
+  --hdr: var(--accent);
+  --accent-soft: color-mix(in srgb, var(--accent) 11%, var(--panel));
+  --bubble-out: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  --chat-bg: color-mix(in srgb, var(--accent) 4%, var(--bg));
+}
+:root[data-theme="coral"] { --accent: #E8664F; --accent2: #E8664F; }
+:root[data-theme] { --accent2: var(--accent); }
+:root[data-mode="dark"] {
+  --bg: #0F1113; --panel: #17191C; --text: #E9EBEE; --muted: #8C929B; --line: #262A30; --bubble-in: #1F2226;
+  --bubble-out: color-mix(in srgb, var(--accent) 30%, var(--panel));
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, var(--panel));
+  --chat-bg: #0F1113; --pattern: rgba(255, 255, 255, .02);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode="light"]) {
+    --bg: #0F1113; --panel: #17191C; --text: #E9EBEE; --muted: #8C929B; --line: #262A30; --bubble-in: #1F2226;
+    --bubble-out: color-mix(in srgb, var(--accent) 30%, var(--panel));
+    --accent-soft: color-mix(in srgb, var(--accent) 20%, var(--panel));
+    --chat-bg: #0F1113; --pattern: rgba(255, 255, 255, .02);
+  }
+}
+html, body { font: 15.5px/1.42 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; letter-spacing: .005em; }
+
+/* шапка: светлая, с тонкой линией снизу */
+.side > .topbar, .chat > .topbar { background: var(--panel); color: var(--text); box-shadow: none; border-bottom: 1px solid var(--line); }
+.side > .topbar .title small, .chat > .topbar .title small { color: var(--muted); }
+.side > .topbar .icon-btn, .chat > .topbar .icon-btn { color: var(--muted); }
+.side > .topbar .icon-btn:hover, .chat > .topbar .icon-btn:hover { background: var(--bg); color: var(--text); }
+.side > .topbar .avatar, .chat > .topbar .avatar { box-shadow: none; }
+.topbar .title b { font-weight: 600; font-size: 17px; }
+.chat > .topbar .back-btn { color: var(--accent) !important; }
+
+/* поиск и папки */
+.search { margin: 6px 12px 8px; }
+.search input { background: var(--bg); border-radius: 10px; padding: 8px 12px; }
+.folders { gap: 0; padding: 0 8px; border-bottom: 1px solid var(--line); }
+.folders button { background: none; border-radius: 0; padding: 9px 12px 8px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; }
+.folders button.on { background: none; color: var(--accent); border-bottom-color: var(--accent); }
+
+/* список чатов */
+.chat-item { border-bottom: 0; position: relative; }
+.chat-item:not(.quick-pill)::after { content: ""; position: absolute; left: 74px; right: 0; bottom: 0; height: 1px; background: var(--line); }
+.chat-item .name, .chat-item b { font-weight: 600; }
+.badge, .tab-badge { background: var(--accent); }
+.quick-bar { gap: 8px; padding: 8px 12px; }
+.quick-bar .chat-item.quick-pill { background: var(--bg); border-radius: 10px; padding: 7px 4px; box-shadow: none; }
+.quick-bar .quick-pill.on { background: var(--accent-soft); }
+.quick-bar .qp-ico { font-size: 20px; }
+.quick-bar .quick-pill .name { font-weight: 600; font-size: 12px; }
+
+/* кнопки */
+.fab { background: var(--accent); box-shadow: 0 4px 14px rgba(16, 24, 40, .18); width: 54px; height: 54px; }
+.btn { background: var(--accent); border-radius: 10px; font-weight: 600; box-shadow: none; }
+.btn.ghost { background: var(--bg); color: var(--text); }
+.composer .send, .vr-bottom .send, .sv-reply .send { background: var(--accent); }
+.sheet { border-radius: 16px 16px 0 0; }
+.sheet h3 { font-weight: 600; }
+.menu-item { border-radius: 10px; }
+
+/* нижнее меню: без «пилюль», активный — цветом */
+.bottom-tabs { background: var(--panel); border-top: 1px solid var(--line); box-shadow: none; }
+.bottom-tabs button { color: var(--muted); font-weight: 500; }
+.bottom-tabs button.on { color: var(--accent); }
+.bottom-tabs button.on span, .bottom-tabs button span { background: none !important; padding: 2px 14px; }
+
+/* настройки: аккуратные группы */
+.set-group { border-radius: 12px; margin: 10px 12px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); }
+.tg-ico { border-radius: 8px; }
+.set-note { margin: 4px 24px 8px; font-size: 13px; color: var(--muted); }
+.set-toggle { padding: 6px 12px; }
+
+/* переписка */
+.msg.out .bubble { background: var(--bubble-out); }
+.bubble { box-shadow: 0 1px 1px rgba(16, 24, 40, .06); }
+
+/* ───────── меню (как в VK) ───────── */
+#tabMenu { overflow-y: auto; background: var(--bg); padding-bottom: 12px; }
+.mn-profile { display: flex; align-items: center; gap: 12px; width: calc(100% - 24px); margin: 12px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; text-align: left; }
+.mn-profile .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mn-profile b { font-size: 17px; font-weight: 600; }
+.mn-profile small { color: var(--muted); }
+.mn-profile .chev svg { width: 20px; height: 20px; color: var(--muted); }
+.mn-sec { margin: 0 12px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 4px; }
+.mn-cap { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 0 8px 8px; }
+.mn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+.mn-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 12px; border-radius: 10px; text-align: center; }
+.mn-tile:active { background: var(--bg); }
+.mn-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; }
+.mn-ico svg { width: 24px; height: 24px; }
+.mn-lbl { font-size: 12.5px; line-height: 1.2; font-weight: 500; }
+.mn-badge { position: absolute; top: 6px; right: calc(50% - 30px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font: 600 11px/18px system-ui; font-style: normal; }
+
+/* ───────── плавающий ассистент ───────── */
+.asst-fab { position: fixed; z-index: 45; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel); color: var(--accent); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(16, 24, 40, .16);
+  transition: opacity .3s, transform .15s, left .2s ease-out, top .05s; touch-action: none; user-select: none; -webkit-user-select: none; }
+.asst-fab svg { width: 24px; height: 24px; pointer-events: none; }
+.asst-fab.idle { opacity: .5; }
+.asst-fab.dragging { transform: scale(1.08); transition: none; opacity: 1; }
+.asst-fab:active { transform: scale(.94); }
+
+/* ───────── истории вверху (как в Telegram) ───────── */
+.story-top { max-height: 120px; overflow: hidden; transition: max-height .25s ease, opacity .2s; background: var(--panel); flex: none; }
+.story-top.collapsed { max-height: 0; opacity: 0; }
+.story-top .story-strip { border-bottom: 0; padding: 10px 12px 6px; }
+.story-all { background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+.story-all-ico { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); color: var(--muted); }
+.story-all-ico svg { width: 24px; height: 24px; }
+.set-group, .mn-sec, .mn-profile, .set-note, .set-toggle, .set-profile { flex: none; }
+.mn-profile .avatar { width: 52px; height: 52px; font-size: 22px; }
+.asst-fab { width: 42px; height: 42px; }
+.asst-fab svg { width: 22px; height: 22px; }
+.asst-fab.idle { opacity: .45; }
+/* видеоредактор: музыка из интернета */
+.ve-ml-search { display: flex; gap: 8px; margin: 6px 0 8px; }
+.ve-ml-q { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 12px; color: var(--text); }
+.ve-moods button { color: var(--text); border-color: var(--line); background: var(--bg); }
+.ve-moods button.on { color: #fff; }
+.ve-ml { max-height: 46vh; overflow-y: auto; margin-top: 6px; }
+.ve-ml-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+.ve-ml-row .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ve-ml-row b { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ve-ml-row small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ve-ml-play { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); flex: none; font-size: 14px; }
+.ve-ml-add { flex: none; padding: 7px 12px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
+.ve-ml-add:disabled { opacity: .6; }
+.ve-now { font-weight: 600; }
+.ve-panel > * { flex: none; }                      /* строки панели не сжимаются — прокрутка вместо наложения */

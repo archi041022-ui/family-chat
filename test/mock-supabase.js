@@ -392,6 +392,21 @@
         }) },
         channel: (name) => new Channel(name),
         functions: { async invoke(fn, { body }) {
+          if (fn === "music") {          // как функция сервера music: поиск и скачивание (тональный WAV на 6 с)
+            window.__musicCalls = (window.__musicCalls || []); window.__musicCalls.push(body);
+            if (body.action === "search") return { data: { from: "openverse", items: [
+              { id: "ov:1", title: "Happy Morning", artist: "Test Band", duration: 125, license: "CC BY 4.0", source: "jamendo", url: "https://prod-1.storage.jamendo.com/?trackid=1&format=mp32" },
+              { id: "ov:2", title: "Calm Piano", artist: "Pianist", duration: 98, license: "CC BY-SA 3.0", source: "ccmixter", url: "https://ccmixter.org/content/x.mp3" }] }, error: null };
+            if (body.action === "get") {
+              const sr = 22050, n = sr * 6, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+              const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+              w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+              v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+              for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.sin(i / sr * 2 * Math.PI * 523) * 8000, true);
+              await new Promise((r) => setTimeout(r, 200));
+              return { data: new Blob([buf], { type: "application/octet-stream" }), error: null };
+            }
+          }
           if (fn === "push") { window.__pushTests = (window.__pushTests || 0) + 1; return { data: { ok: true, sent: 1 }, error: null }; }
           await new Promise((r) => setTimeout(r, 300));
           const last = body.messages.at(-1).content;

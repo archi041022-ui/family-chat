@@ -70,7 +70,14 @@ const VE_FILTERS = [
   ["soft", "Нежный", "brightness(1.08) saturate(0.9) contrast(0.9)"],
   ["neon", "Неон", "saturate(2) hue-rotate(290deg) contrast(1.1)"],
 ];
-const VE_EFFECTS = [["fade", "Плавные переходы"], ["zoom", "Медленный зум"], ["vignette", "Виньетка"], ["grain", "Плёнка"], ["flash", "Вспышка на стыках"]];
+const VE_EFFECT_GROUPS = [
+  ["Кадр", [["blurbg", "Размытый фон"], ["zoom", "Медленный зум"], ["pulse", "Пульс в ритм"], ["mirror", "Зеркало"], ["cinema", "Кинорамка"]]],
+  ["Стиль", [["vignette", "Виньетка"], ["grain", "Плёнка"], ["vhs", "VHS-кассета"], ["glitch", "Глитч"], ["rainbow", "Радуга"], ["shake", "Тряска"], ["flash", "Вспышка на стыках"]]],
+];
+const VE_PARTICLES = [[null, "Нет"], ["hearts", "❤️ Сердечки"], ["snow", "❄️ Снег"], ["confetti", "🎊 Конфетти"], ["sparkles", "✨ Блёстки"]];
+const VE_TRANSITIONS = [["none", "Без перехода"], ["fade", "Затемнение"], ["flash", "Вспышка"], ["zoom", "Наезд"], ["slide", "Сдвиг"], ["blur", "Размытие"], ["spin", "Поворот"]];
+const VE_TEXT_ANIMS = [["none", "Без анимации"], ["pop", "Появление"], ["type", "Печать"], ["fade", "Проявление"], ["bob", "Покачивание"], ["pulse", "Пульс"]];
+const VE_MOODS = [["happy", "😊 Весёлая"], ["calm piano", "🌿 Спокойная"], ["party dance", "🎉 Праздник"], ["children kids", "🧸 Детская"], ["romantic love", "💕 Романтика"], ["energetic rock", "⚡ Энергичная"], ["cinematic", "🎬 Кино"], ["acoustic guitar", "🎸 Гитара"]];
 const VE_COLORS = ["#ffffff", "#000000", "#E8664F", "#F2A541", "#FFE14D", "#2EAD6B", "#3D8BFD", "#9B5DE5", "#E0457B"];
 const VE_STICKERS = "😂 😍 🥰 😎 🤩 🥳 😜 😇 🤗 😭 😱 🔥 ✨ 🎉 ❤️ 💯 👍 👏 🙏 💪 👋 🌹 🌸 ☀️ 🌈 ⭐ 🎂 🎁 🐶 🐱 🦄 🍕 ☕ 🏖️ 🎵 📍".split(" ");
 const VE_SPEEDS = [0.5, 1, 1.5, 2, 3];
@@ -86,7 +93,7 @@ const VideoEditor = {
     if (!this.supported()) { toast("Видеоредактор не поддерживается на этом устройстве"); return; }
     if (Calls.pc || Calls.ui || GroupCall.active) { toast("Сначала завершите звонок"); return; }
     this.close();
-    this.st = { opts, clips: [], overlays: [], filter: "none", adj: { b: 100, c: 100, s: 100 }, effects: new Set(["fade"]),
+    this.st = { opts, clips: [], overlays: [], filter: "none", adj: { b: 100, c: 100, s: 100 }, effects: new Set(), transition: "fade", particles: null,
       music: null, musicVol: 0.8, origVol: 1, sel: 0 };
     this.root = h("div", { class: "ve-root" });
     this.pool = h("div", { class: "ve-pool" });                 // скрытые видео-элементы клипов
@@ -96,13 +103,26 @@ const VideoEditor = {
     else if (opts.pick) { this.pickFiles(() => this.editor()); this.camera(); }   // галерея поверх камеры: отмена — остаёмся снимать
     else this.camera();
   },
+  /** Остановить весь звук редактора: клипы, музыку, предпросмотр результата. */
+  silence() {
+    try { this.player?.pause(); } catch { /* */ }
+    for (const el of this.root?.querySelectorAll("video, audio") || []) { try { el.pause(); } catch { /* */ } }
+    for (const el of document.querySelectorAll(".ve-result")) { try { el.pause(); } catch { /* */ } }
+    try { this.st?.music?.el.pause(); } catch { /* */ }
+    try { this.mlPreview?.pause(); } catch { /* */ }
+  },
+  /** Приложение свернули / пришёл звонок — ставим на паузу (монтаж сохраняется). */
+  onBackground() { if (this.root) this.silence(); },
   close() {
     if (!this.root) return;
-    this.player?.stop(); this.cam?.stop?.();
-    this.st?.clips.forEach((c) => { try { c.el.pause(); } catch { /* */ } URL.revokeObjectURL(c.url); });
-    if (this.st?.music) { this.st.music.el.pause(); URL.revokeObjectURL(this.st.music.url); }
+    this.silence();
+    try { this.cam?.stop?.(); } catch { /* */ }
+    // выгружаем все файлы: звук не может продолжиться после закрытия
+    for (const el of this.root.querySelectorAll("video, audio")) { try { el.pause(); el.removeAttribute("src"); el.srcObject = null; el.load(); } catch { /* */ } }
+    this.st?.clips.forEach((c) => { try { URL.revokeObjectURL(c.url); } catch { /* */ } });
+    if (this.st?.music) { try { URL.revokeObjectURL(this.st.music.url); } catch { /* */ } }
     try { this.ac?.close(); } catch { /* */ }
-    this.ac = null; this.player = null; this.cam = null;
+    this.ac = null; this.player = null; this.cam = null; this.st = null;
     this.root.remove(); this.root = null;
   },
   /** «Назад»: из монтажа — к камере, из камеры — выход (с вопросом, если уже что-то снято) */
@@ -330,7 +350,7 @@ const VideoEditor = {
       panel.innerHTML = ""; panel.append(...(this.panels[name]?.call(this, p) || []));
     };
     const T = [["clip", "✂️", "Обрезка"], ["speed", "⏩", "Скорость"], ["filters", "🎨", "Фильтры"], ["text", "Aa", "Текст"],
-      ["stickers", "😊", "Стикеры"], ["music", "🎵", "Музыка"], ["effects", "✨", "Эффекты"], ["order", "↔️", "Порядок"]];
+      ["stickers", "😊", "Стикеры"], ["music", "🎵", "Музыка"], ["effects", "✨", "Эффекты"], ["transitions", "🔀", "Переходы"], ["order", "↔️", "Порядок"]];
     for (const [k, ic, l] of T) tools.append(h("button", { "data-t": k, onclick: () => tool(k) }, h("span", null, ic), h("small", null, l)));
     this.tool = tool;
     drawTimeline(); tool("clip");
@@ -402,6 +422,9 @@ const VideoEditor = {
           h("div", { class: "ve-chips" }, [["shadow", "Обычный"], ["box", "С фоном"], ["outline", "Контур"], ["neon", "Неон"]].map(([k, l]) =>
             h("button", { class: o.style === k ? "on" : "", onclick: () => { o.style = k; p.redrawFrame(); this.tool("text"); } }, l))),
           h("label", { class: "ve-range" }, "Размер", h("input", { type: "range", min: 20, max: 110, value: o.size, oninput: (e) => { o.size = +e.target.value; p.redrawFrame(); } })),
+          h("div", { class: "ve-chips wrap" }, VE_TEXT_ANIMS.map(([k, l]) => h("button", { class: (o.anim || "none") === k ? "on" : "", onclick: () => {
+            o.anim = k; this.tool("text"); if (k !== "none") { p.seek(0); p.play(); clearTimeout(this.anT); this.anT = setTimeout(() => p.pause(), 1800); }
+          } }, l))),
           h("button", { class: "menu-item danger", onclick: () => { st.overlays = st.overlays.filter((x) => x !== o); st.ovSel = null; p.redrawFrame(); this.tool("text"); } }, "Удалить текст"));
       } else if (st.overlays.some((x) => x.type === "text")) out.push(h("p", { class: "sheet-note" }, "Нажмите на текст на видео, чтобы изменить его."));
       return out;
@@ -421,28 +444,39 @@ const VideoEditor = {
       const st = this.st;
       const inp = h("input", { type: "file", accept: "audio/*", style: { display: "none" }, onchange: async (e) => {
         const f = e.target.files[0]; if (!f) return;
-        if (st.music) { st.music.el.pause(); URL.revokeObjectURL(st.music.url); }
-        const url = URL.createObjectURL(f);
-        const el = h("audio", { src: url, preload: "auto" }); this.pool.append(el);
-        await new Promise((r) => { el.onloadedmetadata = r; el.onerror = r; setTimeout(r, 5000); });
-        if (!isFinite(el.duration) || !el.duration) { toast("Не удалось открыть музыку"); return; }
-        st.music = { el, url, name: f.name.replace(/\.[^.]+$/, ""), dur: el.duration, offset: 0 };
-        p.connect(el, "music"); p.applyVolumes(); this.tool("music"); p.seek(0); p.play();
+        await this.useMusic(f, f.name.replace(/\.[^.]+$/, ""), null);
       } });
-      const out = [inp, h("button", { class: "menu-item", onclick: () => inp.click() }, h("span", null, "🎵"), st.music ? `Музыка: ${st.music.name}` : "Выбрать музыку с телефона")];
+      const out = [inp,
+        h("button", { class: "menu-item", onclick: () => this.musicOnline() }, h("span", null, "🌐"), "Найти музыку в интернете"),
+        h("button", { class: "menu-item", onclick: () => inp.click() }, h("span", null, "📱"), "Выбрать музыку с телефона")];
       if (st.music) {
-        out.push(h("label", { class: "ve-range" }, "Начать музыку с", h("input", { type: "range", min: 0, max: Math.max(0, st.music.dur - 1), step: 0.5, value: st.music.offset, onchange: (e) => { st.music.offset = +e.target.value; p.seek(0); } })),
+        out.push(h("div", { class: "ve-row-lbl ve-now" }, `🎵 ${st.music.name}${st.music.credit ? " · " + st.music.credit.license : ""}`),
+          h("label", { class: "ve-range" }, "Начать музыку с", h("input", { type: "range", min: 0, max: Math.max(0, st.music.dur - 1), step: 0.5, value: st.music.offset, onchange: (e) => { st.music.offset = +e.target.value; p.seek(0); } })),
           h("label", { class: "ve-range" }, "Громкость музыки", h("input", { type: "range", min: 0, max: 100, value: st.musicVol * 100, oninput: (e) => { st.musicVol = e.target.value / 100; p.applyVolumes(); } })),
-          h("button", { class: "menu-item danger", onclick: () => { st.music.el.pause(); st.music = null; this.tool("music"); } }, "Убрать музыку"));
+          h("button", { class: "menu-item danger", onclick: () => this.dropMusic() }, "Убрать музыку"));
       }
       out.push(h("label", { class: "ve-range" }, "Громкость звука видео", h("input", { type: "range", min: 0, max: 100, value: st.origVol * 100, oninput: (e) => { st.origVol = e.target.value / 100; p.applyVolumes(); } })));
       return out;
     },
     effects(p) {
       const st = this.st;
-      return [h("div", { class: "ve-chips wrap" }, VE_EFFECTS.map(([k, l]) => h("button", { class: st.effects.has(k) ? "on" : "", onclick: () => {
-        st.effects.has(k) ? st.effects.delete(k) : st.effects.add(k); p.redrawFrame(); this.tool("effects");
-      } }, l)))];
+      const chip = (on, label, fn) => h("button", { class: on ? "on" : "", onclick: () => { fn(); p.redrawFrame(); this.tool("effects"); } }, label);
+      return [
+        ...VE_EFFECT_GROUPS.flatMap(([title, list]) => [h("div", { class: "ve-row-lbl" }, title),
+          h("div", { class: "ve-chips wrap" }, list.map(([k, l]) => chip(st.effects.has(k), l, () => (st.effects.has(k) ? st.effects.delete(k) : st.effects.add(k)))))]),
+        h("div", { class: "ve-row-lbl" }, "Частицы поверх видео"),
+        h("div", { class: "ve-chips wrap" }, VE_PARTICLES.map(([k, l]) => chip(st.particles === k, l, () => { st.particles = k; }))),
+        h("p", { class: "sheet-note" }, "Нажмите ▶ на видео, чтобы увидеть эффекты в движении."),
+      ];
+    },
+    transitions(p) {
+      const st = this.st;
+      return [h("div", { class: "ve-row-lbl" }, st.clips.length > 1 ? "Переход между клипами" : "Переход (виден, когда клипов несколько)"),
+        h("div", { class: "ve-chips wrap" }, VE_TRANSITIONS.map(([k, l]) => h("button", { class: (st.transition || "fade") === k ? "on" : "", onclick: () => {
+          st.transition = k; this.tool("transitions");
+          const b = st.clips.length > 1 ? this.clipStart(1) : 0; p.seek(Math.max(0, b - 0.6)); p.play();           // показать переход
+          clearTimeout(this.trT); this.trT = setTimeout(() => p.pause(), 1300);
+        } }, l)))];
     },
     order(p) {
       const st = this.st, i = st.sel, c = st.clips[i]; if (!c) return [];
@@ -488,11 +522,112 @@ const VideoEditor = {
     canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
   },
 
+  contain(ctx, el, W, H, zoom = 1) {
+    const iw = el.videoWidth || el.naturalWidth || el.width, ih = el.videoHeight || el.naturalHeight || el.height;
+    if (!iw || !ih) return;
+    const k = Math.min(W / iw, H / ih) * zoom, w = iw * k, hh = ih * k;
+    ctx.drawImage(el, (W - w) / 2, (H - hh) / 2, w, hh);
+  },
   cover(ctx, el, W, H, zoom = 1) {
     const iw = el.videoWidth || el.naturalWidth || el.width, ih = el.videoHeight || el.naturalHeight || el.height;
     if (!iw || !ih) return;
     const k = Math.max(W / iw, H / ih) * zoom, w = iw * k, hh = ih * k;
     ctx.drawImage(el, (W - w) / 2, (H - hh) / 2, w, hh);
+  },
+
+  // ───────── Музыка ─────────
+  dropMusic() {
+    const m = this.st?.music; if (!m) return;
+    try { m.el.pause(); m.el.removeAttribute("src"); m.el.load(); m.el.remove(); } catch { /* */ }
+    try { URL.revokeObjectURL(m.url); } catch { /* */ }
+    this.st.music = null; this.tool?.("music");
+  },
+  /** Подключить музыку (файл с телефона или скачанную); credit — автор и лицензия для подписи */
+  async useMusic(blob, name, credit) {
+    const st = this.st, p = this.player; if (!st || !p) return false;
+    this.dropMusic();
+    const url = URL.createObjectURL(blob);
+    const el = h("audio", { src: url, preload: "auto" }); this.pool.append(el);
+    el.addEventListener("play", () => { if (!VideoEditor.root || !VideoEditor.player?.playing) el.pause(); });   // сама по себе музыка не играет
+    await new Promise((r) => { el.onloadedmetadata = r; el.onerror = r; setTimeout(r, 6000); });
+    if (!isFinite(el.duration) || !el.duration) { el.remove(); URL.revokeObjectURL(url); toast("Не удалось открыть музыку"); return false; }
+    if (this.st !== st) { el.remove(); URL.revokeObjectURL(url); return false; }      // редактор уже закрыли
+    st.music = { el, url, name, dur: el.duration, offset: 0, credit };
+    p.connect(el, "music"); p.applyVolumes(); this.tool("music"); p.seek(0); p.play();
+    return true;
+  },
+  async musicApi(body) {
+    const { data, error } = await S.sb.functions.invoke("music", { body });
+    if (error) throw error;
+    return data;
+  },
+  /** Поиск свободной музыки (Creative Commons) и скачивание через сервер семьи */
+  musicOnline() {
+    let close, preview = null, cache = new Map(), gen = 0;   // gen: любое «стоп» отменяет превью, которое ещё грузится
+    const list = h("div", { class: "ve-ml" });
+    const q = h("input", { class: "ve-ml-q", placeholder: "Например: happy, piano, rock, лето…", maxlength: 60, onkeydown: (e) => { if (e.key === "Enter") run(q.value); } });
+    const stopPreview = () => { gen++; if (preview) { preview.pause(); preview = null; this.mlPreview = null; } list.querySelectorAll(".ve-ml-play").forEach((b) => { b.textContent = "▶"; }); };
+    const load = async (it) => {
+      if (cache.has(it.url)) return cache.get(it.url);
+      const data = await this.musicApi({ action: "get", url: it.url });
+      if (!(data instanceof Blob) || data.size < 10000) throw new Error("bad");
+      const blob = new Blob([data], { type: /\.ogg|format=ogg/i.test(it.url) ? "audio/ogg" : "audio/mpeg" });
+      cache.set(it.url, blob); return blob;
+    };
+    const row = (it) => {
+      const play = h("button", { class: "ve-ml-play", title: "Послушать" }, "▶");
+      const add = h("button", { class: "ve-ml-add" }, "Добавить");
+      play.onclick = async () => {
+        if (play.textContent === "⏸") return stopPreview();
+        stopPreview(); play.textContent = "…";
+        const my = gen;
+        const start = async (src) => {
+          if (my !== gen) return false;
+          const a = new Audio(src); preview = this.mlPreview = a;
+          try { await a.play(); } catch (e) { if (preview === a) { preview = this.mlPreview = null; } throw e; }
+          if (my !== gen) { a.pause(); return false; }                    // пока грузилось, нажали «стоп» или «Добавить»
+          return true;
+        };
+        try {
+          // послушать — сразу из интернета, без скачивания; если не вышло — через сервер семьи
+          const direct = /^https:/.test(it.url) ? it.url : null;
+          let ok;
+          try { ok = await start(direct || URL.createObjectURL(await load(it))); }
+          catch (e) { if (!direct || e?.name === "NotAllowedError" || my !== gen) throw e; ok = await start(URL.createObjectURL(await load(it))); }
+          if (ok) { play.textContent = "⏸"; preview.onended = stopPreview; }
+        } catch { if (my === gen) { play.textContent = "▶"; toast("Не удалось включить трек — попробуйте другой"); } }
+      };
+      add.onclick = async () => {
+        add.disabled = true; add.textContent = "Скачиваю…"; stopPreview();
+        try {
+          const b = await load(it); stopPreview(); close();
+          const ok = await this.useMusic(b, it.title, { title: it.title, artist: it.artist, license: it.license });
+          if (ok) toast(`🎵 «${it.title}» добавлена`);
+        } catch { add.disabled = false; add.textContent = "Добавить"; toast("Не удалось скачать трек — попробуйте другой"); }
+      };
+      return h("div", { class: "ve-ml-row" }, play,
+        h("div", { class: "mid" }, h("b", null, it.title), h("small", null, [it.artist, it.duration ? fmtDur(it.duration) : "", it.license].filter(Boolean).join(" · "))), add);
+    };
+    let seq = 0;
+    const run = async (text) => {
+      const my = ++seq; stopPreview();
+      list.innerHTML = ""; list.append(h("p", { class: "sheet-note" }, "Ищу музыку…"));
+      try {
+        const d = await this.musicApi({ action: "search", q: text });
+        if (my !== seq) return;
+        list.innerHTML = "";
+        if (!d?.items?.length) { list.append(h("p", { class: "sheet-note" }, "Ничего не нашлось — попробуйте другое слово (лучше по-английски).")); return; }
+        d.items.forEach((it) => list.append(row(it)));
+      } catch { if (my === seq) { list.innerHTML = ""; list.append(h("p", { class: "sheet-note" }, "Нет связи с поиском музыки. Проверьте интернет и попробуйте ещё раз.")); } }
+    };
+    close = sheet([
+      h("h3", null, "🌐 Музыка из интернета"),
+      h("p", { class: "sheet-note" }, "Свободная музыка с лицензиями Creative Commons (Jamendo, ccMixter, Internet Archive). Автор трека добавится в подпись к статусу."),
+      h("div", { class: "ve-ml-search" }, q, h("button", { class: "btn", onclick: () => run(q.value) }, "Найти")),
+      h("div", { class: "ve-chips wrap ve-moods" }, VE_MOODS.map(([k, l]) => h("button", { onclick: (e) => { e.currentTarget.parentNode.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === e.currentTarget)); q.value = ""; run(k); } }, l))),
+      list,
+    ], () => stopPreview());
+    run("happy");
   },
 
   // ───────── Сборка видео ─────────
@@ -529,7 +664,9 @@ const VideoEditor = {
         const { error } = await S.sb.storage.from("media").upload(path, blob, { contentType: blob.type || "video/webm" });
         if (error) return toast("Не удалось загрузить: " + (error.message || ""));
         await signUrls([path]);
-        await Stories.publish({ media_path: path, media_type: "video", body: cap.value.trim() || null });
+        const cr = this.st?.music?.credit, credit = cr ? `♪ ${cr.title}${cr.artist ? " — " + cr.artist : ""} (${cr.license})` : "";
+        const body = [cap.value.trim(), credit].filter(Boolean).join("\n").slice(0, 500);
+        await Stories.publish({ media_path: path, media_type: "video", body: body || null });
         done();
       } }, "Опубликовать в статус (24 часа)"),
       this.st.opts.chat ? h("button", { class: "menu-item", onclick: async () => { const chat = this.st.opts.chat; done(); if (S.current !== chat) await openChat(chat); FX.sendAnim(); await sendFile(file()); } }, h("span", { html: I.forward }), "Отправить в этот чат") : null,
@@ -652,20 +789,66 @@ class VEPlayer {
     const { b, c, s } = this.st.adj;
     return (f + (b !== 100 ? ` brightness(${b / 100})` : "") + (c !== 100 ? ` contrast(${c / 100})` : "") + (s !== 100 ? ` saturate(${s / 100})` : "")).trim() || "none";
   }
+  // псевдослучайное число по номеру — эффекты одинаковы в предпросмотре и в готовом видео
+  rnd(n) { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
   draw() {
-    const { ctx } = this, W = this.ed.W, H = this.ed.H, st = this.st, fx = st.effects;
+    const { ctx } = this, W = this.ed.W, H = this.ed.H, st = this.st, fx = st.effects, t = this.t;
+    const live = this.playing || this.recording;
     ctx.save(); ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
-    const a = this.at(this.t);
+    const a = this.at(t);
     if (a) {
-      const k = a.local / a.len;
-      const zoom = (a.c.kind === "image" || fx.has("zoom")) ? 1 + 0.08 * k : 1;
-      ctx.filter = this.filterCss();
-      try { VideoEditor.cover(ctx, a.c.el, W, H, zoom); } catch { /* кадр ещё не готов */ }
+      const k = a.local / a.len, D = 0.35;
+      const last = st.clips.length - 1;
+      const inK = a.i > 0 && a.local < D ? 1 - a.local / D : 0;                 // начало клипа (стык с предыдущим)
+      const outK = a.i < last && a.len - a.local < D ? 1 - (a.len - a.local) / D : 0;   // конец клипа (стык со следующим)
+      const tr = st.transition || "fade";
+      let zoom = (a.c.kind === "image" || fx.has("zoom")) ? 1 + 0.08 * k : 1;
+      if (fx.has("pulse")) zoom *= 1 + 0.05 * Math.pow(Math.max(0, Math.cos(t * Math.PI * 4)), 6);   // «удар» 120 раз в минуту
+      ctx.save();
+      // переход: двигаем/масштабируем кадр у стыков
+      const e = Math.max(inK, outK);
+      if (tr === "zoom" && e) zoom *= 1 + 0.45 * e * e;
+      if (tr === "slide" && e) ctx.translate(outK ? -W * outK * outK : W * inK * inK, 0);
+      if (tr === "spin" && e) { ctx.translate(W / 2, H / 2); ctx.rotate((outK ? 1 : -1) * e * e * 0.6); ctx.scale(1 + e * 0.4, 1 + e * 0.4); ctx.translate(-W / 2, -H / 2); }
+      if (fx.has("shake")) { ctx.translate(Math.sin(t * 41) * 5 + Math.sin(t * 13) * 3, Math.cos(t * 37) * 5); zoom *= 1.04; }
+      let filter = this.filterCss();
+      if (fx.has("rainbow")) filter = (filter === "none" ? "" : filter + " ") + `hue-rotate(${Math.round(t * 120) % 360}deg)`;
+      if (tr === "blur" && e) filter = (filter === "none" ? "" : filter + " ") + `blur(${(e * 14).toFixed(1)}px)`;
+      try {
+        if (fx.has("blurbg")) {                                                // размытый фон: горизонтальное видео целиком
+          ctx.filter = (filter === "none" ? "" : filter + " ") + "blur(22px) brightness(.7)";
+          VideoEditor.cover(ctx, a.c.el, W, H, 1.15);
+          ctx.filter = filter; VideoEditor.contain(ctx, a.c.el, W, H, zoom);
+        } else { ctx.filter = filter; VideoEditor.cover(ctx, a.c.el, W, H, zoom); }
+      } catch { /* кадр ещё не готов */ }
       ctx.filter = "none";
-      const edge = Math.min(a.local, a.len - a.local);
-      const many = st.clips.length > 1, first = a.i === 0 && a.local < 0.5, last = a.i === st.clips.length - 1 && a.len - a.local < 0.5;
-      if (fx.has("fade") && edge < 0.35 && (many || first || last)) { ctx.fillStyle = `rgba(0,0,0,${(1 - edge / 0.35) * 0.9})`; ctx.fillRect(0, 0, W, H); }
-      if (fx.has("flash") && a.i > 0 && a.local < 0.18) { ctx.fillStyle = `rgba(255,255,255,${0.85 * (1 - a.local / 0.18)})`; ctx.fillRect(0, 0, W, H); }
+      ctx.restore();
+      if (fx.has("mirror")) { ctx.save(); ctx.setTransform(-1, 0, 0, 1, W, 0); ctx.drawImage(this.canvas, 0, 0, W / 2, H, 0, 0, W / 2, H); ctx.restore(); }
+      // переходы через цвет
+      const first = a.i === 0 && a.local < 0.4, end = a.i === last && a.len - a.local < 0.4;
+      if (tr === "fade") {
+        const f = Math.max(inK, outK, first ? 1 - a.local / 0.4 : 0, end ? 1 - (a.len - a.local) / 0.4 : 0);
+        if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${(f * 0.92).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
+      }
+      if (tr === "flash" && (inK || outK)) { ctx.fillStyle = `rgba(255,255,255,${(Math.max(inK, outK) * 0.9).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
+      if (fx.has("flash") && tr !== "flash" && a.i > 0 && a.local < 0.18) { ctx.fillStyle = `rgba(255,255,255,${0.85 * (1 - a.local / 0.18)})`; ctx.fillRect(0, 0, W, H); }
+    }
+    if (fx.has("glitch") && live) {                                           // глитч: сдвиг полос и двоение
+      const seg = Math.floor(t * 5);
+      if (this.rnd(seg) > 0.45 && (t * 5) % 1 < 0.35) {
+        for (let i = 0; i < 6; i++) {
+          const y = this.rnd(seg * 7 + i) * H, hh = 8 + this.rnd(seg * 11 + i) * 46, dx = (this.rnd(seg * 13 + i) - 0.5) * 70;
+          ctx.drawImage(this.canvas, 0, y, W, hh, dx, y, W, hh);
+        }
+        ctx.save(); ctx.globalAlpha = 0.3; ctx.globalCompositeOperation = "screen"; ctx.drawImage(this.canvas, 7, 0); ctx.restore();
+      }
+    }
+    if (fx.has("vhs")) {
+      if (!this.lines) { this.lines = document.createElement("canvas"); this.lines.width = 4; this.lines.height = 4; const l = this.lines.getContext("2d"); l.fillStyle = "rgba(0,0,0,.22)"; l.fillRect(0, 0, 4, 1); }
+      ctx.fillStyle = ctx.createPattern(this.lines, "repeat"); ctx.fillRect(0, 0, W, H);
+      const band = ((t * 0.35) % 1) * H; ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(0, band, W, 26);
+      ctx.save(); ctx.font = "700 26px ui-monospace, Menlo, Consolas, monospace"; ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.shadowColor = "#000"; ctx.shadowBlur = 4;
+      ctx.fillText("▶ PLAY", 26, 56); ctx.fillText(fmtDur(t).padStart(5, "0"), W - 110, 56); ctx.restore();
     }
     if (fx.has("vignette")) {
       const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.7);
@@ -678,7 +861,34 @@ class VEPlayer {
       gx.putImageData(img, 0, 0); ctx.drawImage(this.grain, 0, 0, W, H);
       ctx.fillStyle = "rgba(255,200,120,0.06)"; ctx.fillRect(0, 0, W, H);
     }
+    if (fx.has("cinema")) { ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H * 0.11); ctx.fillRect(0, H * 0.89, W, H * 0.11); }
+    if (st.particles) this.drawParticles(st.particles, t);
     for (const o of st.overlays) this.drawOverlay(o, o.id === st.ovSel && !this.recording);
+    ctx.restore();
+  }
+  drawParticles(kind, t) {
+    const { ctx } = this, W = this.ed.W, H = this.ed.H;
+    ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const N = kind === "snow" ? 60 : kind === "confetti" ? 46 : 18;
+    for (let i = 0; i < N; i++) {
+      const r1 = this.rnd(i + 1), r2 = this.rnd(i + 101), r3 = this.rnd(i + 201);
+      if (kind === "hearts") {                                                    // сердечки поднимаются
+        const sp = 70 + r2 * 90, y = H + 40 - ((t * sp + r3 * (H + 80)) % (H + 80)), x = r1 * W + Math.sin(t * 2 + i) * 18;
+        ctx.globalAlpha = Math.min(1, (H + 40 - y) / 200) * 0.9; ctx.font = `${22 + r3 * 24}px system-ui`; ctx.fillText(["❤️", "💖", "💕"][i % 3], x, y);
+      } else if (kind === "snow") {                                               // снег падает
+        const sp = 40 + r2 * 80, y = ((t * sp + r3 * (H + 20)) % (H + 20)) - 10, x = (r1 * W + Math.sin(t * 1.3 + i) * 20 + W) % W;
+        ctx.globalAlpha = 0.55 + r3 * 0.4; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x, y, 1.5 + r2 * 3.5, 0, Math.PI * 2); ctx.fill();
+      } else if (kind === "confetti") {                                           // конфетти кружится
+        const sp = 110 + r2 * 140, y = ((t * sp + r3 * (H + 30)) % (H + 30)) - 15, x = (r1 * W + Math.sin(t * 2.2 + i) * 30 + W) % W;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(t * (2 + r3 * 4) + i); ctx.fillStyle = VE_COLORS[2 + (i % 7)];
+        ctx.fillRect(-5, -2.5, 10, 5); ctx.restore();
+      } else if (kind === "sparkles") {                                           // блёстки мерцают
+        const ph = Math.sin(t * (2 + r2 * 3) + i * 2);
+        if (ph < 0.2) continue;
+        ctx.globalAlpha = ph; ctx.font = `${16 + r3 * 22}px system-ui`;
+        ctx.fillText("✨", r1 * W, this.rnd(i + 301 + Math.floor((t * (2 + r2 * 3) + i * 2) / (Math.PI * 2))) * H);
+      }
+    }
     ctx.restore();
   }
   drawOverlay(o, selected) {
@@ -687,6 +897,18 @@ class VEPlayer {
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = `${o.type === "sticker" ? "" : "800 "}${o.size}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
     const x = o.x * W, y = o.y * H, w = ctx.measureText(o.text).width, hh = o.size * 1.2;
+    // анимация (в предпросмотре на паузе текст виден целиком — удобно править)
+    const t = this.t, anim = (this.playing || this.recording) ? o.anim || "none" : "none";
+    let shown = o.text;
+    if (anim !== "none") {
+      ctx.translate(x, y);
+      if (anim === "pop") { const p = Math.min(1, t / 0.45), s = p < 1 ? 1 + 2.7 * Math.pow(p - 1, 3) + 1.7 * Math.pow(p - 1, 2) : 1; ctx.scale(Math.max(0.01, s), Math.max(0.01, s)); }
+      if (anim === "bob") ctx.translate(0, Math.sin(t * 3) * 8);
+      if (anim === "pulse") { const s = 1 + 0.07 * Math.sin(t * 6); ctx.scale(s, s); }
+      if (anim === "fade") ctx.globalAlpha = Math.min(1, t / 0.8);
+      if (anim === "type") shown = o.text.slice(0, Math.floor(t * 14));
+      ctx.translate(-x, -y);
+    }
     if (o.type === "text") {
       const pad = o.size * 0.35;
       if (o.style === "box") {
@@ -694,10 +916,10 @@ class VEPlayer {
         this.round(x - w / 2 - pad, y - hh / 2 - pad * 0.4, w + pad * 2, hh + pad * 0.8, o.size * 0.3); ctx.fill();
         ctx.fillStyle = o.color === "#ffffff" || o.color === "#FFE14D" ? "#fff" : (o.color === "#000000" ? "#fff" : "#fff");
       } else ctx.fillStyle = o.color;
-      if (o.style === "outline") { ctx.lineWidth = Math.max(3, o.size / 9); ctx.strokeStyle = o.color === "#000000" ? "#fff" : "#000"; ctx.lineJoin = "round"; ctx.strokeText(o.text, x, y); }
+      if (o.style === "outline") { ctx.lineWidth = Math.max(3, o.size / 9); ctx.strokeStyle = o.color === "#000000" ? "#fff" : "#000"; ctx.lineJoin = "round"; ctx.strokeText(shown, x, y); }
       if (o.style === "shadow") { ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = o.size / 5; ctx.shadowOffsetY = 2; }
-      if (o.style === "neon") { ctx.shadowColor = o.color; ctx.shadowBlur = o.size / 2.2; ctx.fillStyle = "#fff"; ctx.fillText(o.text, x, y); ctx.fillStyle = o.color; }
-      ctx.fillText(o.text, x, y);
+      if (o.style === "neon") { ctx.shadowColor = o.color; ctx.shadowBlur = o.size / 2.2; ctx.fillStyle = "#fff"; ctx.fillText(shown, x, y); ctx.fillStyle = o.color; }
+      ctx.fillText(shown, x, y);
     } else ctx.fillText(o.text, x, y);
     o.box = [(x - w / 2 - 12) / W, (y - hh / 2 - 12) / H, (x + w / 2 + 12) / W, (y + hh / 2 + 12) / H];
     if (selected) {

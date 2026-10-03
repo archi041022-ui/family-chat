@@ -44,7 +44,7 @@ try:
         A.reload(); A.wait_for_selector("#chatList .chat-item")
         name = lambda n: f"#chatItems .chat-item:not(.quick-pill):has(.name:text-is('{n}'))"
         # ── 1. панель сверху
-        A.wait_for_selector(".quick-bar .assistant-item"); A.wait_for_selector(".quick-bar .tasks-item"); A.wait_for_selector(".quick-bar .family-pill")
+        A.wait_for_selector(".asst-fab.assistant-item"); A.wait_for_selector(".quick-bar .tasks-item"); A.wait_for_selector(".quick-bar .family-pill")   # ассистент — плавающий значок
         assert A.locator(name("Семья")).count() == 0
         shot(A, "y1_A_quickbar")
         A.click(".quick-bar .family-pill"); A.wait_for_selector("#chatView .topbar >> text=Семья"); A.click(".back-btn")

@@ -65,7 +65,7 @@ const Stories = {
     const meHas = g.has(S.me.id);
     const me = this.ringAvatar(S.me.id, "", "Моя история");
     me.onclick = () => (meHas ? this.open(S.me.id) : this.create());
-    if (!meHas) me.append(h("i", { class: "story-plus", html: I.plus }));
+    me.append(h("i", { class: "story-plus", html: I.plus, onclick: (e) => { e.stopPropagation(); this.create(); } }));   // «+» — ещё одна история
     strip.append(h("div", { class: "story-cell" }, me, h("span", null, "Моя история")));
     for (const u of [...unseen, ...seen]) {
       const r = this.ringAvatar(u, "", S.profiles.get(u)?.name);
@@ -75,6 +75,7 @@ const Stories = {
     if (unseen.length + seen.length + (meHas ? 1 : 0) === 0 && !S.filter) {
       strip.append(h("div", { class: "story-hint" }, "Поделитесь моментом дня — история исчезнет через 24 часа"));
     }
+    strip.append(h("button", { class: "story-cell story-all", onclick: () => showTab("stories") }, h("span", { class: "story-all-ico", html: I.story }), h("span", null, "Все")));
     box.append(strip);
   },
 

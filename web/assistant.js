@@ -85,6 +85,7 @@ const Assistant = {
           } }, t))),
       this.composer());
     app.append(view);
+    SwipeBack.attach(view, () => closeChat());
     renderChatList();
     this.render(true);
   },

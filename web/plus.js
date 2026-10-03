@@ -553,6 +553,7 @@ const Tasks = {
       h("div", { class: "messages tasks-list", id: "tasksList" }),
       h("div", { class: "composer task-composer" }, input, h("button", { class: "send", title: "Добавить", html: I.plus, onclick: add })));
     app.append(view);
+    SwipeBack.attach(view, () => closeChat(), { both: true });               // свайп вправо или влево — назад
     renderChatList();
     this.render();
     this.load().then(() => this.render());

@@ -201,7 +201,12 @@ object WebHolder {
         @JavascriptInterface fun setBarColor(hex: String) {
             val a = activity ?: return
             val color = try { android.graphics.Color.parseColor(hex) } catch (_: Throwable) { return }
-            a.runOnUiThread { try { a.window.statusBarColor = color } catch (_: Throwable) {} }
+            // светлая шапка — тёмные значки в строке состояния, тёмная — светлые
+            val light = (android.graphics.Color.red(color) * 299 + android.graphics.Color.green(color) * 587 + android.graphics.Color.blue(color) * 114) / 1000 > 160
+            a.runOnUiThread {
+                try { @Suppress("DEPRECATION") run { a.window.statusBarColor = color } } catch (_: Throwable) {}
+                try { androidx.core.view.WindowCompat.getInsetsController(a.window, a.window.decorView).isAppearanceLightStatusBars = light } catch (_: Throwable) {}
+            }
         }
 
         @JavascriptInterface fun speak(text: String, gender: String) {
