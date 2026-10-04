@@ -69,7 +69,7 @@ const Tg = {
     if (!this.typing.has(p.chat_id)) this.typing.set(p.chat_id, new Map());
     this.typing.get(p.chat_id).set(p.user_id, Date.now());
     this.refreshTyping(p.chat_id);
-    clearTimeout(this.tt); this.tt = setTimeout(() => this.refreshTyping(p.chat_id), 5200);
+    this.tts = this.tts || new Map(); clearTimeout(this.tts.get(p.chat_id)); this.tts.set(p.chat_id, setTimeout(() => this.refreshTyping(p.chat_id), 5200));
   },
   refreshTyping(chatId) {
     renderChatList();
@@ -132,9 +132,10 @@ const Tg = {
     let close;
     const input = h("input", { placeholder: "Найти в переписке", autofocus: true });
     const results = h("div", { class: "search-results" });
-    let timer;
+    let timer, runId = 0;
     const run = async () => {
       const q = input.value.trim().toLowerCase();
+      const my = ++runId;
       results.innerHTML = "";
       if (q.length < 2) return;
       const found = new Map();
@@ -143,6 +144,7 @@ const Tg = {
         const { data } = await S.sb.from("messages").select("*").eq("chat_id", c.id).ilike("body", `%${q}%`).order("created_at", { ascending: false }).limit(60);
         for (const m of data || []) if (!m.deleted) found.set(m.id, m);
       } catch { /* только загруженные */ }
+      if (my !== runId) return;                       // пока ждали ответ, запрос уже изменился
       const list = [...found.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       if (!list.length) { results.append(h("p", { class: "empty-chat" }, "Ничего не найдено")); return; }
       for (const m of list.slice(0, 60)) {
@@ -160,10 +162,9 @@ const Tg = {
   },
   async jumpToMessage(chatId, m) {
     if (S.current !== chatId) await openChat(chatId);
-    const list = S.msgs.get(chatId) || [];
-    // догружаем историю, пока не найдём сообщение
-    for (let i = 0; i < 20 && !list.some((x) => x.id === m.id); i++) {
-      const more = await loadMessages(chatId, list[0]?.created_at);
+    // догружаем историю, пока не найдём сообщение (список каждый раз читаем заново — loadMessages кладёт новый массив)
+    for (let i = 0; i < 20 && !(S.msgs.get(chatId) || []).some((x) => x.id === m.id); i++) {
+      const more = await loadMessages(chatId, (S.msgs.get(chatId) || [])[0]?.created_at);
       if (!more?.length) break;
     }
     renderMessages(false);
@@ -413,8 +414,8 @@ const Tg = {
       this.toggle("Реакции на мои сообщения и истории", "nReacts"),
       this.toggle("Звук отправки в открытом чате", "inAppSound"),
       h("button", { class: "menu-item", onclick: () => Snd.sheet() }, h("span", { html: I.bell }), h("span", null, "Мелодии звонка и уведомлений", h("small", { class: "sub" }, `Звонок: ${Snd.title("ring")} · Сообщения: ${Snd.title("msg")}`))),
-      h("button", { class: "menu-item", onclick: () => FcmSetup.sheet() }, h("span", { html: I.bell }), "⚡ Мгновенные оповещения"),
-      window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => window.AndroidBridge.openSettings("notifications") }, h("span", { html: I.gear }), "Системные настройки уведомлений") : null,
+      S.isAdmin ? h("button", { class: "menu-item", onclick: () => FcmSetup.sheet() }, h("span", { html: I.bell }), "⚡ Мгновенные оповещения (администратор)") : null,
+      window.AndroidBridge?.openSettings ? h("button", { class: "menu-item", onclick: () => window.AndroidBridge.openSettings?.("notifications") }, h("span", { html: I.gear }), "Системные настройки уведомлений") : null,
       h("p", { class: "sheet-note" }, "Отключить звук у отдельного чата: долгое нажатие на чат → «Без звука»."),
     ]);
   },
@@ -430,14 +431,14 @@ const Tg = {
       }
       const line = (ok, label, fixLabel, what) => h("div", { class: `health${ok ? " ok" : " bad"}` },
         h("span", { class: "st" }, ok ? "✓" : "!"), h("span", { class: "lbl" }, label),
-        ok ? null : h("button", { class: "btn small", onclick: () => { window.AndroidBridge.openSettings(what); setTimeout(draw, 1500); } }, fixLabel));
+        ok ? null : h("button", { class: "btn small", onclick: () => { window.AndroidBridge.openSettings?.(what); setTimeout(draw, 1500); } }, fixLabel));
       rows.append(
         line(st.notifications, "Уведомления разрешены", "Разрешить", "notifications"),
         line(st.overlay !== false, "Показ поверх других приложений (включает экран при звонке)", "Разрешить", "overlay"),
         line(st.fullScreen, "Звонок на весь экран при блокировке", "Разрешить", "fullScreen"),
         line(st.battery, "Без ограничений экономии батареи", "Снять", "battery"),
         line(st.service, "Работа в фоне включена", "Открыть", "app"),
-        h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: !!st.reliable, onchange: (e) => window.AndroidBridge.setReliable(e.target.checked) }),
+        h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: !!st.reliable, onchange: (e) => window.AndroidBridge.setReliable?.(e.target.checked) }),
           h("span", null, "Надёжные звонки", h("small", null, "Телефон не усыпляет связь с сервером — звонки доходят при выключенном экране. Немного больше расход батареи."))));
     };
     draw();
@@ -453,7 +454,7 @@ const Tg = {
       h("label", { class: "toggle-row" }, h("span", null, "Расшифровывать голосовые сами", h("small", null, "Входящие голосовые и кружки превращаются в текст прямо на телефоне")),
         h("input", { type: "checkbox", checked: Prefs.get("sttAuto") !== false, onchange: (e) => Prefs.set("sttAuto", e.target.checked) })),
       h("button", { class: "menu-item", onclick: async () => { try { await caches.delete("stt-v1"); STT.model = null; STT.loading = null; toast("Модель распознавания речи удалена (≈45 МБ)"); } catch { /* */ } } }, h("span", { html: I.trash }), "Удалить модель распознавания речи"),
-      h("button", { class: "menu-item", onclick: () => { S.msgs.clear(); toast("Кэш сообщений очищен — переписки загрузятся заново"); } }, h("span", { html: I.trash }), "Очистить кэш сообщений"),
+      h("button", { class: "menu-item", onclick: () => { S.msgs.clear(); if (S.current) loadMessages(S.current).then(() => renderMessages(false)); toast("Кэш сообщений очищен — переписки загрузятся заново"); } }, h("span", { html: I.trash }), "Очистить кэш сообщений"),
       h("button", { class: "menu-item", onclick: () => {
         if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; }
         Assistant.history = []; Assistant.save(); toast("Переписка с ассистентом очищена");
@@ -505,7 +506,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "3.2";
+const APP_VERSION = "3.3";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {
@@ -529,7 +530,7 @@ Object.assign(Tg, {
     const p = S.profiles.get(uid); if (!p) return;
     const me = uid === S.me.id;
     const on = S.online.has(uid);
-    let close;
+    let close; const slot = h("div", { class: "pv-gifts-slot" });
     const row = (icon, label, value, onclick) => value ? h("div", { class: `info-row${onclick ? " link" : ""}`, onclick },
       h("span", { class: "info-ico" }, icon), h("div", null, h("div", { class: "info-val" }, value), h("small", null, label))) : null;
     const since = p.created_at ? new Date(p.created_at).toLocaleDateString("ru-RU", { month: "long", year: "numeric" }) : "";
@@ -555,11 +556,11 @@ Object.assign(Tg, {
       info.length > 2 || p.bio || p.family_role ? h("div", { class: "pv-info" }, info)
         : h("div", { class: "pv-info" }, info, h("p", { class: "sheet-note", style: { textAlign: "center", margin: "8px" } },
           me ? "Расскажите о себе: нажмите «Изменить» и заполните анкету." : "Пока ничего не рассказал(а) о себе.")),
-      h("div", { class: "pv-gifts-slot" }),
+      slot,
       me ? null : h("button", { class: `menu-item${Privacy.isBlocked(uid) ? "" : " danger"}`, onclick: async () => { close(); await Privacy.block(uid, !Privacy.isBlocked(uid)); } },
         h("span", null, "🚫"), Privacy.isBlocked(uid) ? "Разблокировать" : "Заблокировать"),
     ]);
-    Gifts.section(uid).then((el) => document.querySelector(".pv-gifts-slot")?.replaceWith(el)).catch(() => {});
+    Gifts.section(uid).then((el) => slot.replaceWith(el)).catch(() => {});
   },
 });
 
@@ -577,6 +578,12 @@ const Updates = {
   },
   start() {
     clearInterval(this.timer);
+    // после установки сборка уже новее ожидавшейся — гасим подсветку сразу, не дожидаясь проверки
+    this.ownBuild().then((own) => {
+      let pend = 0; try { pend = +(localStorage.getItem("updPending") || 0); } catch { /* */ }
+      if (pend && own.build && own.build >= pend) { try { localStorage.removeItem("updPending"); } catch { /* */ } window.AndroidBridge?.updateClear?.(); }
+      else if (pend && own.build) setTimeout(() => document.querySelector("#tabBtnMenu")?.classList.add("upd-glow"), 1500);   // обновление ещё не поставлено — подсветка с первой секунды
+    });
     setTimeout(() => this.check(false), 5000);
     this.timer = setInterval(() => this.check(false), 6 * 3600e3);
   },
@@ -606,10 +613,22 @@ const Updates = {
       return null;
     }
     this.latest = found;
+    this.paint();
     if (found) { this.announce(); this.auto(); }
     else if (manual) toast(own.build ? "У вас последняя версия ✓" : "Проверка доступна в установленном приложении");
     renderChatList();
     return found;
+  },
+  // Пока обновление не установлено: значок «Меню» подсвечен, плитка «Обновить» пульсирует, а на Android — постоянное
+  // уведомление и точка на значке приложения. Всё гаснет само, когда стоит сборка не старше последней.
+  paint() {
+    const f = this.latest;
+    document.querySelector("#tabBtnMenu")?.classList.toggle("upd-glow", !!f);
+    try {
+      if (f) { localStorage.setItem("updPending", String(f.build)); window.AndroidBridge?.updateNotice?.(f.version || ""); }
+      else { localStorage.removeItem("updPending"); window.AndroidBridge?.updateClear?.(); }
+    } catch { /* */ }
+    if (S.tab === "menu") Menu.render();
   },
   announce() {
     const f = this.latest; if (!f) return;
@@ -666,7 +685,8 @@ const Updates = {
   auto() {
     const f = this.latest; if (!f || Prefs.get("autoUpdate") === false) return;
     if (f.web) {
-      if (!Calls.ui && !GroupCall.active && !($("#input")?.value || "").trim()) location.reload();
+      const busy = Calls.ui || GroupCall.active || ($("#input")?.value || "").trim() || $(".recording") || $(".sheet-back") || $("#veRoot, .ve-root") || Voice.cancel;
+      if (!busy) location.reload();
       return;
     }
     if (!window.AndroidBridge?.downloadUpdate) return;

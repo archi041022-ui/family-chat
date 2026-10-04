@@ -1348,3 +1348,51 @@ body.pip .call video.remote { width: 100%; height: 100%; object-fit: cover; }
 .call-bg.photo { filter: blur(5px) brightness(.62) saturate(1.1); transform: scale(1.06); background-size: cover; background-position: center 30%; }
 .call-bg.photo::after { background: linear-gradient(180deg, rgba(0,0,0,.35), transparent 30%, transparent 55%, rgba(0,0,0,.6)); }
 .topbar.searching > .title, .topbar.searching > .top-search-btn { visibility: hidden; }
+
+/* ───────── v3.3: изящные округлые значки меню ───────── */
+.mn-ico { --c: #5F6B7A; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(150deg, rgba(255,255,255,.32), rgba(255,255,255,0) 58%), var(--c);
+  box-shadow: 0 6px 12px -7px var(--c), inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 4px rgba(0,0,0,.08);
+  transition: transform .15s; }
+.mn-tile:active .mn-ico { transform: scale(.93); }
+.mn-ico svg { width: 22px; height: 22px; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 1px rgba(0,0,0,.12)); }
+.mn-tile { gap: 7px; }
+.mn-lbl { font-size: 12px; letter-spacing: .01em; }
+.mn-sec { border-radius: 18px; }
+.mn-profile { border-radius: 18px; }
+.mn-badge { top: 4px; right: calc(50% - 28px); box-shadow: 0 0 0 2px var(--panel); }
+
+/* ───────── v3.3: подсветка, пока обновление не установлено ───────── */
+@keyframes updPulse { 0% { box-shadow: 0 0 0 0 rgba(229,96,58,.55); } 70% { box-shadow: 0 0 0 11px rgba(229,96,58,0); } 100% { box-shadow: 0 0 0 0 rgba(229,96,58,0); } }
+@keyframes updGlow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(229,96,58,0)); transform: scale(1); } 50% { filter: drop-shadow(0 0 6px rgba(229,96,58,.95)); transform: scale(1.1); } }
+.mn-tile.glow .mn-ico { animation: updPulse 1.8s ease-out infinite; }
+.bottom-tabs .upd-glow { color: #E5603A; }
+.bottom-tabs .upd-glow svg { animation: updGlow 1.8s ease-in-out infinite; }
+.bottom-tabs .upd-glow::after { content: ""; position: absolute; top: 6px; left: calc(50% + 6px); width: 9px; height: 9px; border-radius: 50%; background: #E5603A; box-shadow: 0 0 0 2px var(--panel); }
+.bottom-tabs button { position: relative; }
+
+@keyframes tabSlideL { from { transform: translateX(28px); opacity: .35; } to { transform: none; opacity: 1; } }
+@keyframes tabSlideR { from { transform: translateX(-28px); opacity: .35; } to { transform: none; opacity: 1; } }
+.tab-body.slide-l { animation: tabSlideL .22s ease-out; }
+.tab-body.slide-r { animation: tabSlideR .22s ease-out; }
+
+/* ───────── v3.3: GIF ───────── */
+.gif-box { display: flex; flex-direction: column; min-height: 320px; max-height: 62vh; }
+.gif-tabs { display: flex; gap: 6px; padding: 0 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.gif-tabs button { flex: 1; height: 36px; border-radius: 18px; font-size: 14px; font-weight: 500; background: var(--bg); }
+.gif-tabs button.on { background: var(--accent-soft); color: var(--accent); }
+.gif-body { overflow-y: auto; flex: 1; min-height: 0; }
+.gif-search { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.gif-q { flex: 1; height: 40px; border-radius: 20px; border: 1px solid var(--line); background: var(--bg); padding: 0 14px; color: var(--text); font-size: 15px; min-width: 0; }
+.gif-cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 8px; scrollbar-width: none; }
+.gif-cats button { flex: none; height: 30px; padding: 0 12px; border-radius: 15px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+.gif-grid { columns: 2; column-gap: 6px; }
+.gif-cell { position: relative; display: block; width: 100%; margin: 0 0 6px; padding: 0; border-radius: 12px; overflow: hidden; background: var(--bg); break-inside: avoid; min-height: 60px; }
+.gif-cell img { display: block; width: 100%; height: auto; }
+.gif-cell:active { transform: scale(.97); }
+.gif-act { position: absolute; right: 6px; bottom: 6px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, .55); color: #fff; font-style: normal; font-size: 14px; }
+.gif-act svg { width: 16px; height: 16px; }
+.gif-act.busy { opacity: .6; animation: wlFloat 1s infinite; }
+.gif-act.done { background: var(--accent); }
+.gif-more { display: block; margin: 6px auto 4px; }
+.gif-src { text-align: center; font-size: 11px; }

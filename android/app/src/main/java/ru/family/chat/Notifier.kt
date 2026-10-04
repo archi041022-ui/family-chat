@@ -19,6 +19,8 @@ object Notifier {
     const val CH_MSG = "messages_v2"
     const val CH_CALL = "calls_v2"
     const val CH_SERVICE = "service"
+    const val CH_UPDATE = "update_v1"
+    const val ID_UPDATE = 101
     const val ID_SERVICE = 100
     private const val ID_CALL = 2
 
@@ -36,6 +38,10 @@ object Notifier {
             enableVibration(false)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             setBypassDnd(false)
+        })
+        nm.createNotificationChannel(NotificationChannel(CH_UPDATE, "Обновления", NotificationManager.IMPORTANCE_LOW).apply {
+            setShowBadge(true)                       // точка на значке приложения
+            description = "Напоминание, пока новая версия не установлена"
         })
         nm.createNotificationChannel(NotificationChannel(CH_SERVICE, "Работа в фоне", NotificationManager.IMPORTANCE_MIN).apply {
             setShowBadge(false)
@@ -147,6 +153,24 @@ object Notifier {
         (ctx.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() ?: true)
 
     /** Звонок принят, отклонён или завершён: убрать уведомление и обязательно остановить мелодию. */
+    /** Новая версия вышла, но не установлена: постоянное уведомление — на значке приложения горит точка, пока не обновитесь. */
+    fun updateAvailable(ctx: Context, version: String) {
+        if (!allowed(ctx)) return
+        val n = NotificationCompat.Builder(ctx, CH_UPDATE)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle("Доступно обновление${if (version.isNotBlank()) " $version" else ""}")
+            .setContentText("Откройте «Семью» и нажмите «Обновить»")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setNumber(1)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setContentIntent(openIntent(ctx, null, ID_UPDATE))
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(ID_UPDATE, n) } catch (_: SecurityException) {}
+    }
+
+    fun updateClear(ctx: Context) { try { NotificationManagerCompat.from(ctx).cancel(ID_UPDATE) } catch (_: Throwable) {} }
+
     fun cancelCall(ctx: Context) { Sounds.ringStop(); NotificationManagerCompat.from(ctx).cancel(ID_CALL) }
 
     fun clearMessages(ctx: Context) {

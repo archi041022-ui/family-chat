@@ -54,10 +54,12 @@ const VideoNote = {
     const startCam = async () => {
       stopStream();
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const got = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: this.facing, width: { ideal: 640 }, height: { ideal: 640 }, aspectRatio: { ideal: 1 }, frameRate: { ideal: 30, max: 30 } },
           audio: { echoCancellation: true, noiseSuppression: true },
         });
+        if (cancelled || !root.isConnected) { got.getTracks().forEach((t) => t.stop()); return; }   // закрыли, пока шёл запрос доступа — камеру не держим
+        stream = got;
         preview.srcObject = stream; preview.classList.toggle("mirror", this.facing === "user");
       } catch { toast("Нет доступа к камере или микрофону"); finish(); }
     };
@@ -163,6 +165,7 @@ async function sendLocation() {
 
 // ───────────── Управление участниками (администратор) ─────────────
 async function membersAdmin() {
+  if (!S.isAdmin) return;                                // только администратор (сервер проверяет ещё раз)
   await loadProfiles();
   let close;
   const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id).sort((a, b) => (a.banned - b.banned) || a.name.localeCompare(b.name, "ru"));

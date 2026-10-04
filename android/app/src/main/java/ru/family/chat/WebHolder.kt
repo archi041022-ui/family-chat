@@ -61,6 +61,15 @@ object WebHolder {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 loader.shouldInterceptRequest(request.url)
 
+            // система убила процесс отрисовки (мало памяти) — пересоздаём WebView, а не падаем
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                try { (view.parent as? android.view.ViewGroup)?.removeView(view); view.destroy() } catch (_: Exception) { }
+                if (web === view) { web = null; wrapper = null }
+                val a = activity
+                a?.runOnUiThread { try { a.recreate() } catch (_: Exception) { } }
+                return true
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.host == HOST) return false
                 openExternal(app, request.url)
@@ -105,7 +114,9 @@ object WebHolder {
         activityRef = null
     }
 
-    fun js(code: String) { web?.post { web?.evaluateJavascript(code, null) } }
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    // Не View.post: у отсоединённого WebView (приложение в фоне) он откладывает код до возвращения окна — звонок мог опоздать
+    fun js(code: String) { mainHandler.post { try { web?.evaluateJavascript(code, null) } catch (_: Exception) { } } }
 
     fun destroy() {
         web?.let { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }
@@ -124,6 +135,10 @@ object WebHolder {
 
         @JavascriptInterface fun notify(title: String, text: String, chatId: String?) =
             Notifier.message(ctx, title, text, chatId)
+
+        /** Пока есть непоставленное обновление — постоянное уведомление и точка на значке. */
+        @JavascriptInterface fun updateNotice(version: String?) = Notifier.updateAvailable(ctx, version ?: "")
+        @JavascriptInterface fun updateClear() = Notifier.updateClear(ctx)
 
         @JavascriptInterface fun incomingCall(name: String) = Notifier.incomingCall(ctx, name, false)
 

@@ -79,7 +79,7 @@ const Moderation = {
     const el = document.querySelector(`#msgs .msg[data-id="${m.id}"] .bubble`);
     if (!ok) await FX.dust(el);
     const { data, error } = await S.sb.rpc("moderate_message", { mid: m.id, ok });
-    if (error || data !== "OK") { toast("Не получилось"); return; }
+    if (error || data !== "OK") { toast("Не получилось"); if (S.current === m.chat_id) renderMessages(false); return; }   // сообщение возвращаем на место
     const list = S.msgs.get(m.chat_id) || [];
     if (ok) { m.approved = true; FX.sparkle(el); toast("Опубликовано"); }
     else { const i = list.indexOf(m); if (i >= 0) list.splice(i, 1); toast("Отклонено"); }
@@ -340,7 +340,7 @@ const FcmSetup = {
         row((st?.people || 0) > 0, `Телефонов с мгновенными оповещениями: ${st?.devices || 0} (людей: ${st?.people || 0})`),
         ph ? row(!!ph.token, ph.token ? "Этот телефон получает мгновенные оповещения" : (st?.configured ? "Этот телефон ещё не получил адрес Firebase" + (ph.error ? ` (${ph.error})` : "") : "Этот телефон: ждёт подключения")) : null,
       );
-      if (!S.isAdmin) { box.append(h("p", { class: "sheet-note" }, "Подключает администратор семьи. Остальным ничего делать не нужно — после подключения достаточно открыть приложение.")); return; }
+      if (!S.isAdmin) { box.append(h("p", { class: "sheet-note" }, "Настройка доступна только администратору семьи. Остальным ничего делать не нужно.")); return; }
       const pick = (label, onfile) => {
         const inp = h("input", { type: "file", accept: "*/*", style: { display: "none" }, onchange: async (e) => { const f = e.target.files[0]; if (f) await onfile(f); e.target.value = ""; } });
         return [h("button", { class: "menu-item", onclick: () => inp.click() }, h("span", { html: I.download }), label), inp];

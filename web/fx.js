@@ -217,15 +217,7 @@ const Emoji = {
       tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === k));
       body.innerHTML = "";
       if (k === "stickers") { body.append(Stickers.pane(() => close())); return; }   // наборы, избранные, свои стикеры
-      if (k === "gif") {
-        const file = h("input", { type: "file", accept: "image/gif,image/webp,video/mp4", class: "hidden" });
-        file.onchange = async () => { const f = file.files[0]; if (!f) return; close(); FX.sendAnim(); await sendFile(f); };
-        body.append(h("div", { class: "gif-pane" },
-          h("div", { class: "gif-hero" }, "🎞️"),
-          h("p", null, "Отправьте GIF-анимацию или короткое видео из галереи — оно будет проигрываться прямо в чате."),
-          h("button", { class: "btn wide", onclick: () => file.click() }, "Выбрать GIF из галереи"), file));
-        return;
-      }
+      if (k === "gif") { body.append(Gifs.pane(() => close())); return; }   // найти, скачать в «Мои», добавить свой
       const list = k === "recent" ? this.recent() : (EMOJI_SETS.find((x) => x[0] === k)?.[2] || "").split(" ");
       if (!list.length) { body.append(h("p", { class: "empty-chat" }, "Здесь появятся недавние эмодзи")); return; }
       body.append(h("div", { class: "emoji-grid" }, list.map((e) => h("button", { onclick: () => {
@@ -450,11 +442,12 @@ const Groups = {
       h("div", { class: "section-title", style: { padding: "4px 4px 6px" } }, "Участники"),
       h("div", { class: "people-pick" }, picks),
       h("button", { class: "btn wide", style: { marginTop: "12px" }, onclick: async (e) => {
+        const btn = e.currentTarget;
         const ids = picks.map((l) => l.querySelector("input")).filter((i) => i.checked).map((i) => i.value);
         if (!title.value.trim()) { toast("Введите название"); return; }
-        e.currentTarget.disabled = true;
+        btn.disabled = true;
         const { data: id, error } = await S.sb.rpc("create_group", { title: title.value.trim(), members: ids });
-        if (error || !id) { e.currentTarget.disabled = false; toast("Не удалось создать группу"); return; }
+        if (error || !id) { btn.disabled = false; toast("Не удалось создать группу"); return; }
         let avatar = null;
         try { if (photo) avatar = await this.uploadPhoto(id, photo); } catch { toast("Фото не загрузилось — можно добавить позже"); }
         if (desc.value.trim() || avatar) await S.sb.rpc("group_update", { cid: id, new_title: title.value.trim(), new_description: desc.value.trim(), new_avatar: avatar });
@@ -513,11 +506,11 @@ const Groups = {
       h("label", { class: "field" }, h("span", null, "Название"), title),
       h("label", { class: "field" }, h("span", null, "Описание"), desc),
       h("button", { class: "btn wide", onclick: async (e) => {
-        e.currentTarget.disabled = true;
+        const btn = e.currentTarget; btn.disabled = true;
         let avatar = removePhoto ? "" : null;
         try { if (photo) avatar = await this.uploadPhoto(c.id, photo); } catch { toast("Фото не загрузилось"); }
         const { data } = await S.sb.rpc("group_update", { cid: c.id, new_title: title.value, new_description: desc.value, new_avatar: avatar });
-        if (data !== "OK") { e.currentTarget.disabled = false; toast("Изменять группу может только её создатель"); return; }
+        if (data !== "OK") { btn.disabled = false; toast("Изменять группу может только её создатель"); return; }
         close(); toast("Сохранено"); await this.refresh(c.id);
         if (S.current === c.id) { const id = c.id; S.current = null; openChat(id); }
       } }, "Сохранить"),

@@ -20,9 +20,11 @@ const Menu = {
   render() {
     const box = $("#tabMenu"); if (!box) return;
     box.innerHTML = "";
-    const tile = (bg, icon, label, onclick, badge) => h("button", { class: "mn-tile", onclick },
-      h("span", { class: "mn-ico", style: { background: bg }, html: icon }), h("span", { class: "mn-lbl" }, label),
-      badge ? h("i", { class: "mn-badge" }, badge > 99 ? "99+" : String(badge)) : null);
+    const tile = (bg, icon, label, onclick, badge, glow) => {
+      const ico = h("span", { class: "mn-ico", html: icon }); ico.style.setProperty("--c", bg);      // свой цвет у каждого значка
+      return h("button", { class: `mn-tile${glow ? " glow" : ""}`, onclick }, ico, h("span", { class: "mn-lbl" }, label),
+        badge ? h("i", { class: "mn-badge" }, badge > 99 ? "99+" : String(badge)) : null);
+    };
     const section = (title, ...tiles) => h("section", { class: "mn-sec" }, h("div", { class: "mn-cap" }, title), h("div", { class: "mn-grid" }, ...tiles.filter(Boolean)));
     const tasks = Tasks.active().length, unseen = Stories.order().unseen.length, famUnread = S.unread.get(FAMILY_CHAT) || 0;
     box.append(...[                                    // пустые разделы (например, «Администратор») не выводим
@@ -47,13 +49,14 @@ const Menu = {
       S.isAdmin ? section("Администратор",
         tile("#5F6B7A", I.shield, "Участники", () => membersAdmin()),
         tile("#5F6B7A", I.key, "Сброс пароля", () => adminResetSheet()),
-        tile("#5F6B7A", I.bell, "Мгновенные оповещения", () => FcmSetup.sheet())) : null,
+        tile("#5F6B7A", I.bell, "Мгновенные оповещения", () => FcmSetup.sheet()),
+        tile("#5F6B7A", MI.film, "GIF: ключ GIPHY", () => Gifs.adminSheet())) : null,
       section("Настройки",
         tile("#5F6B7A", I.gear, "Настройки", () => showTab("settings")),
         tile("#3E4A5A", MI.lock, "Конфиденциальность", () => Privacy.sheet()),
         tile("#5F6B7A", I.bell, "Уведомления", () => Tg.notifSheet())),
       section("Приложение",
-        tile("#5F6B7A", I.download, "Обновления", () => Updates.sheet(), Updates.latest ? 1 : 0),
+        tile(Updates.latest ? "#E5603A" : "#5F6B7A", I.download, Updates.latest ? "Обновить" : "Обновления", () => Updates.sheet(), Updates.latest ? 1 : 0, !!Updates.latest),
         tile("#5F6B7A", I.info, "О приложении", () => Tg.aboutSheet())),
     ].filter(Boolean));
   },
@@ -152,6 +155,61 @@ const SwipeBack = {
       } else reset();
     };
     view.addEventListener("touchend", end); view.addEventListener("touchcancel", end);
+  },
+};
+
+// ───────── Свайп между разделами главного экрана: Меню ↔ Чаты ↔ Контакты ↔ Звонки ─────────
+const TabSwipe = {
+  ORDER: ["menu", "chats", "contacts", "calls"],
+  // внутри горизонтально прокручиваемых элементов (истории, папки, чипы) жест принадлежит им
+  inScroller(el, root) {
+    for (let n = el; n && n !== root; n = n.parentElement) {
+      if (n.matches?.("input, textarea, select, [data-noswipe], .story-top, .folders, .task-filters, .asst-fab")) return true;
+      if (n.scrollWidth > n.clientWidth + 4) { const ox = getComputedStyle(n).overflowX; if (ox === "auto" || ox === "scroll") return true; }
+    }
+    return false;
+  },
+  blocked() {
+    return !!(document.querySelector(".sheet-back, .call:not(.mini), .ve-root, .camera, .video-rec, .vnote-rec, .lightbox, .story-viewer, .scan-editor, .gift-reveal, .welcome, .lock-screen, .auth") || $(".topbar.searching"));
+  },
+  go(dir) {
+    const i = this.ORDER.indexOf(S.tab || "chats"); if (i < 0) return false;
+    const to = this.ORDER[i + dir]; if (!to) return false;
+    showTab(to);
+    const body = $("#tab" + to[0].toUpperCase() + to.slice(1));
+    if (body) { body.classList.remove("slide-l", "slide-r"); void body.offsetWidth; body.classList.add(dir > 0 ? "slide-l" : "slide-r"); setTimeout(() => body.classList.remove("slide-l", "slide-r"), 260); }
+    return true;
+  },
+  attach(root) {
+    if (!root || root._tabSwipe) return; root._tabSwipe = true;
+    let x0 = 0, y0 = 0, t0 = 0, active = false, decided = false, horiz = false, dx = 0, body = null;
+    root.addEventListener("touchstart", (e) => {
+      active = false;
+      if (e.touches.length > 1 || this.ORDER.indexOf(S.tab || "chats") < 0 || this.blocked()) return;
+      if (this.inScroller(e.target, root)) return;
+      const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); dx = 0; active = true; decided = false; horiz = false;
+      const cur = S.tab || "chats"; body = $("#tab" + cur[0].toUpperCase() + cur.slice(1));
+    }, { passive: true });
+    root.addEventListener("touchmove", (e) => {
+      if (!active) return;
+      const t = e.touches[0], ddx = t.clientX - x0, ddy = t.clientY - y0;
+      if (!decided) {
+        if (Math.abs(ddx) < 12 && Math.abs(ddy) < 12) return;
+        decided = true; horiz = Math.abs(ddx) > Math.abs(ddy) * 1.8;
+        if (!horiz) { active = false; return; }
+      }
+      dx = ddx;
+      const i = this.ORDER.indexOf(S.tab || "chats"), can = this.ORDER[i + (dx < 0 ? 1 : -1)];
+      if (body && can) { body.style.transition = "none"; body.style.transform = `translateX(${dx * 0.3}px)`; body.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / innerWidth)); }
+    }, { passive: true });
+    const end = () => {
+      if (!active) return; active = false;
+      if (body) { body.style.transition = "transform .18s, opacity .18s"; body.style.transform = ""; body.style.opacity = ""; setTimeout(() => { if (body) body.style.transition = ""; }, 200); }
+      if (!horiz) return;
+      const fast = Date.now() - t0 < 280 && Math.abs(dx) > 40;
+      if (Math.abs(dx) > 70 || fast) this.go(dx < 0 ? 1 : -1);
+    };
+    root.addEventListener("touchend", end); root.addEventListener("touchcancel", end);
   },
 };
 

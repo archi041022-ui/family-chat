@@ -25,12 +25,12 @@
     if (table === "join_requests") { const ch = db.chats.find((x) => x.id === row.chat_id); return row.user_id === u || (ch && (ch.created_by === u || db.admin === u)); }
     if (table === "reactions") return isMember(db, row.chat_id, u);
     if (table === "notices") return row.user_id === u;
-    if (table === "user_stickers") return row.user_id === u;
+    if (table === "user_stickers" || table === "user_gifs") return row.user_id === u;
     if (table === "user_gifts") return row.to_user === u;
     if (table === "story_views") return row.viewer_id === u || db.stories.some((s) => s.id === row.story_id && s.user_id === u);
     return true;
   };
-  const emit = (table, event, row) => { const msg = { table, event, row }; bc.postMessage(msg); dispatch(msg); };
+  const emit = (table, event, row, old) => { const msg = { table, event, row, old }; bc.postMessage(msg); dispatch(msg); };
   // серверные оповещения (как триггеры 010_notices.sql)
   const ntext = (m) => {
     const t = String(m.body || "").replace(/\u2063/g, "").replace(/\u2062fx:[a-z]+/g, "").replace(/^↪️ Переслано от [^\n]*\n?/, "").split("\u2064")[0].trim();
@@ -139,6 +139,7 @@
           remind: r.remind !== false, chat_id: r.chat_id ?? null, assignee_id: r.assignee_id ?? null, due_at: r.due_at ?? null, note: r.note ?? null });
         if (this.t === "stories") Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 864e5).toISOString(), body: r.body ?? null, media_path: r.media_path ?? null, media_type: r.media_type ?? null, bg: r.bg ?? null });
         if (this.t === "user_stickers") { if (!String(r.path || "").startsWith(`stickers/${u}/`)) return { data: null, error: { message: "rls" } }; Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), emoji: r.emoji ?? null }); }
+        if (this.t === "user_gifs") { if (!String(r.path || "").startsWith(`gifs/${u}/`)) return { data: null, error: { message: "rls" } }; Object.assign(r, { id: uid(), user_id: u, created_at: new Date().toISOString(), title: r.title ?? null }); }
         if (this.t === "story_views") {
           if (db.story_views.some((x) => x.story_id === r.story_id && x.viewer_id === u)) return { data: null, error: { code: "23505" } };
           Object.assign(r, { viewer_id: u, emoji: null, viewed_at: new Date().toISOString() });
@@ -150,7 +151,7 @@
       if (this.op === "update") {
         const rows = tb.filter((r) => this.f.every((f) => f(r)));
         const nn = [];
-        rows.forEach((r) => { const before = { ...r }; Object.assign(r, this.val); nn.push(...noticesFor(db, this.t, r, before)); emit(this.t, "UPDATE", r); });
+        rows.forEach((r) => { const before = { ...r }; Object.assign(r, this.val); nn.push(...noticesFor(db, this.t, r, before)); emit(this.t, "UPDATE", r, before); });
         save(db); emitNotices(nn); return { data: rows, error: null };
       }
       if (this.op === "delete") {
@@ -176,7 +177,7 @@
           const db = load();
           for (const x of this.h) if (x.type === "postgres_changes" && x.filter.table === msg.table && x.filter.event === msg.event) {
             if (msg.event !== "DELETE" && !visible(db, msg.table, msg.row, u)) continue;
-            x.cb(msg.event === "DELETE" ? { old: msg.row } : { new: msg.row });
+            x.cb(msg.event === "DELETE" ? { old: msg.row } : { new: msg.row, old: msg.old });
           }
         } else if (msg.channel === this.name) {
           if (msg.kind === "presence") { this.state[msg.key] = [msg.meta || {}]; for (const x of this.h) if (x.type === "presence") x.cb(); }
@@ -247,6 +248,8 @@
           if (name === "set_invite_code") { if (db.admin !== u) return { data: "NOT_ADMIN", error: null }; db.invite = args.code.toUpperCase(); save(db); return { data: "OK", error: null }; }
           if (name === "set_recovery_word") { db.words[u] = args.word.trim().toLowerCase(); save(db); return { data: null, error: null }; }
           if (name === "has_recovery_word") return { data: !!db.words[u], error: null };
+          if (name === "gif_status") return { data: db.admin === u && !!db.giphy_key, error: null };
+          if (name === "set_gif_key") { if (db.admin !== u) return { data: "NOT_ADMIN", error: null }; const k = String(args.k || "").trim(); if (!k) delete db.giphy_key; else if (!/^[A-Za-z0-9]{16,64}$/.test(k)) return { data: "BAD_KEY", error: null }; else db.giphy_key = k; save(db); return { data: "OK", error: null }; }
           if (name === "is_admin") return { data: db.admin === u, error: null };
           if (name === "admin_user_login") return { data: db.admin === u ? db.users.find((x) => x.id === args.target)?.email.split("@")[0] : null, error: null };
           if (name === "admin_reset_password") {
@@ -308,14 +311,14 @@
             if ("private" in st && c.is_channel) c.is_private = st.private;
             if ("protected" in st) c.protected = st.protected;
             if ("members_can_post" in st && c.is_channel) c.members_can_post = st.members_can_post;
-            if ("moderated" in st) { c.moderated = st.moderated; if (!st.moderated) db.messages.filter((m) => m.chat_id === c.id && m.approved === false).forEach((m) => { m.approved = true; emit("messages", "UPDATE", m); }); }
+            if ("moderated" in st) { c.moderated = st.moderated; if (!st.moderated) db.messages.filter((m) => m.chat_id === c.id && m.approved === false).forEach((m) => { const b0 = { ...m }; m.approved = true; emit("messages", "UPDATE", m, b0); }); }
             if ("listed" in st) c.listed = st.listed;
             save(db); return { data: "OK", error: null };
           }
           if (name === "moderate_message") {
             const m = db.messages.find((x) => x.id === args.mid); if (!m) return { data: "NO_MESSAGE", error: null };
             if (!chatOwner(m.chat_id)) return { data: "NOT_OWNER", error: null };
-            if (args.ok) { const before = { ...m }; m.approved = true; const nn = noticesFor(db, "messages", m, before); save(db); emit("messages", "UPDATE", m); emitNotices(nn); }
+            if (args.ok) { const before = { ...m }; m.approved = true; const nn = noticesFor(db, "messages", m, before); save(db); emit("messages", "UPDATE", m, before); emitNotices(nn); }
             else { db.messages = db.messages.filter((x) => x !== m); save(db); emit("messages", "DELETE", m); }
             return { data: "OK", error: null };
           }
@@ -466,6 +469,15 @@
               for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.sin(i / sr * 2 * Math.PI * 523) * 8000, true);
               await new Promise((r) => setTimeout(r, 200));
               return { data: new Blob([buf], { type: "application/octet-stream" }), error: null };
+            }
+          }
+          if (fn === "gif") {            // как функция сервера gif: поиск и скачивание
+            window.__gifCalls = (window.__gifCalls || []); window.__gifCalls.push(body);
+            if (body.action === "search") return { data: { from: window.__giphyOn ? "giphy" : "openverse", giphy: !!window.__giphyOn, items: Array.from({ length: 14 }, (_, i) => ({
+              id: "ov:" + body.q + i, title: "GIF " + i, preview: "https://media.test/p" + i + ".gif", url: "https://media.test/f" + i + ".gif", w: 200, h: 150 + (i % 3) * 30, source: "Openverse" })) }, error: null };
+            if (body.action === "get") {
+              const g = Uint8Array.from(atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), (c) => c.charCodeAt(0));
+              return { data: new Blob([g], { type: "image/gif" }), error: null };
             }
           }
           if (fn === "push") { window.__pushTests = (window.__pushTests || 0) + 1; return { data: { ok: true, sent: 1 }, error: null }; }

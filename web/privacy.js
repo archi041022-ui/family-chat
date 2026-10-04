@@ -24,8 +24,9 @@ const Privacy = {
   async load() {
     if (!S.me) return;
     try {
-      const [{ data: g }, { data: v }] = await Promise.all([S.sb.rpc("privacy_get"), S.sb.rpc("privacy_view")]);
-      this.mine = g?.data || {}; this.blocked = g?.blocked || [];
+      const [{ data: g, error: e1 }, { data: v, error: e2 }] = await Promise.all([S.sb.rpc("privacy_get"), S.sb.rpc("privacy_view")]);
+      if (e1 || e2 || !g) return;                           // ошибка сети: не затираем правила пустыми
+      this.mine = g.data || {}; this.blocked = g.blocked || [];
       this.view = new Map((v || []).map((x) => [x.user_id, x.r || {}]));
       this.loaded = true;
     } catch { /* без сервера — всё разрешено */ }
@@ -62,6 +63,7 @@ const Privacy = {
     if (S.tab === "contacts") Tg.renderContacts();
   },
   async save() {
+    if (!this.loaded) { toast("Правила ещё не загружены — попробуйте через пару секунд"); await this.load(); return false; }
     const { data, error } = await S.sb.rpc("privacy_save", { data: this.mine });
     if (error || data !== "OK") { toast("Не удалось сохранить"); return false; }
     Live.broadcast("privacy", {});
@@ -99,7 +101,9 @@ const Privacy = {
         h("div", { class: "set-group" }, PRIVACY_KEYS.map(([k, l, , ic]) => row(ic, l, this.summary(k), () => this.ruleSheet(k, draw)))),
         h("div", { class: "set-group pv-flags" },
           h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.mine.read !== false, onchange: async (e) => {
-            this.mine.read = e.target.checked; if (await this.save()) toast(e.target.checked ? "Отметки о прочтении включены" : "Отметки о прочтении выключены");
+            const was = this.mine.read; this.mine.read = e.target.checked;
+            if (await this.save()) toast(e.target.checked ? "Отметки о прочтении включены" : "Отметки о прочтении выключены");
+            else { this.mine.read = was; e.target.checked = was !== false; }
           } }), h("span", null, "Отметки о прочтении", h("small", null, "Если выключить, другие не увидят, что вы прочитали, — и вы не увидите их отметки"))),
           h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: Prefs.get("preview") !== false, onchange: (e) => Prefs.set("preview", e.target.checked) }),
             h("span", null, "Текст сообщений в уведомлениях", h("small", null, "Если выключить, на экране блокировки будет только «Новое сообщение»")))),
@@ -132,8 +136,9 @@ const Privacy = {
     };
     close = sheet([h("h3", null, label), box,
       h("button", { class: "btn wide", onclick: async () => {
+        const was = this.mine[key];
         this.mine[key] = { mode: r.mode, allow: r.mode === "nobody" ? r.allow : [], deny: r.mode === "all" ? r.deny : [] };
-        if (await this.save()) { toast("Сохранено"); close(); done?.(); }
+        if (await this.save()) { toast("Сохранено"); close(); done?.(); } else { if (was) this.mine[key] = was; else delete this.mine[key]; }
       } }, "Сохранить")]);
     draw();
   },

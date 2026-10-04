@@ -158,7 +158,10 @@ try:
         print("fcm setup: ok")
         # не-администратор видит только состояние
         B.evaluate("AndroidBridge.fg = true")
-        B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Настройки')"); B.click("#tabSettings >> text=Уведомления и звуки"); B.click(".sheet >> text=Мгновенные оповещения")
+        B.evaluate("S.tab === 'menu' || showTab('menu')"); B.click("#tabMenu .mn-tile:has-text('Настройки')"); B.click("#tabSettings >> text=Уведомления и звуки")
+        assert B.locator(".sheet >> text=Мгновенные оповещения").count() == 0          # настройки администратора — только администратору
+        assert B.locator("#tabMenu .mn-tile:has-text('Мгновенные оповещения')").count() == 0
+        B.evaluate("FcmSetup.sheet()")
         B.wait_for_selector(".sheet >> text=Этот телефон получает мгновенные оповещения"); assert B.locator(".sheet input[type=file]").count() == 0
         shot(B, "x3_B_fcm_status")
         while B.locator(".sheet-back").count(): B.locator(".sheet-back").last.click(position={"x": 5, "y": 5}); B.wait_for_timeout(350)

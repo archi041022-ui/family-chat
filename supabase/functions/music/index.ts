@@ -3,6 +3,9 @@
 //   { action: "search", q, page }  → { items: [{ id, title, artist, duration, license, source, url }] }
 //   { action: "get", url }         → сам аудиофайл (только с разрешённых сайтов, до 20 МБ)
 
+import { createClient } from "jsr:@supabase/supabase-js@2";
+const sbAuth = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -54,6 +57,8 @@ async function resolveArchive(id: string): Promise<string | null> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
+    const { data: who } = await sbAuth.auth.getUser((req.headers.get("authorization") || "").replace(/^Bearer\s+/i, ""));
+    if (!who?.user) return json({ error: "NO_AUTH" }, 401);              // только вошедшие в приложение
     const body = await req.json().catch(() => ({}));
     if (body.action === "search") {
       const q = String(body.q || "").slice(0, 80).replace(/[^\p{L}\p{N} \-]/gu, " ").trim();
@@ -69,9 +74,16 @@ Deno.serve(async (req) => {
       let host = ""; try { host = new URL(url).hostname; } catch { /* */ }
       if (!host || !ALLOWED.some((re) => re.test(host))) return json({ error: "BAD_URL" }, 400);
       if (/jamendo\.com$/.test(host)) url = url.replace("format=mp32", "format=mp31");
-      const r = await fetch(url, { headers: { ...UA, Range: `bytes=0-${PART - 1}` }, redirect: "follow" });
-      const fin = new URL(r.url).hostname;
-      if (!r.ok || !ALLOWED.some((re) => re.test(fin))) return json({ error: "FETCH_" + r.status }, 502);
+      // перенаправления — вручную, каждый переход проверяем по списку разрешённых сайтов
+      let r: Response | null = null;
+      for (let hop = 0; hop < 4; hop++) {
+        let hh = ""; try { const uu = new URL(url); hh = uu.protocol === "https:" ? uu.hostname : ""; } catch { /* */ }
+        if (!hh || !ALLOWED.some((re) => re.test(hh))) return json({ error: "BAD_URL" }, 400);
+        r = await fetch(url, { headers: { ...UA, Range: `bytes=0-${PART - 1}` }, redirect: "manual" });
+        if (r.status >= 300 && r.status < 400 && r.headers.get("location")) { url = new URL(r.headers.get("location")!, url).toString(); continue; }
+        break;
+      }
+      if (!r || !r.ok) return json({ error: "FETCH_" + (r?.status ?? "BAD") }, 502);
       // читаем не больше PART (если сайт не поддерживает Range — обрезаем сами; mp3/ogg проигрываются и с обрезанным концом)
       const reader = r.body!.getReader(); const parts: Uint8Array[] = []; let got = 0;
       while (got < PART) { const { done, value } = await reader.read(); if (done) break; parts.push(value); got += value.length; }

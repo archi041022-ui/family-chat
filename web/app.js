@@ -554,6 +554,7 @@ async function recoveryWordSheet() {
 }
 
 function adminResetSheet() {
+  if (!S.isAdmin) return;
   let close;
   const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id).sort((a, b) => a.name.localeCompare(b.name, "ru"));
   close = sheet([
@@ -625,11 +626,12 @@ async function loadProfiles() {
   await signUrls((data || []).map((p) => S.profiles.get(p.id)?.avatar_path).filter(Boolean));
 }
 async function loadChats() {
-  const [{ data: chats }, { data: mem }, { data: recent }] = await Promise.all([
+  const [{ data: chats, error: e1 }, { data: mem, error: e2 }, { data: recent, error: e3 }] = await Promise.all([
     S.sb.from("chats").select("*").order("last_message_at", { ascending: false }),
     S.sb.from("chat_members").select("*"),
     S.sb.from("messages").select("id,chat_id,user_id,body,media_type,deleted,created_at").order("created_at", { ascending: false }).limit(600),
   ]);
+  if (e1 || e2 || e3 || !chats) return;            // сеть пропала — оставляем прежний список, а не стираем его
   S.chats = chats || [];
   await signUrls(S.chats.map((c) => c.avatar_path).filter(Boolean));
   S.members.clear();
@@ -691,6 +693,8 @@ function buildShell() {
   Stories.renderAll();
   StoryTop.attach($("#chatList"), $("#storyStrip"));
   AsstFab.init();
+  S.tab = S.tab || "chats";
+  TabSwipe.attach($("#side"));
   // В браузере «назад» (кнопка или свайп) сначала закрывает окна внутри мессенджера, а не уходит со страницы
   if (!window.__popBound) {
     window.__popBound = true;
@@ -809,8 +813,9 @@ function renderChatList() {
 // ───────────── Открытый чат ─────────────
 async function openChat(chatId) {
   if (S.current === chatId) return;
-  S.current = chatId; S.replyTo = null; S.assistantOpen = false; S.editing = null; S.tasksOpen = false;
   const c = S.chats.find((x) => x.id === chatId); if (!c) return;
+  Voice.cancel?.();
+  S.current = chatId; S.replyTo = null; S.assistantOpen = false; S.editing = null; S.tasksOpen = false;
   if (location.hash.slice(1) !== chatId) history.replaceState(history.state, "", "#" + chatId);
   app.classList.add("in-chat");
   $("#placeholder")?.remove(); $("#chatView")?.remove();
@@ -859,6 +864,7 @@ async function openChat(chatId) {
   $("#msgs").addEventListener("scroll", onScrollTop);
 }
 function closeChat(fromPop) {
+  Voice.cancel?.();
   S.assistantOpen = false; S.tasksOpen = false;
   Protect.off();
   S.current = null; app.classList.remove("in-chat");
@@ -1387,7 +1393,8 @@ const Voice = {
     const tick = setInterval(() => (time.textContent = fmtDur((Date.now() - t0) / 1000)), 250);
     const saved = [...wrap.children];
     let cancelled = false;
-    const finish = () => { clearInterval(tick); stream.getTracks().forEach((t) => t.stop()); wrap.innerHTML = ""; wrap.append(...saved); };
+    const finish = () => { clearInterval(tick); stream.getTracks().forEach((t) => t.stop()); Voice.cancel = null; wrap.innerHTML = ""; wrap.append(...saved); };
+    Voice.cancel = () => { cancelled = true; try { if (rec.state !== "inactive") rec.stop(); else finish(); } catch { finish(); } };   // ушли из чата — микрофон выключаем
     rec.onstop = async () => {
       finish();
       if (cancelled || Date.now() - t0 < 700) return;
@@ -1535,7 +1542,7 @@ const onlineFrom = (state) => new Set(Object.entries(state || {}).filter(([k, me
 function subscribe() {
   Live.channel = S.sb.channel("db-changes")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => onNewMessage(p.new))
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => onUpdatedMessage(p.new))
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => onUpdatedMessage(p.new, p.old))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, (p) => {
       // сообщение отклонено при одобрении — убираем у автора
       const id = p.old?.id; if (!id) return;
@@ -1609,7 +1616,7 @@ const TABS = { menu: "Меню", chats: "Чаты", contacts: "Контакты"
 function showTab(t) {
   if (t === "menu" && S.tab === "menu") {                         // повторное нажатие «Меню» — закрыть
     const m = $("#tabMenu"); m?.classList.add("closing");
-    setTimeout(() => { m?.classList.remove("closing"); showTab(S.prevTab && S.prevTab !== "menu" ? S.prevTab : "chats"); }, 160);
+    setTimeout(() => { m?.classList.remove("closing"); if (S.tab === "menu") showTab(S.prevTab && S.prevTab !== "menu" ? S.prevTab : "chats"); }, 160);
     return;
   }
   if (t === "menu" && S.tab !== "menu") S.prevTab = S.tab;
@@ -1652,7 +1659,7 @@ async function onNewMessage(m) {
   const list = S.msgs.get(m.chat_id);
   if (list && !list.some((x) => x.id === m.id)) {
     const pend = m.user_id === S.me.id && list.find((x) => x.pending && x.body == m.body && x.media_path == m.media_path);
-    if (pend) { FX.carry(pend.id, m.id); list.splice(list.indexOf(pend), 1, m); } else { list.push(m); if (m.user_id !== S.me.id) FX.add(m.id); }
+    if (pend) { FX.carry(pend.id, m.id); list.splice(list.indexOf(pend), 1, m); } else { let k = list.length; while (k > 0 && !list[k - 1].pending && new Date(list[k - 1].created_at) > new Date(m.created_at)) k--; list.splice(k, 0, m); if (m.user_id !== S.me.id) FX.add(m.id); }
     S.reacts.set(m.id, S.reacts.get(m.id) || []);
   }
   if (S.current === m.chat_id && appVisible()) {
@@ -1664,10 +1671,10 @@ async function onNewMessage(m) {
   }
   renderChatList();
 }
-function onUpdatedMessage(m) {
+function onUpdatedMessage(m, old) {
   const list = S.msgs.get(m.chat_id);
-  // сообщение одобрили — у остальных оно появляется впервые
-  if ((!list || !list.some((x) => x.id === m.id)) && m.approved !== false && !m.deleted && Date.now() - new Date(m.created_at) < 7 * 864e5) {
+  // сообщение одобрили (было approved=false, стало true) — у остальных оно появляется впервые. Обычная правка — не «новое».
+  if (old && old.approved === false && m.approved === true && (!list || !list.some((x) => x.id === m.id)) && !m.deleted) {
     if (!S.lastByChat.get(m.chat_id) || S.lastByChat.get(m.chat_id).id !== m.id) { onNewMessage(m); return; }
   }
   if (!list) return;
@@ -1829,18 +1836,23 @@ const Calls = {
     if (!Privacy.can(userId, "calls")) { toast(`${S.profiles.get(userId)?.name || "Пользователь"} ограничил(а) звонки`); return; }
     if (!window.RTCPeerConnection || !navigator.mediaDevices) { toast("Звонки не поддерживаются на этом устройстве"); return; }
     this.peer = userId; this.video = video; this.role = "caller"; this.callId = crypto.randomUUID(); this.connected = false;
-    try { this.local = await this.media(video); }
-    catch { toast(video ? "Нет доступа к камере или микрофону" : "Нет доступа к микрофону"); this.reset(); return; }
+    const cid0 = this.callId;
+    let got0;
+    try { got0 = await this.media(video); }
+    catch { toast(video ? "Нет доступа к камере или микрофону" : "Нет доступа к микрофону"); if (this.callId === cid0) this.reset(); return; }
+    if (this.callId !== cid0) { got0?.getTracks?.().forEach((t) => t.stop()); return; }
+    this.local = got0;
     window.AndroidBridge?.callState?.(true, !!video);
     this.showUi("Вызов…");
     this.ringback();
     await Ice.get();
-    if (this.peer !== userId || !this.local) return;
+    if (this.peer !== userId || !this.local || this.callId !== cid0) return;
     this.pc = this.makePc();
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     const callId = this.callId;
     await this.send(userId, { kind: "offer", sdp: offer.sdp, video, name: S.me.name });
+    if (this.callId !== callId || !this.pc) return;                    // за время отправки вызов уже отменили
     S.sb.rpc("wake_call", { targets: [userId], video: !!video }).then(() => {}, () => {});   // разбудить телефон, если приложение выгружено
     // Повторяем вызов каждые 3 секунды, пока не ответят: если телефон собеседника спал и только
     // проснулся, он всё равно получит звонок — уже со всеми адресами соединения внутри.
@@ -1895,15 +1907,19 @@ const Calls = {
     if (this.pc || this.accepting) return;
     this.accepting = true; setTimeout(() => { this.accepting = false; }, 3000);
     clearTimeout(this.ringTimer); this.stopRing(); window.AndroidBridge?.cancelCall?.();
-    try { this.local = await this.media(this.video); }
+    const cid = this.callId;
+    let got;
+    try { got = await this.media(this.video); }
     catch {
-      try { this.local = await this.media(false); this.video = false; }
-      catch { toast("Нет доступа к микрофону"); this.decline(); return; }
+      try { got = await this.media(false); this.video = false; }
+      catch { toast("Нет доступа к микрофону"); if (this.callId === cid) this.decline(); return; }
     }
+    if (this.callId !== cid || !this.offer) { got?.getTracks?.().forEach((t) => t.stop()); return; }   // пока шёл запрос доступа, звонок уже сбросили
+    this.local = got;
     window.AndroidBridge?.callState?.(true, !!this.video);
     this.showUi("Соединение…");
     await Ice.get();
-    if (!this.local) return;
+    if (!this.local || this.callId !== cid) return;
     this.pc = this.makePc();
     await this.pc.setRemoteDescription({ type: "offer", sdp: this.offer });
     for (const c of this.pendingIce.splice(0)) await this.pc.addIceCandidate(c).catch(() => {});

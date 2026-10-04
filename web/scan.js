@@ -192,6 +192,7 @@ const Camera = {
   async open(mode = "photo") {
     if (!navigator.mediaDevices?.getUserMedia) { toast("Камера недоступна на этом устройстве"); return; }
     if (Calls.pc || Calls.ui || GroupCall.active) { toast("Сначала завершите звонок"); return; }
+    if (this.el) return;                                      // камера уже открыта
     this.mode = mode; this.facing = "environment"; this.pages = this.pages || [];
     const video = h("video", { class: "cam-video", autoplay: true, playsinline: true, muted: true }); video.muted = true;
     const tabs = h("div", { class: "cam-tabs" },
@@ -234,7 +235,9 @@ const Camera = {
   async start() {
     this.stream?.getTracks().forEach((t) => t.stop());
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this.facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+      const got = await navigator.mediaDevices.getUserMedia({ video: { facingMode: this.facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+      if (!this.el) { got.getTracks().forEach((t) => t.stop()); return; }       // закрыли, пока шёл запрос доступа
+      this.stream = got;
       this.video.srcObject = this.stream; this.video.play().catch(() => {});
       this.video.classList.toggle("mirror", this.facing === "user");
     } catch { toast("Нет доступа к камере"); this.close(); }
@@ -276,6 +279,7 @@ const Camera = {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "scan-quad");
     const wrap = h("div", { class: "scan-stage" }, img, svg);
     const draw = () => {
+      if (!ed.isConnected && ed.dataset.shown) { removeEventListener("resize", draw); return; }   // окно закрыто — слушатель больше не нужен
       const r = img.getBoundingClientRect(); const k = r.width / c.width;
       svg.setAttribute("viewBox", `0 0 ${r.width} ${r.height}`); svg.style.width = r.width + "px"; svg.style.height = r.height + "px";
       const pts = quad.map(([a, b]) => [a * k, b * k]);
@@ -299,7 +303,7 @@ const Camera = {
           const flat = await DocScan.warp(c, quad);
           ed.remove(); this.filterStep(flat);
         } }, "Дальше")));
-    document.body.append(ed);
+    document.body.append(ed); ed.dataset.shown = "1";
     img.onload = draw; addEventListener("resize", draw);
     this.lastQuad = quad;
   },

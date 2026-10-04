@@ -139,9 +139,12 @@ class MainActivity : Activity() {
 
     // ───────────── Разрешения при первом запуске ─────────────
     @SuppressLint("BatteryLife")
+    private var notifyAsked = false      // спрашиваем один раз за запуск: после отказа цепочка идёт дальше, а не зацикливается
+
     private fun askStartupPermissions() {
         val prefs = getSharedPreferences("family", MODE_PRIVATE)
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 33 && !notifyAsked && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notifyAsked = true
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFY)
             return
         }

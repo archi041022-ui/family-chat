@@ -28,7 +28,7 @@ const Gifts = {
         h("div", { class: "gift-wallet" }, h("div", null, h("b", null, `⭐ ${this.home.balance}`), h("small", null, "ваши звёзды")),
           this.home.bonus ? h("button", { class: "btn small", onclick: async () => {
             const { data: b } = await S.sb.rpc("claim_bonus");
-            if (b >= 0) { this.home.balance = b; this.home.bonus = false; toast("⭐ +20 звёзд — ежедневный бонус"); Effects.play("stars"); draw(); }
+            if (b != null && b >= 0) { this.home.balance = b; this.home.bonus = false; toast("⭐ +20 звёзд — ежедневный бонус"); Effects.play("stars"); draw(); }
           } }, "+20 ⭐ бонус дня") : h("small", { class: "gift-bonus-done" }, "бонус дня получен ✓")),
         h("button", { class: "btn wide", onclick: () => this.pickPerson() }, "🎁 Подарить подарок"),
         h("div", { class: "set-cap" }, `Мои подарки · ${mine.length}`),
@@ -62,7 +62,7 @@ const Gifts = {
           h("button", { class: "btn wide", onclick: async () => {
             const { data: b } = await S.sb.rpc("gift_convert", { gid: g.id });
             c2(); close();
-            if (b >= 0) { if (this.home) this.home.balance = b; toast(`⭐ +${g.convert} звёзд`); after?.(); } else toast("Не удалось обменять");
+            if (b != null && b >= 0) { if (this.home) this.home.balance = b; toast(`⭐ +${g.convert} звёзд`); after?.(); } else toast("Не удалось обменять");
           } }, `Обменять на ${g.convert} ⭐`)]);
       } }, h("span", null, "⭐"), `Обменять на ${g.convert} ⭐`) : null,
       g.from && g.from !== S.me.id && mine ? h("button", { class: "menu-item", onclick: () => { close(); this.compose(g.from); } }, h("span", null, "🎁"), "Подарить в ответ") : null,

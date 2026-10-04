@@ -104,17 +104,20 @@ async function askLLM(messages: Msg[], context: string, name: string) {
 }
 
 // Пускаем только вошедших участников семьи (а не любого, у кого есть публичный ключ)
-function isMember(req: Request) {
+// Подпись токена проверяет сервер Supabase (getUser), а не мы «на глаз» — подделать нельзя.
+import { createClient } from "jsr:@supabase/supabase-js@2";
+const authSb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+async function isMember(req: Request) {
   try {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.role === "authenticated" && !!payload.sub;
+    const { data } = await authSb.auth.getUser(token);
+    return !!data?.user;
   } catch { return false; }
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  if (!isMember(req)) return new Response(JSON.stringify({ error: "Нужно войти в приложение" }), { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
+  if (!(await isMember(req))) return new Response(JSON.stringify({ error: "Нужно войти в приложение" }), { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
   try {
     const { messages = [], lat, lon, city, name } = await req.json();
     const last: string = (messages.at(-1)?.content || "").slice(0, 1000);
