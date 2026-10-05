@@ -1031,7 +1031,7 @@ function messageEl(m, c, firstInRun, tail) {
   if (out && !m.deleted) {
     const others = (S.members.get(m.chat_id) || []).filter((x) => x.user_id !== S.me.id);
     const read = others.some((x) => Privacy.readOk(x.user_id) && new Date(x.last_read_at) >= new Date(m.created_at));
-    meta.append(h("span", { class: "ticks", title: read ? "Прочитано" : "Доставлено" }, read ? "✓✓" : "✓"));
+    meta.append(h("button", { class: `ticks${read ? " read" : ""}`, title: read ? "Прочитано" : "Доставлено", onclick: (e) => { e.stopPropagation(); readersSheet(m); } }, read ? "✓✓" : "✓"));
   }
   if (m.pending) meta.textContent = "⏳";
   const textEl = bubble.querySelector(".text");
@@ -1146,7 +1146,10 @@ function lightbox(url) {
 }
 
 async function markRead(chatId) {
-  const mine = myMember(chatId); const now = new Date().toISOString();
+  const mine = myMember(chatId);
+  // время берём не раньше последнего сообщения: часы телефона могут отставать от сервера
+  const lastMsg = (S.msgs.get(chatId) || []).at(-1)?.created_at;
+  const now = new Date(Math.max(Date.now(), lastMsg ? new Date(lastMsg).getTime() : 0)).toISOString();
   if (mine) mine.last_read_at = now;
   S.unread.delete(chatId); renderChatList();
   await S.sb.from("chat_members").update({ last_read_at: now }).match({ chat_id: chatId, user_id: S.me.id });
@@ -1579,6 +1582,7 @@ function subscribe() {
       for (const [cid, list] of S.msgs) { const i = list.findIndex((x) => x.id === id); if (i >= 0) { list.splice(i, 1); if (S.current === cid) renderMessages(false); if (list.length === i && S.lastByChat.get(cid)?.id === id) { S.lastByChat.delete(cid); renderChatList(); } } }
     })
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "reactions" }, (p) => onReaction(p.new, true))
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_members" }, (p) => onMemberRead(p.new))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "reactions" }, (p) => onReaction(p.old, false))
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "stories" }, (p) => Stories.onNew(p.new))
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "stories" }, (p) => Stories.onDeleted(p.old))
@@ -1604,7 +1608,7 @@ function subscribe() {
     })
     .on("broadcast", { event: "read" }, ({ payload }) => {
       const m = (S.members.get(payload.chat_id) || []).find((x) => x.user_id === payload.user_id);
-      if (m) { m.last_read_at = payload.at; if (S.current === payload.chat_id) renderMessages(false); }
+      if (payload?.user_id) onMemberRead({ chat_id: payload.chat_id, user_id: payload.user_id, last_read_at: payload.at });
     })
     .on("broadcast", { event: "profile" }, async () => { await loadProfiles(); renderChatList(); })
     .on("broadcast", { event: "typing" }, ({ payload }) => Tg.onTyping(payload))
@@ -1673,6 +1677,29 @@ function showTab(t) {
   if (t === "calls") Tg.renderCalls();
   if (t === "settings") Tg.renderSettings();
   if (t === "menu") Menu.render();
+}
+// собеседник прочитал чат (приходит с сервера, даже если «вещание» уснуло)
+function onMemberRead(row) {
+  if (!row || row.user_id === S.me?.id || !row.last_read_at) return;
+  const m = (S.members.get(row.chat_id) || []).find((x) => x.user_id === row.user_id);
+  if (!m) return;
+  const was = m.last_read_at ? new Date(m.last_read_at).getTime() : 0, now = new Date(row.last_read_at).getTime();
+  if (now <= was) return;
+  m.last_read_at = row.last_read_at;
+  // перерисовываем, только если прочитали что-то из МОИХ сообщений (иначе галочки не меняются)
+  const mineRead = (S.msgs.get(row.chat_id) || []).some((x) => x.user_id === S.me.id && new Date(x.created_at).getTime() > was && new Date(x.created_at).getTime() <= now);
+  if (!mineRead) return;
+  if (S.current === row.chat_id) renderMessages(false);
+  renderChatList();
+}
+// кто прочитал моё сообщение (по нажатию на галочки)
+function readersSheet(m) {
+  const others = (S.members.get(m.chat_id) || []).filter((x) => x.user_id !== S.me.id);
+  const seen = others.filter((x) => Privacy.readOk(x.user_id) && new Date(x.last_read_at) >= new Date(m.created_at));
+  const rest = others.filter((x) => !seen.includes(x));
+  const row = (x, ok) => h("div", { class: "member-row" }, h("div", { class: "menu-item" }, avatarEl(x.user_id, "sm"),
+    h("span", null, S.profiles.get(x.user_id)?.name || "Участник", h("small", { class: "sub" }, ok ? "прочитано ✓✓" : Privacy.readOk(x.user_id) ? "ещё не прочитано" : "отметки скрыты"))));
+  sheet([h("h3", null, seen.length ? "Прочитано" : "Ещё не прочитано"), ...seen.map((x) => row(x, true)), ...rest.map((x) => row(x, false))]);
 }
 async function resync() {
   await loadChats(); renderChatList();
@@ -1766,11 +1793,23 @@ document.addEventListener("click", function askNotify() {
 // звонок идёт через TURN-ретранслятор. Логин для общего ретранслятора Open Relay вычисляется
 // по его открытому ключу (схема TURN REST API) и действует сутки.
 const Ice = {
-  list: null, until: 0,
+  list: null, until: 0, custom: null,
+  STUN: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478", "stun:stun.sipnet.net:3478", "stun:stun.nextcloud.com:443"],
+  // свой сервер звонков, который задал администратор (самый надёжный вариант)
+  async admin() {
+    try { const { data } = await Promise.race([S.sb.rpc("get_turn"), new Promise((r) => setTimeout(() => r({}), 3000))]); this.custom = data && data.url ? data : null; } catch { /* без него */ }
+    return this.custom;
+  },
   async get() {
     if (this.list && Date.now() < this.until) return this.list;
-    const base = (CFG.iceServers || []).length ? CFG.iceServers : [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
-    const list = [...base];
+    const list = [];
+    const own = await this.admin();
+    if (own) {
+      const urls = [own.url]; if (/^turn:/i.test(own.url) && !/transport=/i.test(own.url)) urls.push(own.url + "?transport=tcp");
+      list.push(own.username || own.credential ? { urls, username: own.username, credential: own.credential } : { urls });
+    }
+    const base = (CFG.iceServers || []).length ? CFG.iceServers : [];
+    list.push(...base, { urls: this.STUN });
     const relay = CFG.turnRelay === false ? null : (CFG.turnRelay || { host: "staticauth.openrelay.metered.ca", secret: "openrelayprojectsecret" });
     if (relay && crypto?.subtle) {
       try {
@@ -1781,10 +1820,49 @@ const Ice = {
         list.push({ urls: [`turn:${relay.host}:80`, `turn:${relay.host}:80?transport=tcp`, `turn:${relay.host}:443`, `turns:${relay.host}:443?transport=tcp`], username, credential });
       } catch { /* без ретранслятора — только напрямую */ }
     }
-    this.list = list; this.until = Date.now() + 12 * 3600e3;
+    this.list = list; this.until = Date.now() + 30 * 60e3;
     return list;
   },
-  now() { return this.list || CFG.iceServers || [{ urls: "stun:stun.l.google.com:19302" }]; },
+  now() { return this.list || [{ urls: this.STUN }]; },
+  // проверка: достучались ли до серверов звонков (relay — значит через ретранслятор звонок пройдёт даже в строгой сети)
+  async test(ms = 7000) {
+    const servers = await this.get();
+    const pc = new RTCPeerConnection({ iceServers: servers });
+    const seen = { host: 0, srflx: 0, relay: 0 };
+    pc.createDataChannel("t");
+    pc.onicecandidate = (e) => { const t = e.candidate?.type; if (t && seen[t] !== undefined) seen[t]++; };
+    try { await pc.setLocalDescription(await pc.createOffer()); } catch { pc.close(); return { ...seen, error: true }; }
+    await new Promise((res) => { const t = setTimeout(res, ms); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); res(); } }; });
+    pc.close();
+    return seen;
+  },
+  async adminSheet() {
+    if (!S.isAdmin) return;
+    const { data: on } = await S.sb.rpc("turn_status");
+    const url = h("input", { placeholder: "turn:адрес:3478", autocomplete: "off", spellcheck: false });
+    const user = h("input", { placeholder: "Логин", autocomplete: "off" });
+    const pass = h("input", { placeholder: "Пароль", autocomplete: "off", spellcheck: false });
+    const out = h("div", { class: "health" }, h("span", null, "•"), h("span", null, "Нажмите «Проверить связь»"));
+    let close;
+    close = sheet([h("h3", null, "📞 Сервер звонков"),
+      h("div", { class: `health${on ? " ok" : ""}` }, h("span", null, on ? "✓" : "•"), h("span", null, on ? "Свой сервер подключён" : "Свой сервер не задан — используются общие бесплатные")),
+      h("p", { class: "sheet-note" }, "Если звонки пишут «сеть блокирует звонок», нужен свой TURN-сервер. Бесплатный: metered.ca (Open Relay / TURN) или Cloudflare Realtime TURN — зарегистрируйтесь, скопируйте адрес, логин и пароль и вставьте сюда. Данные хранятся на сервере и видны только приложению семьи."),
+      h("label", { class: "field" }, url), h("label", { class: "field" }, user), h("label", { class: "field" }, pass),
+      h("button", { class: "btn wide", onclick: async () => {
+        const { data } = await S.sb.rpc("set_turn", { cfg: { url: url.value.trim(), username: user.value.trim(), credential: pass.value.trim() } });
+        if (data === "OK") { Ice.list = null; await Ice.get(); toast("✅ Сервер звонков сохранён"); close(); }
+        else toast(data === "BAD_URL" ? "Адрес должен начинаться с turn: или turns:" : "Не удалось сохранить");
+      } }, "Сохранить"),
+      h("button", { class: "btn ghost wide", onclick: async (e) => {
+        const b = e.currentTarget; b.disabled = true; out.lastChild.textContent = "Проверяю…";
+        Ice.list = null; const r = await Ice.test(); b.disabled = false;
+        const ok = r.relay > 0;
+        out.className = `health ${ok ? "ok" : r.srflx > 0 ? "" : "bad"}`; out.firstChild.textContent = ok ? "✓" : "•";
+        out.lastChild.textContent = ok ? "Ретранслятор доступен — звонки пройдут в любой сети" : r.srflx > 0 ? "Прямая связь возможна, но ретранслятор недоступен — в строгих сетях звонок не соединится" : "Серверы звонков недоступны — звонки не пройдут. Задайте свой TURN-сервер";
+      } }, "Проверить связь"),
+      out,
+      on ? h("button", { class: "menu-item danger", onclick: async () => { await S.sb.rpc("set_turn", { cfg: null }); Ice.list = null; toast("Свой сервер отключён"); close(); } }, "Отключить свой сервер") : null]);
+  },
 };
 
 // Входящий звонок из уведомления Android: «Ответить» / «Отклонить»
@@ -1863,7 +1941,7 @@ const Calls = {
       }
       if (pc.connectionState === "failed") {
         if (this.connected && (this.restarts || 0) < 3) { this.restartIce(); return; }
-        toast(this.connected ? "Связь потеряна" : "Связь не установилась: сеть блокирует звонок", 4000); this.hangup(true, "failed");
+        toast(this.connected ? "Связь потеряна" : S.isAdmin ? "Связь не установилась. Меню → Администратор → «Сервер звонков»" : "Связь не установилась: сеть блокирует звонок. Скажите администратору — он настроит сервер звонков", 4000); this.hangup(true, "failed");
       }
     };
     this.local.getTracks().forEach((t) => pc.addTrack(t, this.local));

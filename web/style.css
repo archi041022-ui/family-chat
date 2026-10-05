@@ -140,7 +140,8 @@ input, textarea { font: inherit; color: inherit; }
 .bubble .text { white-space: pre-wrap; }
 .bubble .text a { color: var(--accent); }
 .bubble .meta { float: right; margin: 6px 0 -2px 10px; font-size: 11px; color: var(--muted); display: flex; gap: 3px; align-items: center; }
-.bubble .meta .ticks { color: var(--accent); font-size: 12px; letter-spacing: -3px; }
+.bubble .meta .ticks { color: var(--muted); font-size: 12px; letter-spacing: -3px; background: none; border: 0; padding: 0 3px 0 0; font-family: inherit; cursor: pointer; }
+.bubble .meta .ticks.read { color: var(--accent); }
 .bubble.media { padding: 4px; }
 .bubble.media .text, .bubble.media .who { padding: 3px 7px 0; }
 .bubble.media .meta { margin-right: 6px; }

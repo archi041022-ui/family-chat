@@ -315,6 +315,14 @@
             if ("listed" in st) c.listed = st.listed;
             save(db); return { data: "OK", error: null };
           }
+          if (name === "get_turn") return { data: db.turn || null, error: null };
+          if (name === "turn_status") return { data: db.admin === u && !!db.turn, error: null };
+          if (name === "set_turn") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            if (args.cfg == null) { delete db.turn; save(db); return { data: "OK", error: null }; }
+            if (!/^(turns?|stuns?):[\w.-]+(:\d+)?(\?transport=(udp|tcp))?$/i.test(args.cfg.url || "")) return { data: "BAD_URL", error: null };
+            db.turn = args.cfg; save(db); return { data: "OK", error: null };
+          }
           if (name === "set_burn") {
             const c = db.chats.find((x) => x.id === args.cid);
             if (!c || !isMember(db, c.id, u)) return { data: "NO_CHAT", error: null };
