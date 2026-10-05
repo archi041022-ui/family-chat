@@ -315,6 +315,14 @@
             if ("listed" in st) c.listed = st.listed;
             save(db); return { data: "OK", error: null };
           }
+          if (name === "cf_turn_status") return { data: db.admin === u && !!db.cfTurn, error: null };
+          if (name === "set_cf_turn") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            if (!args.key_id && !args.token) { delete db.cfTurn; save(db); return { data: "OK", error: null }; }
+            if (!/^[\w-]{16,80}$/.test(args.key_id || "")) return { data: "BAD_ID", error: null };
+            if (!/^[\w.-]{20,255}$/.test(args.token || "")) return { data: "BAD_TOKEN", error: null };
+            db.cfTurn = { id: args.key_id, token: args.token }; save(db); return { data: "OK", error: null };
+          }
           if (name === "get_turn") return { data: db.turn || null, error: null };
           if (name === "turn_status") return { data: db.admin === u && !!db.turn, error: null };
           if (name === "set_turn") {
@@ -483,7 +491,8 @@
           async createSignedUrls(paths) { const db = load(); return { data: paths.map((p) => ({ path: p, signedUrl: db.files[p] })) }; },
         }) },
         channel: (name) => new Channel(name),
-        functions: { async invoke(fn, { body }) {
+        functions: { async invoke(fn, { body } = {}) {
+          if (fn === "turn") { const d = load(); return { data: { iceServers: d.cfTurn ? [{ urls: ["stun:stun.cloudflare.com:3478"] }, { urls: ["turn:turn.cloudflare.com:3478?transport=udp", "turns:turn.cloudflare.com:443?transport=tcp"], username: "cfuser", credential: "cfpass" }] : [] }, error: null }; }
           if (fn === "music") {          // как функция сервера music: поиск и скачивание (тональный WAV на 6 с)
             window.__musicCalls = (window.__musicCalls || []); window.__musicCalls.push(body);
             if (body.action === "search") return { data: { from: "openverse", items: [

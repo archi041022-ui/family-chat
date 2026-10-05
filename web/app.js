@@ -1800,10 +1800,18 @@ const Ice = {
     try { const { data } = await Promise.race([S.sb.rpc("get_turn"), new Promise((r) => setTimeout(() => r({}), 3000))]); this.custom = data && data.url ? data : null; } catch { /* без него */ }
     return this.custom;
   },
+  // Cloudflare Realtime TURN: сервер выдаёт короткоживущие данные (ключ у клиентов не бывает)
+  async cloudflare() {
+    try {
+      const r = await Promise.race([S.sb.functions.invoke("turn", { body: {} }), new Promise((res) => setTimeout(() => res({}), 4000))]);
+      const ice = r?.data?.iceServers; return Array.isArray(ice) ? ice.filter((x) => x && x.urls) : [];
+    } catch { return []; }
+  },
   async get() {
     if (this.list && Date.now() < this.until) return this.list;
     const list = [];
-    const own = await this.admin();
+    const [own, cf] = await Promise.all([this.admin(), this.cloudflare()]);
+    if (cf.length) list.push(...cf);
     if (own) {
       const urls = [own.url]; if (/^turn:/i.test(own.url) && !/transport=/i.test(own.url)) urls.push(own.url + "?transport=tcp");
       list.push(own.username || own.credential ? { urls, username: own.username, credential: own.credential } : { urls });
@@ -1840,13 +1848,25 @@ const Ice = {
   },
   async adminSheet() {
     if (!S.isAdmin) return;
-    const { data: on } = await S.sb.rpc("turn_status");
+    const [{ data: on }, { data: cfOn }] = await Promise.all([S.sb.rpc("turn_status"), S.sb.rpc("cf_turn_status")]);
+    const cfId = h("input", { placeholder: "Turn Token ID", autocomplete: "off", spellcheck: false });
+    const cfTok = h("input", { placeholder: "API Token", autocomplete: "off", spellcheck: false });
     const url = h("input", { placeholder: "turn:адрес:3478", autocomplete: "off", spellcheck: false });
     const user = h("input", { placeholder: "Логин", autocomplete: "off" });
     const pass = h("input", { placeholder: "Пароль", autocomplete: "off", spellcheck: false });
     const out = h("div", { class: "health" }, h("span", null, "•"), h("span", null, "Нажмите «Проверить связь»"));
     let close;
     close = sheet([h("h3", null, "📞 Сервер звонков"),
+      h("div", { class: `health${cfOn ? " ok" : ""}` }, h("span", null, cfOn ? "✓" : "•"), h("span", null, cfOn ? "Cloudflare TURN подключён" : "Cloudflare TURN не подключён")),
+      h("p", { class: "sheet-note" }, "Cloudflare: dash.cloudflare.com → Realtime → TURN Server → создайте ключ и вставьте сюда «Turn Token ID» и «API Token». Они хранятся на сервере, участникам не показываются."),
+      h("label", { class: "field" }, cfId), h("label", { class: "field" }, cfTok),
+      h("button", { class: "btn wide", onclick: async () => {
+        const { data } = await S.sb.rpc("set_cf_turn", { key_id: cfId.value.trim(), token: cfTok.value.trim() });
+        if (data === "OK") { Ice.list = null; await Ice.get(); toast("✅ Cloudflare TURN сохранён"); close(); }
+        else toast(data === "BAD_ID" ? "Turn Token ID выглядит неверно" : data === "BAD_TOKEN" ? "API Token выглядит неверно" : "Не удалось сохранить");
+      } }, "Сохранить Cloudflare"),
+      cfOn ? h("button", { class: "menu-item danger", onclick: async () => { await S.sb.rpc("set_cf_turn", { key_id: "", token: "" }); Ice.list = null; toast("Cloudflare TURN отключён"); close(); } }, "Отключить Cloudflare") : null,
+      h("div", { class: "section-title", style: { padding: "10px 4px 4px" } }, "Или другой TURN-сервер"),
       h("div", { class: `health${on ? " ok" : ""}` }, h("span", null, on ? "✓" : "•"), h("span", null, on ? "Свой сервер подключён" : "Свой сервер не задан — используются общие бесплатные")),
       h("p", { class: "sheet-note" }, "Если звонки пишут «сеть блокирует звонок», нужен свой TURN-сервер. Бесплатный: metered.ca (Open Relay / TURN) или Cloudflare Realtime TURN — зарегистрируйтесь, скопируйте адрес, логин и пароль и вставьте сюда. Данные хранятся на сервере и видны только приложению семьи."),
       h("label", { class: "field" }, url), h("label", { class: "field" }, user), h("label", { class: "field" }, pass),

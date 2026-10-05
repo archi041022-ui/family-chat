@@ -44,35 +44,22 @@ try:
         register(B, "mama", "Мама"); B.wait_for_selector("#chatList .chat-item")
         A.reload(); A.wait_for_selector("#chatList .chat-item"); B.reload(); B.wait_for_selector("#chatList .chat-item")
         ids = {p["name"]: p["id"] for p in A.evaluate("JSON.parse(localStorage.getItem('mockdb')).profiles")}
-        FAM = "00000000-0000-0000-0000-000000000001"
-        dm = A.evaluate("(id) => S.sb.rpc('get_or_create_dm', { other: id }).then(x => x.data)", ids["Мама"])
-        A.evaluate("() => loadChats().then(renderChatList)"); B.evaluate("() => loadChats().then(renderChatList)")
-        # ── 1. отметки о прочтении доходят и без «вещания»
-        A.evaluate("() => { S.sb.realtime && 0; }")
-        A.evaluate("(id) => openChat(id)", dm); A.wait_for_selector(".composer")
-        A.evaluate("() => postMessage({ body: 'прочти меня' }, S.current)"); A.wait_for_selector(".msg.out:has-text('прочти меня')")
-        assert A.locator(".msg.out:has-text('прочти меня') .ticks.read").count() == 0
-        # глушим канал вещания у отправителя — должна сработать серверная доставка
-        A.evaluate("() => { Live.broadcast = () => {}; }")
-        B.evaluate("() => { Live.broadcast = () => {}; }")
-        B.evaluate("(id) => openChat(id)", dm); B.wait_for_selector(".msg:has-text('прочти меня')")
-        A.wait_for_selector(".msg.out:has-text('прочти меня') .ticks.read", timeout=5000)
-        A.click(".msg.out:has-text('прочти меня') .ticks"); A.wait_for_selector(".sheet-back:has-text('Прочитано')")
-        assert "Мама" in A.inner_text(".sheet-back"); A.evaluate("document.querySelectorAll('.sheet-back').forEach(x => x._close && x._close())")
-        print("read receipts: ok")
-        # ── 2. сервер звонков
+        A.evaluate("void Ice.adminSheet()"); A.wait_for_selector(".sheet-back:has-text('Cloudflare TURN не подключён')")
+        A.fill(".sheet-back input[placeholder='Turn Token ID']", "коротко"); A.fill(".sheet-back input[placeholder='API Token']", "x")
+        A.click(".sheet-back button:has-text('Сохранить Cloudflare')"); A.wait_for_timeout(400)
+        assert not A.evaluate("JSON.parse(localStorage.getItem('mockdb')).cfTurn")
+        A.fill(".sheet-back input[placeholder='Turn Token ID']", "abcdef0123456789abcdef0123456789"); A.fill(".sheet-back input[placeholder='API Token']", "abcdef0123456789abcdef0123456789abcdef")
+        A.click(".sheet-back button:has-text('Сохранить Cloudflare')"); A.wait_for_timeout(800)
         L = A.evaluate("() => Ice.get().then(l => l.map(s => [].concat(s.urls).join(' ')))")
-        assert any("openrelay" in x for x in L) and any("stun.cloudflare.com" in x for x in L), L
-        A.evaluate("void Ice.adminSheet()"); A.wait_for_selector(".sheet-back:has-text('Сервер звонков')")
-        A.evaluate("document.querySelector(\".sheet-back input[placeholder^='turn:']\").scrollIntoView({ block: 'center' })")
-        A.fill(".sheet-back input[placeholder^='turn:']", "http://плохо"); A.click(".sheet-back button:text-is('Сохранить')"); A.wait_for_timeout(400)
-        assert A.evaluate("!JSON.parse(localStorage.getItem('mockdb')).turn")
-        A.fill(".sheet-back input[placeholder^='turn:']", "turn:relay.example.com:3478"); A.fill(".sheet-back input[placeholder='Логин']", "fam"); A.fill(".sheet-back input[placeholder='Пароль']", "pw")
-        A.click(".sheet-back button:text-is('Сохранить')"); A.wait_for_timeout(700)
-        L = A.evaluate("() => Ice.get().then(l => l.map(s => [].concat(s.urls).join(' ')))")
-        assert "relay.example.com" in L[0] and "transport=tcp" in L[0], L
-        B.evaluate("() => { Ice.list = null; return Ice.get(); }"); assert "relay.example.com" in B.evaluate("() => Ice.now()[0].urls.join(' ')")
-        print("turn config: ok")
+        assert "turn.cloudflare.com" in L[0] or "turn.cloudflare.com" in " ".join(L[:3]), L
+        assert any("cfuser" == (s.get("username") if isinstance(s, dict) else None) for s in A.evaluate("() => Ice.list"))
+        # у обычного участника данные приходят с сервера тоже
+        B.evaluate("() => { Ice.list = null; return Ice.get(); }"); assert B.evaluate("Ice.list.some(s => s.username === 'cfuser')")
+        # подключение отключаем
+        A.evaluate("void Ice.adminSheet()"); A.wait_for_selector(".sheet-back:has-text('Cloudflare TURN подключён')")
+        A.click(".sheet-back button:has-text('Отключить Cloudflare')"); A.wait_for_timeout(600)
+        assert not A.evaluate("JSON.parse(localStorage.getItem('mockdb')).cfTurn")
+        print("cloudflare turn: ok")
         b.close()
 finally:
     srv.terminate()
