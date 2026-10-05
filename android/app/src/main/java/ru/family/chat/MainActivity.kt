@@ -367,17 +367,21 @@ class MainActivity : Activity() {
     }
 
     private fun contactResult(data: Intent?) {
-        var name = ""; var phone = ""
-        try {
-            val uri = data?.data
-            if (uri != null) contentResolver.query(uri, arrayOf(
-                android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { c ->
-                if (c.moveToFirst()) { name = c.getString(0) ?: ""; phone = c.getString(1) ?: "" }
-            }
-        } catch (_: Throwable) {}
-        val js = if (phone.isBlank()) "null" else org.json.JSONObject().put("name", name).put("phone", phone).toString()
-        WebHolder.js("window.onContactPicked && window.onContactPicked($js)")
+        val uri = data?.data
+        if (uri == null) { WebHolder.js("window.onContactPicked && window.onContactPicked(null)"); return }
+        val app = applicationContext
+        Thread {
+            var name = ""; var phone = ""
+            try {
+                app.contentResolver.query(uri, arrayOf(
+                    android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) { name = c.getString(0) ?: ""; phone = c.getString(1) ?: "" }
+                }
+            } catch (_: Throwable) {}
+            val js = if (phone.isBlank()) "null" else org.json.JSONObject().put("name", name).put("phone", phone).toString()
+            WebHolder.js("window.onContactPicked && window.onContactPicked($js)")
+        }.start()
     }
 
     // ───────────── Демонстрация экрана ─────────────

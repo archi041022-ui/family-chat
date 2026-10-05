@@ -506,7 +506,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "3.3";
+const APP_VERSION = "3.4";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

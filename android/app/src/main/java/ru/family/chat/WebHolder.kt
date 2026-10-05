@@ -124,9 +124,11 @@ object WebHolder {
     }
 
     private fun openExternal(ctx: Context, url: Uri) {
-        try {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (_: Throwable) {}
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Throwable) {}
+        }
     }
 
     /** Методы, которые вызывает страница мессенджера. */
@@ -260,9 +262,11 @@ object WebHolder {
         /** Открыть SMS с готовым текстом приглашения — отправляет сам пользователь. */
         @JavascriptInterface fun sendSms(phone: String, text: String) {
             val num = phone.filter { it.isDigit() || it == '+' }
-            try {
-                ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$num")).putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (_: Throwable) { Sharing.shareText(ctx, text) }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$num")).putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Throwable) { Sharing.shareText(ctx, text) }
+            }
         }
 
         @JavascriptInterface fun downloadUpdate(url: String) { android.os.Handler(android.os.Looper.getMainLooper()).post { Updater.download(ctx, url) } }

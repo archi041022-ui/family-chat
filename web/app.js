@@ -345,8 +345,12 @@ const Invite = {
     if (!code) { const r = await S.sb.rpc("get_invite_code"); code = r.data; }
     if (!code) { toast("Нет связи с сервером"); return; }
     if (window.AndroidBridge?.pickContact) {
-      window.onContactPicked = (c) => { window.onContactPicked = null; if (c) this.send(c, code); };
-      window.AndroidBridge.pickContact();
+      let done = false;
+      const fin = (c) => { if (done) return; done = true; window.onContactPicked = null; Lock.ext = false; if (c) setTimeout(() => this.send(c, code), 150); };
+      window.onContactPicked = fin;
+      Lock.ext = true;
+      setTimeout(() => { if (!done && document.visibilityState === "visible") fin(null); }, 120000);
+      try { window.AndroidBridge.pickContact(); } catch { fin(null); toast("Не удалось открыть контакты"); }
       return;
     }
     // браузер Chrome на Android умеет выбирать контакты сам
@@ -377,12 +381,13 @@ const Invite = {
     const text = (first ? `${first}, привет! ` : "Привет! ") + inviteText(code).replace(/^Привет! /, "");
     const d = this.digits(c.phone);
     const go = (fn) => () => { close(); fn(); };
-    const open = (url) => { if (window.AndroidBridge?.openUrl) window.AndroidBridge.openUrl(url); else window.open(url, "_blank", "noopener"); };
+    const open = (url) => { Lock.ext = true; if (window.AndroidBridge?.openUrl) window.AndroidBridge.openUrl(url); else window.open(url, "_blank", "noopener"); };
     close = sheet([
       h("div", { class: "sheet-head" }, h("div", { class: "avatar sm", style: { background: colorFor(d) } }, initials(c.name || "?")),
         h("div", null, h("b", null, c.name || "Новый контакт"), h("small", { style: { display: "block", color: "var(--muted)" } }, c.phone))),
       h("p", { class: "sheet-note" }, "Как отправить приглашение?"),
       h("button", { class: "menu-item", onclick: go(() => {
+        Lock.ext = true;
         if (window.AndroidBridge?.sendSms) window.AndroidBridge.sendSms(c.phone, text);
         else location.href = `sms:${c.phone}?body=${encodeURIComponent(text)}`;
       }) }, h("span", { class: "tg-ico", style: { background: "#2EAD6B" }, html: I.chat }), "SMS"),
@@ -403,7 +408,7 @@ function inviteText(code) {
 }
 async function shareTextOut(text) {
   try {
-    if (window.AndroidBridge?.shareText) { window.AndroidBridge.shareText(text); return; }
+    if (window.AndroidBridge?.shareText) { Lock.ext = true; window.AndroidBridge.shareText(text); return; }
     if (navigator.share) { await navigator.share({ text }); return; }
     await navigator.clipboard.writeText(text); toast("Скопировано — вставьте в любой мессенджер");
   } catch (e) { if (e?.name !== "AbortError") { try { await navigator.clipboard.writeText(text); toast("Скопировано"); } catch { toast("Не удалось поделиться"); } } }
@@ -1596,7 +1601,16 @@ function subscribe() {
     if (window.AndroidBridge) return; // в приложении это сообщает сам Android
     if (document.visibilityState === "visible") window.onAppForeground(); else window.onAppBackground();
   });
-  window.onAppForeground = () => { Live.setActive(true); Lock.onFg(); Theme.apply(); resync(); Updates.maybeCheck(); Tasks.tick(); Stories.load().then(() => Stories.renderAll()); if (S.current) markRead(S.current); Push.soon(500); };
+  window.onAppForeground = () => {
+    Live.setActive(true); Lock.onFg(); Theme.apply();
+    // тяжёлое — чуть позже и по отдельности, чтобы возврат из контактов/«Поделиться» не подвешивал экран
+    const safe = (f) => { try { const r = f(); if (r?.catch) r.catch(() => {}); } catch {} };
+    setTimeout(() => {
+      safe(resync); safe(() => Updates.maybeCheck()); safe(() => Tasks.tick());
+      safe(() => Stories.load().then(() => Stories.renderAll()));
+      safe(() => { if (S.current) markRead(S.current); }); safe(() => Push.soon(500));
+    }, 350);
+  };
   window.onAppBackground = () => { Lock.onBg(); Live.background(); VideoEditor.onBackground(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };
 
 }

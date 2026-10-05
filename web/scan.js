@@ -217,6 +217,7 @@ const Camera = {
           h("button", { class: "cam-shutter", title: "Снять", onclick: () => this.shoot() }),
           h("button", { class: "cam-done hidden", onclick: () => this.finishDoc() }, "PDF"))));
     document.body.append(this.el);
+    SwipeBack.attach(this.el, () => this.close(), { both: true });   // свайп вправо/влево — выйти из камеры
     this.video = video;
     this.setMode(mode);
     await this.start();
@@ -271,6 +272,7 @@ const Camera = {
           FX.sendAnim(); await sendFile(new File([blob], `Фото_${Date.now()}.jpg`, { type: "image/jpeg" }));
         } }, "Отправить")));
     document.body.append(ed);
+    SwipeBack.attach(ed, () => ed.remove(), { both: true });         // свайп — назад к камере
   },
   // документ: углы листа можно подвинуть, затем выравнивание и фильтр
   editDoc(c) {
@@ -278,6 +280,7 @@ const Camera = {
     const img = h("img", { class: "scan-img", src: c.toDataURL("image/jpeg", 0.85) });
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("class", "scan-quad");
     const wrap = h("div", { class: "scan-stage" }, img, svg);
+    svg.setAttribute("data-noswipe", "1");                           // углы листа тянем пальцем — это не свайп
     const draw = () => {
       if (!ed.isConnected && ed.dataset.shown) { removeEventListener("resize", draw); return; }   // окно закрыто — слушатель больше не нужен
       const r = img.getBoundingClientRect(); const k = r.width / c.width;
@@ -304,6 +307,7 @@ const Camera = {
           ed.remove(); this.filterStep(flat);
         } }, "Дальше")));
     document.body.append(ed); ed.dataset.shown = "1";
+    SwipeBack.attach(ed, () => ed.remove(), { both: true });
     img.onload = draw; addEventListener("resize", draw);
     this.lastQuad = quad;
   },
@@ -317,7 +321,9 @@ const Camera = {
       h("div", { class: "scan-bar" },
         h("button", { class: "btn ghost", onclick: () => { this.pages.push(DocScan.filter(flat, mode)); ed.remove(); this.updatePages(); toast(`Страница ${this.pages.length} добавлена — снимите следующую`); } }, "+ Ещё страница"),
         h("button", { class: "btn", onclick: () => { this.pages.push(DocScan.filter(flat, mode)); ed.remove(); this.finishDoc(); } }, "Готово")));
+    chips.setAttribute("data-noswipe", "1");
     document.body.append(ed);
+    SwipeBack.attach(ed, () => ed.remove(), { both: true });         // назад к камере (страница не добавляется)
     render();
   },
   async finishDoc() {

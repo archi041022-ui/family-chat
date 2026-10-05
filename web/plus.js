@@ -35,8 +35,10 @@ const Lock = {
     };
     try { window.AndroidBridge.unlock(); } catch { this.busy = false; }
   },
-  onBg() { if (!this.busy && !this.bgAt) this.bgAt = Date.now(); },
+  ext: false, // короткий выход во внешнее окно (контакты, «Поделиться») — не блокируем
+  onBg() { if (!this.busy && !this.ext && !this.bgAt) this.bgAt = Date.now(); },
   onFg() {
+    if (this.ext) { this.ext = false; this.bgAt = 0; return; }
     if (this.busy) return;
     if (this.enabled() && this.bgAt && Date.now() - this.bgAt >= this.delay() * 1000) this.show();
     this.bgAt = 0;
