@@ -192,6 +192,11 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_NOTIFY) { askStartupPermissions(); return }
+        if (requestCode == REQ_CONTACTS) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) readContacts()
+            else WebHolder.js("window.onContactsList && window.onContactsList(null, 'denied')")
+            return
+        }
         if (requestCode == REQ_LOCATION) {
             val p = geoPending; geoPending = null
             val ok = grantResults.any { it == PackageManager.PERMISSION_GRANTED }
@@ -366,6 +371,34 @@ class MainActivity : Activity() {
         } catch (_: Throwable) { WebHolder.js("window.onContactPicked && window.onContactPicked(null)") }
     }
 
+    /** Список контактов для собственного выбора внутри приложения (без системного окна выбора). */
+    fun loadContacts() {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) readContacts()
+        else try { requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), REQ_CONTACTS) }
+        catch (_: Throwable) { WebHolder.js("window.onContactsList && window.onContactsList(null, 'error')") }
+    }
+
+    private fun readContacts() {
+        val app = applicationContext
+        Thread {
+            val seen = HashSet<String>(); val arr = org.json.JSONArray()
+            try {
+                app.contentResolver.query(android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI, arrayOf(
+                    android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null,
+                    android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC")?.use { c ->
+                    while (c.moveToNext() && arr.length() < 3000) {
+                        val n = c.getString(0) ?: ""; val ph = c.getString(1) ?: ""
+                        val digits = ph.filter { it.isDigit() }
+                        if (digits.length < 5 || !seen.add(n + "|" + digits.takeLast(10))) continue
+                        arr.put(org.json.JSONObject().put("name", n).put("phone", ph))
+                    }
+                }
+            } catch (_: Throwable) {}
+            WebHolder.js("window.onContactsList && window.onContactsList(" + arr.toString() + ")")
+        }.start()
+    }
+
     private fun contactResult(data: Intent?) {
         val uri = data?.data
         if (uri == null) { WebHolder.js("window.onContactPicked && window.onContactPicked(null)"); return }
@@ -461,6 +494,7 @@ class MainActivity : Activity() {
         private const val REQ_LOCATION = 16
         private const val REQ_MIC = 17
         private const val REQ_CONTACT = 18
+        private const val REQ_CONTACTS = 22
         private const val REQ_SOUND = 19
         private const val REQ_SOUND_FILE = 20
         private const val REQ_UNLOCK = 21

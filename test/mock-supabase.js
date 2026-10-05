@@ -315,6 +315,26 @@
             if ("listed" in st) c.listed = st.listed;
             save(db); return { data: "OK", error: null };
           }
+          if (name === "set_burn") {
+            const c = db.chats.find((x) => x.id === args.cid);
+            if (!c || !isMember(db, c.id, u)) return { data: "NO_CHAT", error: null };
+            if (c.is_group && !chatOwner(c.id)) return { data: "NOT_OWNER", error: null };
+            c.burn_after = args.secs; c.burn_since = args.secs == null ? null : new Date().toISOString(); db.burn = db.burn || {};
+            if (args.secs == null) for (const m of db.messages) delete db.burn[m.id];
+            save(db); return { data: "OK", error: null };
+          }
+          if (name === "burn_sweep") {
+            db.burn = db.burn || {}; let n = 0; const now = Date.now();
+            for (const m of db.messages.slice()) {
+              const c = db.chats.find((x) => x.id === m.chat_id); if (!c || !c.burn_after || !isMember(db, c.id, u)) continue;
+              if (m.created_at < c.burn_since) continue;
+              const others = db.chat_members.filter((x) => x.chat_id === c.id && x.user_id !== m.user_id);
+              if (!others.length || others.some((x) => x.last_read_at < m.created_at)) continue;
+              if (!db.burn[m.id]) db.burn[m.id] = now + c.burn_after * 1000;
+              if (db.burn[m.id] <= now) { db.messages = db.messages.filter((x) => x !== m); delete db.burn[m.id]; emit("messages", "DELETE", m); n++; }
+            }
+            save(db); return { data: n, error: null };
+          }
           if (name === "moderate_message") {
             const m = db.messages.find((x) => x.id === args.mid); if (!m) return { data: "NO_MESSAGE", error: null };
             if (!chatOwner(m.chat_id)) return { data: "NOT_OWNER", error: null };

@@ -477,6 +477,7 @@ const Groups = {
       owner ? h("button", { class: "menu-item", onclick: () => { close(); this.addMembers(c); } }, h("span", { html: I.invite }), c.is_channel ? "Добавить подписчиков" : "Добавить участников") : null,
       Joins.block(c, () => close()),
       ...ChatSettings.rows(c),
+      Burn.row(c, () => close()),
       Protect.canChange(c) ? h("label", { class: "toggle-row" }, h("span", null, "🛡 Защита содержимого", h("small", null, "Запрет копирования, пересылки, сохранения и снимков экрана")),
         h("input", { type: "checkbox", checked: !!c.protected, onchange: () => { close(); Protect.toggle(c); } })) : null,
       h("div", { class: "section-title", style: { padding: "8px 4px 4px" } }, "Участники"),

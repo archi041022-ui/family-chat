@@ -344,6 +344,29 @@ const Invite = {
   async fromContacts(code) {
     if (!code) { const r = await S.sb.rpc("get_invite_code"); code = r.data; }
     if (!code) { toast("Нет связи с сервером"); return; }
+    if (window.AndroidBridge?.loadContacts) {
+      // свой список контактов внутри приложения — без системного окна выбора
+      let done = false, close = null;
+      const list = h("div", { class: "contact-list" }, h("p", { class: "sheet-note" }, "Загружаю контакты…"));
+      const search = h("input", { type: "search", placeholder: "Поиск по имени или номеру", class: "contact-search" });
+      let all = [];
+      const draw = () => {
+        const q = search.value.trim().toLowerCase(), qd = q.replace(/\D/g, "");
+        const rows = all.filter((c) => !q || c.name.toLowerCase().includes(q) || (qd && c.phone.replace(/\D/g, "").includes(qd))).slice(0, 60);
+        list.replaceChildren(...(rows.length ? rows.map((c) => h("button", { class: "menu-item", onclick: () => { close?.(); setTimeout(() => this.send(c, code), 120); } },
+          h("div", { class: "avatar sm", style: { background: colorFor(this.digits(c.phone)) } }, initials(c.name || "?")),
+          h("span", null, c.name || "Без имени", h("small", { class: "sub" }, c.phone)))) : [h("p", { class: "sheet-note" }, q ? "Никого не нашли" : "В телефоне нет контактов с номерами")]));
+      };
+      search.addEventListener("input", draw);
+      window.onContactsList = (arr, err) => {
+        if (done) return; done = true; window.onContactsList = null;
+        if (!arr) { close?.(); toast(err === "denied" ? "Нет доступа к контактам — введите номер вручную" : "Не удалось прочитать контакты", 3500); this.manual(code); return; }
+        all = arr; draw();
+      };
+      close = sheet([h("h3", null, "Кого пригласить?"), search, list]);
+      try { window.AndroidBridge.loadContacts(); } catch { done = true; close?.(); this.manual(code); }
+      return;
+    }
     if (window.AndroidBridge?.pickContact) {
       let done = false;
       const fin = (c) => { if (done) return; done = true; window.onContactPicked = null; Lock.ext = false; if (c) setTimeout(() => this.send(c, code), 150); };
@@ -616,7 +639,7 @@ async function enter(user) {
   window.AndroidBridge?.loggedIn?.();
   setTimeout(() => window.onSharedItems(), 300);
   Welcome.maybeShow(user);
-  Updates.start();
+  Updates.start(); Burn.start();
   Tasks.start();
   Joins.load();
   Push.setup();
@@ -638,6 +661,7 @@ async function loadChats() {
   ]);
   if (e1 || e2 || e3 || !chats) return;            // сеть пропала — оставляем прежний список, а не стираем его
   S.chats = chats || [];
+  if (S.chats.some((c) => c.burn_after)) Burn.start();
   await signUrls(S.chats.map((c) => c.avatar_path).filter(Boolean));
   S.members.clear();
   for (const m of mem || []) { if (!S.members.has(m.chat_id)) S.members.set(m.chat_id, []); S.members.get(m.chat_id).push(m); }
@@ -830,7 +854,7 @@ async function openChat(chatId) {
     h("div", { class: "topbar" },
       h("button", { class: "icon-btn back-btn", onclick: () => closeChat(), html: I.back }),
       chatAvatar(c, "sm"),
-      h("div", { class: "title", onclick: () => chatInfo(c) }, h("b", null, c.is_channel ? "📢 " : "", chatTitle(c), !c.is_group ? EStatus.badge(otherUser(c)) : null, c.protected ? h("span", { class: "prot-ico" }, " 🛡") : null), sub),
+      h("div", { class: "title", onclick: () => chatInfo(c) }, h("b", null, c.is_channel ? "📢 " : "", chatTitle(c), !c.is_group ? EStatus.badge(otherUser(c)) : null, c.protected ? h("span", { class: "prot-ico" }, " 🛡") : null, c.burn_after ? h("span", { class: "burn-ico", title: "Исчезающие сообщения" }, "⏳") : null), sub),
       other ? h("button", { class: "icon-btn", title: "Аудиозвонок", onclick: () => Calls.start(other, false), html: I.phone }) : null,
       other ? h("button", { class: "icon-btn", title: "Видеозвонок", onclick: () => Calls.start(other, true), html: I.video }) : null,
       c.is_group ? h("button", { class: "icon-btn", title: "Групповой звонок", onclick: () => GroupCall.start(c.id, false), html: I.phone }) : null,
@@ -1127,6 +1151,7 @@ async function markRead(chatId) {
   S.unread.delete(chatId); renderChatList();
   await S.sb.from("chat_members").update({ last_read_at: now }).match({ chat_id: chatId, user_id: S.me.id });
   Live.broadcast("read", { chat_id: chatId, user_id: S.me.id, at: now });
+  if (S.chats.some((c) => c.burn_after)) Burn.soon();
 }
 
 // ───────────── Поле ввода ─────────────
@@ -1608,7 +1633,7 @@ function subscribe() {
     setTimeout(() => {
       safe(resync); safe(() => Updates.maybeCheck()); safe(() => Tasks.tick());
       safe(() => Stories.load().then(() => Stories.renderAll()));
-      safe(() => { if (S.current) markRead(S.current); }); safe(() => Push.soon(500));
+      safe(() => { if (S.current) markRead(S.current); }); safe(() => Push.soon(500)); safe(() => Burn.sweep());
     }, 350);
   };
   window.onAppBackground = () => { Lock.onBg(); Live.background(); VideoEditor.onBackground(); S.sb.from("profiles").update({ last_seen: new Date().toISOString() }).eq("id", S.me.id).then(() => {}); };

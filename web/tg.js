@@ -119,6 +119,7 @@ const Tg = {
         h("span", { html: I.pushpin }), pinned ? "Открепить чат" : "Закрепить чат"),
       h("button", { class: "menu-item", onclick: () => { close(); this.mediaOfChat(c); } }, h("span", { html: I.gallery || I.clip }), "Фото, видео и файлы"),
       h("button", { class: "menu-item", onclick: () => { close(); Wallpaper.sheet(c.id); } }, h("span", { html: I.palette }), "Фон чата"),
+      Burn.row(c, () => close()),
       h("button", { class: "menu-item", onclick: () => { close(); Tr.sheet(c); } }, h("span", null, "🌐"), h("span", null, "Перевод сообщений", h("small", { class: "sub" }, Tr.chat(c.id).out ? `мои → ${Tr.langName(Tr.chat(c.id).out)}` : "входящие — автоматически"))),
       Protect.canChange(c) ? h("button", { class: "menu-item", onclick: () => { close(); Protect.toggle(c); } }, h("span", null, "🛡"), c.protected ? "Снять защиту содержимого" : "Защитить от копирования и снимков") : null,
       h("button", { class: "menu-item", onclick: () => { close(); Select.start(null); toast("Нажимайте на сообщения, чтобы выбрать"); } }, h("span", { html: I.ticks }), "Выбрать сообщения"),
@@ -506,7 +507,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "3.4";
+const APP_VERSION = "3.5";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

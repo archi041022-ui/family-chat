@@ -259,6 +259,12 @@ object WebHolder {
             a.runOnUiThread { a.pickContact() }
         }
 
+        /** Список контактов (ответ в window.onContactsList). Спросит разрешение на чтение контактов. */
+        @JavascriptInterface fun loadContacts() {
+            val a = activity ?: run { js("window.onContactsList && window.onContactsList(null, 'error')"); return }
+            a.runOnUiThread { a.loadContacts() }
+        }
+
         /** Открыть SMS с готовым текстом приглашения — отправляет сам пользователь. */
         @JavascriptInterface fun sendSms(phone: String, text: String) {
             val num = phone.filter { it.isDigit() || it == '+' }

@@ -216,6 +216,53 @@ const ChatSettings = {
   },
 };
 
+// ───────────── Исчезающие сообщения: удаление после прочтения ─────────────
+const BURN_OPTS = [[null, "Выключено", "Сообщения остаются навсегда"], [10, "Через 10 секунд", "Почти сразу после прочтения"], [60, "Через 1 минуту", ""],
+  [3600, "Через 1 час", ""], [86400, "Через 1 день", ""], [604800, "Через 1 неделю", ""]];
+const Burn = {
+  label(secs) { const o = BURN_OPTS.find((x) => x[0] === (secs ?? null)); return o ? o[1] : `Через ${secs} с`; },
+  can(c) { return c && c.id !== undefined && (!c.is_group || Moderation.isOwner(c)); },
+  async set(c, secs) {
+    const { data, error } = await S.sb.rpc("set_burn", { cid: c.id, secs });
+    if (error || data !== "OK") { toast(data === "NOT_OWNER" ? "Менять может только создатель" : "Не получилось сохранить"); return false; }
+    c.burn_after = secs; c.burn_since = secs == null ? null : new Date().toISOString();
+    Live.broadcast("chats", { chat_id: c.id });
+    if (S.current === c.id) { updateChatSub?.(); this.badge(c); }
+    renderChatList(); this.start(); this.soon();
+    return true;
+  },
+  sheet(c) {
+    let close;
+    const cur = c.burn_after ?? null;
+    close = sheet([
+      h("h3", null, "⏳ Исчезающие сообщения"),
+      h("p", { class: "sheet-note" }, "Когда собеседник прочитает сообщение, оно само удалится через выбранное время — у всех." +
+        (c.is_group ? " В группе — когда его прочитают все участники." : "") + " Это касается только новых сообщений."),
+      ...BURN_OPTS.map(([v, name, hint]) => h("button", { class: "menu-item", onclick: async () => { if (v === cur) { close(); return; } if (await this.set(c, v)) { close(); toast(v == null ? "Автоудаление выключено" : `Автоудаление: ${name.toLowerCase()} после прочтения`, 3500); } } },
+        h("span", { class: "burn-opt" }, h("span", null, name, hint ? h("small", { class: "sub" }, hint) : null)), v === cur ? h("span", { class: "burn-opt" }, h("span", { class: "tick" }, "✓")) : null)),
+    ]);
+  },
+  row(c, close) {
+    if (!this.can(c)) return null;
+    return h("button", { class: "menu-item", onclick: () => { close?.(); this.sheet(c); } }, h("span", null, "⏳"),
+      h("span", null, "Исчезающие сообщения", h("small", { class: "sub" }, c.burn_after ? this.label(c.burn_after) + " после прочтения" : "Выключено")));
+  },
+  badge(c) {
+    const b = document.querySelector(".chat-header .title b, .chat-head .title b, .title b"); if (!b) return;
+    b.querySelector(".burn-ico")?.remove();
+    if (c.burn_after) b.append(h("span", { class: "burn-ico", title: "Исчезающие сообщения" }, "⏳"));
+  },
+  timer: null, last: 0,
+  active() { return S.chats?.some((c) => c.burn_after); },
+  async sweep() {
+    if (!S.me || !this.active() || document.visibilityState === "hidden" || Date.now() - this.last < 4000) return;
+    this.last = Date.now();
+    try { await S.sb.rpc("burn_sweep"); } catch { /* повторим позже */ }
+  },
+  soon() { setTimeout(() => this.sweep(), 1200); },
+  start() { if (!this.timer) this.timer = setInterval(() => this.sweep(), 10000); },
+};
+
 // ───────────── Реакции во время видеозвонка ─────────────
 const CALL_REACTIONS = ["❤️", "👍", "😂", "🎉", "🔥", "👏", "😮", "😢", "🥰", "🙏"];
 const CallReact = {
