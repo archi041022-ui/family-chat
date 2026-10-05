@@ -1820,6 +1820,8 @@ const Ice = {
         list.push({ urls: [`turn:${relay.host}:80`, `turn:${relay.host}:80?transport=tcp`, `turn:${relay.host}:443`, `turns:${relay.host}:443?transport=tcp`], username, credential });
       } catch { /* без ретранслятора — только напрямую */ }
     }
+    // общий бесплатный ретранслятор с открытыми данными для входа (запасной)
+    list.push({ urls: ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443", "turn:openrelay.metered.ca:443?transport=tcp", "turns:openrelay.metered.ca:443?transport=tcp"], username: "openrelayproject", credential: "openrelayproject" });
     this.list = list; this.until = Date.now() + 30 * 60e3;
     return list;
   },
@@ -1929,6 +1931,7 @@ const Calls = {
     };
     pc.onicecandidate = (e) => { if (e.candidate) this.send(this.peer, { kind: "ice", candidate: e.candidate.toJSON() }); };
     pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected" && this.relay) { this.relayStop(); this.setStatus("00:00"); toast("Связь наладилась — звонок идёт напрямую", 2500); }
       if (pc.connectionState === "connected" && !this.connected) {
         this.connected = true; this.startedAt = Date.now(); this.stopRing(); this.setStatus("00:00"); this.timer(); this.attach(); this.tuneSenders();
       }
@@ -1941,6 +1944,7 @@ const Calls = {
       }
       if (pc.connectionState === "failed") {
         if (this.connected && (this.restarts || 0) < 3) { this.restartIce(); return; }
+        if (!this.connected && this.relayStart(true)) return;               // прямая связь не вышла — идём через сервер
         toast(this.connected ? "Связь потеряна" : S.isAdmin ? "Связь не установилась. Меню → Администратор → «Сервер звонков»" : "Связь не установилась: сеть блокирует звонок. Скажите администратору — он настроит сервер звонков", 4000); this.hangup(true, "failed");
       }
     };
@@ -1999,7 +2003,8 @@ const Calls = {
         if (this.answered) return;
         this.answered = true; clearInterval(this.resendTimer);
         clearTimeout(this.ringTimer); this.stopRing(); this.setStatus("Соединение…");
-        this.ringTimer = setTimeout(() => { if (!this.connected) { toast("Связь не установилась. Проверьте интернет и попробуйте ещё раз.", 4000); this.hangup(true, "failed"); } }, 30000);
+        this.armRelay();
+        this.ringTimer = setTimeout(() => { if (!this.connected) { toast("Связь не установилась. Проверьте интернет и попробуйте ещё раз.", 4000); this.hangup(true, "failed"); } }, 40000);
         await this.pc.setRemoteDescription({ type: "answer", sdp: p.sdp });
         for (const c of this.pendingIce.splice(0)) await this.pc.addIceCandidate(c).catch(() => {});
         break;
@@ -2007,6 +2012,8 @@ const Calls = {
         if (this.pc?.remoteDescription) await this.pc.addIceCandidate(p.candidate).catch(() => {});
         else this.pendingIce.push(p.candidate);
         break;
+      case "relay-on": this.relayStart(false); break;
+      case "rl": CallRelay.play(p); break;
       case "decline": toast("Звонок отклонён"); this.hangup(false, "declined"); break;
       case "busy": toast("Абонент занят"); this.hangup(false, "busy"); break;
       case "privacy": this.hangup(false, "privacy"); toast("Пользователь ограничил звонки"); break;
@@ -2043,6 +2050,32 @@ const Calls = {
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
     await this.send(this.peer, { kind: "answer", sdp: answer.sdp });
+    this.armRelay();
+  },
+  // если за 8 секунд прямая связь не появилась — переключаемся на «звонок через сервер»
+  armRelay() {
+    const cid = this.callId; clearTimeout(this.relayTimer);
+    this.relayTimer = setTimeout(() => { if (this.callId === cid && !this.connected) this.relayStart(true); }, 8000);
+  },
+  relayStart(notify) {
+    if (this.relay) return true;
+    if (!this.callId || !this.peer || !this.local) return false;
+    const peer = this.peer, cid = this.callId;
+    this.local.getVideoTracks().forEach((t) => { t.stop(); this.local.removeTrack(t); });
+    this.video = false; this.ui?.classList.remove("has-video");
+    const ok = CallRelay.start(this.local, (m) => { this.send(peer, { ...m, callId: cid }).catch?.(() => {}); });
+    if (!ok) return false;
+    this.relay = true;
+    if (notify) this.send(peer, { kind: "relay-on" }).catch?.(() => {});
+    clearTimeout(this.ringTimer); this.stopRing();
+    if (!this.connected) { this.connected = true; this.startedAt = Date.now(); this.timer(); }
+    this.setStatus("Звонок через сервер · только голос"); this.ui?.classList.add("relayed");
+    toast("Прямая связь недоступна — голос идёт через сервер (только звук, небольшая задержка)", 4500);
+    return true;
+  },
+  relayStop() {
+    if (!this.relay) return;
+    this.relay = false; CallRelay.stop(); this.ui?.classList.remove("relayed");
   },
   decline() { this.send(this.peer, { kind: "decline" }); this.logMissed = false; this.reset(); },
   tryAutoAnswer() {
@@ -2073,7 +2106,7 @@ const Calls = {
     clearTimeout(this.ringTimer); clearTimeout(this.videoOffTimer); clearInterval(this.tick); this.stopRing();
     this.pc?.close(); this.pc = null;
     this.local?.getTracks().forEach((t) => t.stop()); this.local = null; this.remote = null;
-    clearTimeout(this.restartTimer); this.restarts = 0;
+    clearTimeout(this.restartTimer); this.restarts = 0; clearTimeout(this.relayTimer); this.relayStop();
     this.ui?.remove(); this.ui = null; this.peer = null; this.callId = null; this.connected = false; this.pendingIce = [];
   },
 
@@ -2164,7 +2197,7 @@ const Calls = {
   },
   hasRemoteVideo() { return !!this.remote?.getVideoTracks().some((t) => t.readyState === "live" && !t.muted); },
   setStatus(t) { const s = this.ui?.querySelector(".status"); if (s) s.textContent = t; if (this.connected) this.ui?.classList.remove("ringing"); },
-  timer() { clearInterval(this.tick); this.tick = setInterval(() => this.setStatus(fmtDur((Date.now() - this.startedAt) / 1000)), 1000); },
+  timer() { clearInterval(this.tick); this.tick = setInterval(() => this.setStatus(fmtDur((Date.now() - this.startedAt) / 1000) + (this.relay ? " · через сервер" : "")), 1000); },
 
   async toggleCamera(btn) {
     const vt = this.local?.getVideoTracks()[0];
