@@ -121,7 +121,7 @@ const GroupCall = {
     for (const id of [...this.peers.keys()]) this.drop(id, true);
     this.local?.getTracks().forEach((t) => t.stop()); this.local = null;
     this.room(chatId).handlers.delete(this.handler);
-    this.ui?.remove(); this.ui = null;
+    this.ui?.remove(); this.ui = null; this.speaker = false;
     window.AndroidBridge?.callState?.(false, false); window.AndroidBridge?.cancelCall?.();
     this.active = false; this.chatId = null; this.invited = false; this.early.clear();
     this.seen.get(chatId)?.clear();
@@ -277,6 +277,9 @@ const GroupCall = {
     };
     const camBtn = h("button", { class: `cbtn${this.video ? "" : " off"}`, html: this.video ? I.video : I.videoOff });
     camBtn.onclick = () => this.toggleCam(camBtn);
+    const spkBtn = h("button", { class: "cbtn spk-btn", html: I.speaker, title: "Громкая связь" });
+    spkBtn.onclick = () => Calls.toggleSpeaker.call(this, spkBtn);
+    if (this.speaker) spkBtn.classList.add("off");
     this.grid = h("div", { class: "grid" });
     this.localTile = h("div", { class: "tile me" },
       h("video", { autoplay: true, playsinline: true, muted: true }), avatarEl(S.me.id, "lg"),
@@ -291,6 +294,7 @@ const GroupCall = {
         h("div", { class: "cbtn-wrap" }, micBtn, "Микрофон"),
         h("div", { class: "cbtn-wrap" }, camBtn, "Камера"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.flip, onclick: () => this.flip() }), "Повернуть"),
+        window.AndroidBridge?.setSpeaker ? h("div", { class: "cbtn-wrap" }, spkBtn, "Громкая") : null,
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.group, onclick: () => this.invite() }), "Позвать"),
         CallReact.button((emoji) => this.emit({ kind: "react", emoji })),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.leave() }), "Выйти")));
