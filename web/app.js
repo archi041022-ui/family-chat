@@ -643,6 +643,7 @@ async function enter(user) {
   Tasks.start();
   Joins.load();
   Push.setup();
+  WebPush.start();
   const hashChat = location.hash.slice(1);
   if (hashChat && S.chats.find((c) => c.id === hashChat)) openChat(hashChat);
 }
@@ -1780,7 +1781,7 @@ function notify(m) {
     const text = Prefs.get("preview") ? (c?.is_group ? (S.profiles.get(m.user_id)?.name || "") + ": " : "") + previewText({ ...m, user_id: null }) : "Новое сообщение";
     window.AndroidBridge.notify(c ? chatTitle(c) : "Новое сообщение", text, m.chat_id);
   } else if (!appVisible() && "Notification" in window && Notification.permission === "granted") {
-    try { new Notification(S.profiles.get(m.user_id)?.name || "Новое сообщение", { body: previewText({ ...m, user_id: null }), icon: "icon-192.png" }); } catch { /* */ }
+    try { new Notification(S.profiles.get(m.user_id)?.name || "Новое сообщение", { body: previewText({ ...m, user_id: null }), icon: "icon-192.png", tag: "chat-" + m.chat_id }); } catch { /* */ }
   }
 }
 document.addEventListener("click", function askNotify() {

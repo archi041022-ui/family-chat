@@ -1,6 +1,8 @@
 {
   "name": "Семья — мессенджер",
   "short_name": "Семья",
+  "id": "./",
+  "scope": "./",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#F4F1EC",

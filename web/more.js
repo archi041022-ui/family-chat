@@ -428,4 +428,91 @@ const FcmSetup = {
     draw();
   },
 };
+// ───────── Оповещения на iPhone и в браузерах (Web Push) ─────────
+// Подписка хранится на сервере, текст оповещений шифруется ключом устройства.
+const WebPush = {
+  isIos() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); },
+  standalone() { return window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches); },
+  available() { return !window.AndroidBridge && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; },
+  u8(b64) { const t = b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (b64.length % 4)) % 4); return Uint8Array.from(atob(t), (c) => c.charCodeAt(0)); },
+  async ready() { await navigator.serviceWorker.register("sw.js"); return navigator.serviceWorker.ready; },
+  async current() { const r = await this.ready(); return r.pushManager.getSubscription(); },
+  async key() {
+    const { data, error } = await S.sb.functions.invoke("webpush", { body: { action: "key" } });
+    if (error || !data?.key) throw new Error("KEY");
+    return data.key;
+  },
+  async save(sub) {
+    const j = sub.toJSON();
+    const { data } = await S.sb.rpc("save_web_push", { ep: j.endpoint, k: j.keys?.p256dh, a: j.keys?.auth });
+    return data;
+  },
+  /** Включить: вызывается только по нажатию кнопки (так требует iPhone). */
+  async enable() {
+    if (!this.available()) return "UNSUPPORTED";
+    const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm !== "granted") return "DENIED";
+    const reg = await this.ready();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: this.u8(await this.key()) });
+    const r = await this.save(sub);
+    return r === "OK" ? "OK" : (r || "FAIL");
+  },
+  async disable() {
+    const sub = await this.current();
+    if (sub) { try { await S.sb.rpc("drop_web_push", { ep: sub.endpoint }); } catch { /* */ } await sub.unsubscribe().catch(() => {}); }
+  },
+  /** После входа: зарегистрировать службу, обновить подписку на сервере, открыть чат из оповещения. */
+  async start() {
+    if (!this.available() || !S.me) return;
+    try {
+      navigator.serviceWorker.addEventListener("message", (e) => { if (e.data?.type === "open" && e.data.chat && typeof openChat === "function") openChat(e.data.chat); });
+      const sub = await this.current();
+      if (sub) await this.save(sub);
+      else if (Notification.permission === "granted") await this.enable();     // разрешение уже есть — подписываемся сами
+    } catch { /* без оповещений приложение работает как раньше */ }
+    try {
+      const chat = new URLSearchParams(location.search).get("chat");
+      if (chat && typeof openChat === "function") { history.replaceState(null, "", location.pathname); setTimeout(() => openChat(chat), 600); }
+    } catch { /* */ }
+  },
+  async sheet() {
+    const box = h("div");
+    const draw = async () => {
+      box.innerHTML = "";
+      const row = (ok, text) => h("div", { class: `health${ok ? " ok" : " bad"}` }, h("span", null, ok ? "✓" : "•"), h("span", null, text));
+      if (window.AndroidBridge) { box.append(h("p", { class: "sheet-note" }, "В приложении для Android оповещения идут через Firebase — см. раздел «Мгновенные оповещения» (его настраивает администратор).")); return; }
+      if (!this.available()) {
+        if (this.isIos() && !this.standalone()) {
+          box.append(row(false, "Оповещения на iPhone работают, когда «Семья» добавлена на экран «Домой»"),
+            h("ol", { class: "sheet-note", style: { paddingLeft: "20px" } },
+              h("li", null, "Откройте этот сайт в Safari."), h("li", null, "Нажмите «Поделиться» (квадрат со стрелкой) → «На экран Домой»."),
+              h("li", null, "Откройте «Семью» с новой иконки и вернитесь в этот раздел."), h("li", null, "Нажмите «Включить оповещения».")),
+            h("p", { class: "sheet-note" }, "Нужен iOS 16.4 или новее."));
+        } else box.append(row(false, "Этот браузер не поддерживает оповещения"));
+        return;
+      }
+      let sub = null; try { sub = await this.current(); } catch { /* */ }
+      const perm = Notification.permission;
+      box.append(row(!!sub && perm === "granted", sub && perm === "granted" ? "Оповещения на этом устройстве включены" : perm === "denied" ? "Оповещения запрещены в настройках устройства" : "Оповещения на этом устройстве выключены"));
+      if (perm === "denied") box.append(h("p", { class: "sheet-note" }, "Разрешите оповещения для «Семьи» в настройках устройства (на iPhone: Настройки → Уведомления → Семья), затем вернитесь сюда."));
+      else if (!(sub && perm === "granted")) box.append(h("button", { class: "btn wide", onclick: async () => {
+        let r; try { r = await this.enable(); } catch { r = "FAIL"; }
+        toast({ OK: "✅ Оповещения включены", DENIED: "Оповещения не разрешены", UNSUPPORTED: "Не поддерживается на этом устройстве", NO_AUTH: "Войдите в приложение", BANNED: "Недоступно" }[r] || "Не удалось включить: сервер оповещений не отвечает", 5000);
+        draw();
+      } }, "Включить оповещения"));
+      else box.append(
+        h("button", { class: "btn wide ghost", onclick: async () => {
+          const { data, error } = await S.sb.functions.invoke("webpush", { body: { action: "test" } });
+          toast(!error && data?.sent ? "Отправлено — сейчас придёт оповещение" : "Не отправилось: " + (data?.reason || error?.message || "устройство не отвечает"), 5000);
+        } }, "Проверить на этом устройстве"),
+        h("button", { class: "menu-item danger", onclick: async () => { await this.disable(); toast("Оповещения на этом устройстве отключены"); draw(); } }, "Отключить"));
+    };
+    sheet([h("h3", null, "🔔 Оповещения на этом устройстве"),
+      h("p", { class: "sheet-note" }, "Сообщения, истории и звонки будут приходить даже когда «Семья» закрыта. Текст передаётся в зашифрованном виде: прочитать его может только ваше устройство."),
+      box]);
+    draw();
+  },
+};
+
 window.onPushTest = () => toast("✅ Мгновенные оповещения работают на этом телефоне", 5000);

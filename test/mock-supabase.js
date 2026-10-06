@@ -315,6 +315,13 @@
             if ("listed" in st) c.listed = st.listed;
             save(db); return { data: "OK", error: null };
           }
+          if (name === "save_web_push") {
+            if (!/^https:\/\/(fcm\.googleapis\.com|[a-z0-9.-]+\.push\.apple\.com)\//.test(args.ep || "")) return { data: "BAD_ENDPOINT", error: null };
+            if (!/^[\w-]{80,100}$/.test(args.k || "") || !/^[\w-]{16,32}$/.test(args.a || "")) return { data: "BAD_KEYS", error: null };
+            db.webPush = (db.webPush || []).filter((x) => x.ep !== args.ep); db.webPush.push({ ep: args.ep, user: u, k: args.k, a: args.a }); save(db); return { data: "OK", error: null };
+          }
+          if (name === "drop_web_push") { db.webPush = (db.webPush || []).filter((x) => !(x.ep === args.ep && x.user === u)); save(db); return { data: null, error: null }; }
+          if (name === "web_push_status") return { data: (db.webPush || []).filter((x) => x.user === u).length, error: null };
           if (name === "cf_turn_status") return { data: db.admin === u && !!db.cfTurn, error: null };
           if (name === "set_cf_turn") {
             if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
@@ -516,6 +523,10 @@
               const g = Uint8Array.from(atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), (c) => c.charCodeAt(0));
               return { data: new Blob([g], { type: "image/gif" }), error: null };
             }
+          }
+          if (fn === "webpush") {
+            if (body.action === "key") return { data: { key: "B" + "Q".repeat(86) }, error: null };
+            if (body.action === "test") { const d = load(); window.__wpTests = (window.__wpTests || 0) + 1; return { data: { ok: !!(d.webPush || []).length, sent: (d.webPush || []).length }, error: null }; }
           }
           if (fn === "push") { window.__pushTests = (window.__pushTests || 0) + 1; return { data: { ok: true, sent: 1 }, error: null }; }
           await new Promise((r) => setTimeout(r, 300));
