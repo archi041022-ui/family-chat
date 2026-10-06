@@ -119,6 +119,9 @@
           if (!isMember(db, r.chat_id, u)) return { data: null, error: { message: "rls" } };
           const ch = db.chats.find((x) => x.id === r.chat_id);
           const owner = ch && (ch.created_by === u || db.admin === u);
+          const lp = db.profiles.find((x) => x.id === u);
+          if (db.admin !== u && lp?.lim_readonly) return { data: null, error: { message: "LIMITED_READONLY" } };
+          if (db.admin !== u && lp?.lim_media && r.media_type && r.media_type !== "location") return { data: null, error: { message: "LIMITED_MEDIA" } };
           if (ch?.is_channel && !ch.members_can_post && !owner) return { data: null, error: { message: "rls" } };
           if (ch && !ch.is_group && !String(ch.dm_key || "").startsWith("saved:")) {
             const other = db.chat_members.find((m) => m.chat_id === ch.id && m.user_id !== u)?.user_id;
@@ -457,7 +460,37 @@
             const nn = (args.targets || []).filter((t) => t !== u).map((t) => addNotice(db, { user_id: t, kind: "call", actor: u, title: pname(db, u), body: args.video ? "Входящий видеозвонок" : "Входящий звонок" }));
             db.wakes = (db.wakes || 0) + nn.length; save(db); emitNotices(nn); return { data: "OK", error: null };
           }
+          const createBlocked = () => db.admin !== u && (db.createOnly || db.profiles.find((x) => x.id === u)?.lim_create);
+          if (name === "admin_overview") {
+            if (db.admin !== u) return { data: null, error: { message: "NOT_ADMIN" } };
+            return { data: { create_admin_only: !!db.createOnly,
+              users: db.profiles.map((p) => ({ id: p.id, name: p.name, banned: !!p.banned, joined: p.created_at, last_seen: p.last_seen, lim_create: !!p.lim_create, lim_media: !!p.lim_media, lim_readonly: !!p.lim_readonly,
+                groups: db.chats.filter((c) => c.created_by === p.id && c.is_group && !c.is_channel && c.id !== FAMILY).length, channels: db.chats.filter((c) => c.created_by === p.id && c.is_channel).length, msgs: db.messages.filter((m) => m.user_id === p.id).length })),
+              chats: db.chats.filter((c) => c.is_group).map((c) => ({ id: c.id, title: c.title, channel: !!c.is_channel, private: !!c.is_private, by: c.created_by || null, at: c.created_at || null, members: db.chat_members.filter((m) => m.chat_id === c.id).length, msgs: db.messages.filter((m) => m.chat_id === c.id).length, family: c.id === FAMILY })) }, error: null };
+          }
+          if (name === "admin_log_list") { if (db.admin !== u) return { data: null, error: { message: "NOT_ADMIN" } }; return { data: (db.adminLog || []).slice().reverse(), error: null }; }
+          if (name === "admin_set_limits") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            if (args.target === u) return { data: "SELF", error: null };
+            const pr = db.profiles.find((x) => x.id === args.target); if (!pr) return { data: "NO_USER", error: null };
+            pr.lim_create = !!args.l_create; pr.lim_media = !!args.l_media; pr.lim_readonly = !!args.l_readonly;
+            (db.adminLog = db.adminLog || []).push({ at: new Date().toISOString(), actor: u, kind: "limits", ref: pr.id, title: pr.name + ": ограничения" }); save(db); return { data: "OK", error: null };
+          }
+          if (name === "admin_set_create_only") { if (db.admin !== u) return { data: "NOT_ADMIN", error: null }; db.createOnly = !!args.on_; save(db); return { data: "OK", error: null }; }
+          if (name === "admin_delete_chat") {
+            if (db.admin !== u) return { data: "NOT_ADMIN", error: null };
+            if (args.cid === FAMILY) return { data: "FAMILY", error: null };
+            const c = db.chats.find((x) => x.id === args.cid && x.is_group); if (!c) return { data: "NO_CHAT", error: null };
+            db.chats = db.chats.filter((x) => x !== c); db.chat_members = db.chat_members.filter((m) => m.chat_id !== c.id); save(db); return { data: "OK", error: null };
+          }
+          if (name === "welcome_me") {
+            const body = "👋 Я теперь в «Семье»!";
+            if (!isMember(db, FAMILY, u)) return { data: "NO_FAMILY", error: null };
+            if (db.messages.some((m) => m.chat_id === FAMILY && m.user_id === u && m.body === body)) return { data: "DONE", error: null };
+            const m = { id: uid(), chat_id: FAMILY, user_id: u, body, created_at: new Date().toISOString(), approved: true }; db.messages.push(m); save(db); emit("messages", "INSERT", m); return { data: "OK", error: null };
+          }
           if (name === "create_channel") {
+            if (createBlocked()) return { data: null, error: { message: "LIMITED_CREATE" } };
             const c = { id: uid(), is_group: true, is_channel: true, is_private: args.private !== false, protected: false, title: args.title, description: args.description || null, created_by: u, last_message_at: new Date().toISOString() };
             db.chats.push(c);
             for (const x of [u, ...(args.members || [])]) if (!isMember(db, c.id, x)) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
@@ -481,6 +514,7 @@
             save(db); return { data: "OK", error: null };
           }
           if (name === "create_group") {
+            if (createBlocked()) return { data: null, error: { message: "LIMITED_CREATE" } };
             const c = { id: uid(), is_group: true, title: args.title, created_by: u, last_message_at: new Date().toISOString() }; db.chats.push(c);
             for (const x of [u, ...args.members]) if (x === u || pvAllowed(db, x, u, "groups")) db.chat_members.push({ chat_id: c.id, user_id: x, last_read_at: new Date(0).toISOString() });
             save(db); return { data: c.id, error: null };

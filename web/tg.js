@@ -736,15 +736,16 @@ window.onUpdateProgress = (p) => Updates.onProgress(p);
 // ───────────── Приветствие нового участника ─────────────
 const WELCOME_MARK = "👋 Я теперь в «Семье»!";
 const Welcome = {
-  maybeShow(user) {
+  async maybeShow(user) {
     if (window.__noWelcome) return;
+    const created = new Date(S.me.created_at || user?.created_at || 0).getTime();
+    if (!created || Date.now() - created > 3 * 864e5) return;      // только для недавно зарегистрированных
+    // сообщение «Я теперь в Семье» ставит сервер: ровно один раз, даже если приложение закрыли раньше времени
+    let r = null; try { r = (await S.sb.rpc("welcome_me")).data; } catch { /* */ }
     const key = "welcomed:" + S.me.id;
     let done = false; try { done = !!localStorage.getItem(key); localStorage.setItem(key, "1"); } catch { /* */ }
-    if (done) return;
-    const created = new Date(S.me.created_at || user?.created_at || 0).getTime();
-    if (!created || Date.now() - created > 20 * 60e3) return;      // только для только что зарегистрированных
-    this.show();
-    if ((S.members.get(FAMILY_CHAT) || []).some((m) => m.user_id === S.me.id)) setTimeout(() => postMessage({ body: WELCOME_MARK }, FAMILY_CHAT).catch(() => {}), 1200);
+    if (r == null && !done && (S.members.get(FAMILY_CHAT) || []).some((m) => m.user_id === S.me.id)) setTimeout(() => postMessage({ body: WELCOME_MARK }, FAMILY_CHAT).catch(() => {}), 1200);
+    if (!done) this.show();
   },
   confetti(n = 70) {
     const box = h("div", { class: "confetti" });

@@ -59,10 +59,10 @@ try:
         assert A.evaluate("S.filter") == ""
         # меню — открыть и закрыть той же кнопкой
         A.click("#tabBtnMenu"); A.wait_for_selector("#tabMenu:not(.hidden)")
-        for t in ["Конфиденциальность", "Подарки", "Стикеры", "Избранное", "Семья", "Мои задачи", "Настройки"]: assert A.locator(f"#tabMenu .mn-tile:has-text('{t}')").count() == 1, t
+        for t in ["Конфиденциальность", "Подарки", "Стикеры", "Избранное", "Мои задачи", "Настройки"]: assert A.locator(f"#tabMenu .mn-tile:has-text('{t}')").count() == 1, t
         shot(A, "z2_menu")
         A.click("#tabBtnMenu"); A.wait_for_selector("#tabChats:not(.hidden)"); assert A.evaluate("S.tab") == "chats"
-        menu(A, "Семья"); A.wait_for_selector("#chatView .topbar >> text=Семья"); A.click(".back-btn")
+        A.evaluate("openChat(FAMILY_CHAT)"); A.wait_for_selector("#chatView .topbar >> text=Семья"); A.click(".back-btn")
         print("main screen: ok")
         # ── 2. конфиденциальность (Мама)
         menu(B, "Конфиденциальность"); B.wait_for_selector(".sheet >> text=Чёрный список")

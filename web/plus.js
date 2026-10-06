@@ -233,7 +233,7 @@ const Channels = {
         const ids = picks.map((l) => l.querySelector("input")).filter((i) => i.checked).map((i) => i.value);
         btn.disabled = true;
         const { data: id, error } = await S.sb.rpc("create_channel", { title: title.value.trim(), description: desc.value.trim(), private: priv, members: ids });
-        if (error || !id) { btn.disabled = false; toast("Не удалось создать канал"); return; }
+        if (error || !id) { btn.disabled = false; toast(/LIMITED_CREATE/.test(error?.message || "") ? "🔒 Создавать каналы вам запретил администратор" : "Не удалось создать канал"); return; }
         await S.sb.rpc("chat_settings2", { cid: id, settings: { members_can_post: true, moderated: priv, listed: priv } });
         try { if (photo) { const path = await Groups.uploadPhoto(id, photo); await S.sb.rpc("group_update", { cid: id, new_title: title.value.trim(), new_description: desc.value.trim(), new_avatar: path }); } }
         catch { toast("Фото не загрузилось — можно добавить позже"); }

@@ -447,7 +447,7 @@ const Groups = {
         if (!title.value.trim()) { toast("Введите название"); return; }
         btn.disabled = true;
         const { data: id, error } = await S.sb.rpc("create_group", { title: title.value.trim(), members: ids });
-        if (error || !id) { btn.disabled = false; toast("Не удалось создать группу"); return; }
+        if (error || !id) { btn.disabled = false; toast(/LIMITED_CREATE/.test(error?.message || "") ? "🔒 Создавать группы вам запретил администратор" : "Не удалось создать группу"); return; }
         let avatar = null;
         try { if (photo) avatar = await this.uploadPhoto(id, photo); } catch { toast("Фото не загрузилось — можно добавить позже"); }
         if (desc.value.trim() || avatar) await S.sb.rpc("group_update", { cid: id, new_title: title.value.trim(), new_description: desc.value.trim(), new_avatar: avatar });

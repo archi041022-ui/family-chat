@@ -23,10 +23,10 @@ const Menu = {
     const tile = (bg, icon, label, onclick, badge, glow) => {
       const ico = h("span", { class: "mn-ico", html: icon }); ico.style.setProperty("--c", bg);      // свой цвет у каждого значка
       return h("button", { class: `mn-tile${glow ? " glow" : ""}`, onclick }, ico, h("span", { class: "mn-lbl" }, label),
-        badge ? h("i", { class: "mn-badge" }, badge > 99 ? "99+" : String(badge)) : null);
+        badge ? h("i", { class: "mn-badge" }, badge > 99 ? "99+" : String(badge)) : null, h("span", { class: "mn-chev", html: MI.chev }));
     };
     const section = (title, ...tiles) => h("section", { class: "mn-sec" }, h("div", { class: "mn-cap" }, title), h("div", { class: "mn-grid" }, ...tiles.filter(Boolean)));
-    const tasks = Tasks.active().length, unseen = Stories.order().unseen.length, famUnread = S.unread.get(FAMILY_CHAT) || 0;
+    const tasks = Tasks.active().length, unseen = Stories.order().unseen.length, canCreate = S.isAdmin || !S.me.lim_create;
     box.append(...[                                    // пустые разделы (например, «Администратор») не выводим
       h("button", { class: "mn-profile", onclick: () => showTab("settings") }, avatarEl(S.me.id, "lg"),
         h("div", { class: "mid" }, h("b", null, S.me.name), h("small", null, "Профиль и настройки")), h("span", { class: "chev", html: MI.chev })),
@@ -40,13 +40,13 @@ const Menu = {
         tile("#8A57D6", I.story, "Истории и статусы", () => showTab("stories"), unseen),
         tile("#14919B", I.video, "Видеочат семьи", () => GroupCall.start(FAMILY_CHAT, true))),
       section("Общение",
-        tile("#E8664F", MI.home, "Семья", () => openChat(FAMILY_CHAT), famUnread),
         tile("#3E7BE6", MI.bookmark, "Избранное", () => Saved.open()),
         tile("#3E7BE6", MI.compass, "Группы и каналы", () => Joins.directory()),
-        tile("#3E7BE6", I.group, "Создать группу", () => newGroupSheet()),
-        tile("#3E7BE6", MI.megaphone, "Создать канал", () => Channels.create()),
+        canCreate ? tile("#3E7BE6", I.group, "Создать группу", () => newGroupSheet()) : null,
+        canCreate ? tile("#3E7BE6", MI.megaphone, "Создать канал", () => Channels.create()) : null,
         tile("#2E9E62", I.invite, "Пригласить в семью", () => showTab("invite"))),
       S.isAdmin ? section("Администратор",
+        tile("#C0392B", I.shield, "Панель управления", () => AdminPanel.open()),
         tile("#5F6B7A", I.shield, "Участники", () => membersAdmin()),
         tile("#5F6B7A", I.key, "Сброс пароля", () => adminResetSheet()),
         tile("#5F6B7A", I.bell, "Мгновенные оповещения", () => FcmSetup.sheet()),
@@ -213,37 +213,49 @@ const TabSwipe = {
   },
   attach(root) {
     if (!root || root._tabSwipe) return; root._tabSwipe = true;
-    let x0 = 0, y0 = 0, t0 = 0, active = false, decided = false, horiz = false, dx = 0, body = null, raf = 0, can = false;
-    const paint = () => { raf = 0; if (body && can) { body.style.transform = `translate3d(${dx * 0.4}px,0,0)`; body.style.opacity = String(1 - Math.min(0.3, Math.abs(dx) / innerWidth * 0.5)); } };
+    let x0 = 0, y0 = 0, t0 = 0, active = false, decided = false, horiz = false, dx = 0, body = null, raf = 0, can = false, vx = 0, lx = 0, lt = 0;
+    const EASE = "cubic-bezier(.22,.8,.3,1)";
+    // палец ведёт содержимое почти один в один; на краю (дальше листать некуда) — с сопротивлением
+    const paint = () => { raf = 0; if (!body) return; const k = can ? 0.92 : 0.22; body.style.transform = `translate3d(${dx * k}px,0,0)`; body.style.opacity = String(1 - Math.min(0.45, Math.abs(dx) / innerWidth * 0.7)); };
     root.addEventListener("touchstart", (e) => {
       active = false;
       if (e.touches.length > 1 || this.ORDER.indexOf(S.tab || "chats") < 0 || this.blocked()) return;
       if (this.inScroller(e.target, root)) return;
-      const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); dx = 0; active = true; decided = false; horiz = false;
+      const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; t0 = lt = Date.now(); lx = x0; vx = 0; dx = 0; active = true; decided = false; horiz = false;
       const cur = S.tab || "chats"; body = $("#tab" + cur[0].toUpperCase() + cur.slice(1));
+      if (body) { body.getAnimations?.().forEach((an) => an.cancel()); body.classList.remove("slide-l", "slide-r"); }
     }, { passive: true });
     root.addEventListener("touchmove", (e) => {
       if (!active) return;
       const t = e.touches[0], ddx = t.clientX - x0, ddy = t.clientY - y0;
       if (!decided) {
-        if (Math.abs(ddx) < 12 && Math.abs(ddy) < 12) return;
-        decided = true; horiz = Math.abs(ddx) > Math.abs(ddy) * 1.8;
+        if (Math.abs(ddx) < 10 && Math.abs(ddy) < 10) return;
+        decided = true; horiz = Math.abs(ddx) > Math.abs(ddy) * 1.5;
         if (!horiz) { active = false; return; }
-        x0 = t.clientX; if (body) { body.style.transition = "none"; body.style.willChange = "transform, opacity"; }   // без рывка в начале жеста
+        x0 = t.clientX; lx = x0; if (body) { body.style.transition = "none"; body.style.willChange = "transform, opacity"; }   // без рывка в начале жеста
         return;
       }
-      dx = t.clientX - x0;
+      const now = Date.now(); dx = t.clientX - x0;
+      if (now > lt) { vx = vx * 0.3 + ((t.clientX - lx) / (now - lt)) * 0.7; lx = t.clientX; lt = now; }   // сглаженная скорость, px/мс
       const i = this.ORDER.indexOf(S.tab || "chats"); can = !!(this.folderStep(dx < 0 ? 1 : -1) || this.ORDER[i + (dx < 0 ? 1 : -1)]);
       if (!raf) raf = requestAnimationFrame(paint);
     }, { passive: true });
     const end = () => {
       if (!active) return; active = false;
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
-      const b = body;
-      if (b) { b.style.transition = "transform .24s cubic-bezier(.22,.8,.3,1), opacity .24s"; b.style.transform = ""; b.style.opacity = ""; setTimeout(() => { b.style.transition = ""; b.style.willChange = ""; }, 260); }
-      if (!horiz) return;
-      const fast = Date.now() - t0 < 280 && Math.abs(dx) > 40;
-      if (Math.abs(dx) > Math.min(80, innerWidth * 0.2) || fast) this.go(dx < 0 ? 1 : -1);
+      const b = body; if (!b) return;
+      const settle = () => { b.style.transition = ""; b.style.transform = ""; b.style.opacity = ""; b.style.willChange = ""; };
+      const dir = dx < 0 ? 1 : -1;
+      const commit = horiz && can && (Math.abs(dx) > Math.min(72, innerWidth * 0.18) || (Math.abs(vx) > 0.4 && Math.abs(dx) > 28));
+      if (!commit) {                                           // вернуть на место мягко
+        b.style.transition = `transform .26s ${EASE}, opacity .26s`; b.style.transform = "translate3d(0,0,0)"; b.style.opacity = "";
+        setTimeout(settle, 280); return;
+      }
+      // дотолкнуть уходящий экран по инерции и сразу показать следующий, без «отскока назад»
+      const left = Math.max(120, Math.min(220, (innerWidth - Math.abs(dx)) / Math.max(0.6, Math.abs(vx) + 0.4)));
+      b.style.transition = `transform ${Math.round(left) * 0.9}ms ease-out, opacity ${Math.round(left) * 0.9}ms ease-out`;
+      b.style.transform = `translate3d(${-dir * innerWidth * 0.5}px,0,0)`; b.style.opacity = "0";
+      setTimeout(() => { settle(); this.go(dir); }, Math.round(left) * 0.9);
     };
     root.addEventListener("touchend", end); root.addEventListener("touchcancel", end);
   },

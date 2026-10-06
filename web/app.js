@@ -1379,7 +1379,7 @@ async function postMessage(fields, chatId = S.current) {
     if (i >= 0) list.splice(i, 1);
     if (S.current === chatId) renderMessages(false);
     const pm = String(error.message || "");
-    toast(/PRIVACY_VOICE/.test(pm) ? "🔒 Получатель ограничил голосовые сообщения" : /PRIVACY/.test(pm) ? "🔒 Получатель ограничил личные сообщения" : "Не отправлено. Проверьте интернет."); return null;
+    toast(/LIMITED_READONLY/.test(pm) ? "🔒 Администратор отключил вам отправку сообщений" : /LIMITED_MEDIA/.test(pm) ? "🔒 Администратор запретил вам отправлять фото, видео и файлы" : /PRIVACY_VOICE/.test(pm) ? "🔒 Получатель ограничил голосовые сообщения" : /PRIVACY/.test(pm) ? "🔒 Получатель ограничил личные сообщения" : "Не отправлено. Проверьте интернет."); return null;
   }
   FX.carry(temp.id, data.id);
   if (list.some((x) => x.id === data.id)) { if (i >= 0) list.splice(i, 1); } // уже пришло по realtime
@@ -1495,7 +1495,7 @@ function oldNewGroupSheet() {
       const ids = picks.map((l) => l.querySelector("input")).filter((i) => i.checked).map((i) => i.value);
       if (!title.value.trim()) { toast("Введите название"); return; }
       const { data: id, error } = await S.sb.rpc("create_group", { title: title.value.trim(), members: ids });
-      if (error) { toast("Не удалось создать группу"); return; }
+      if (error) { toast(/LIMITED_CREATE/.test(error?.message || "") ? "🔒 Создавать группы вам запретил администратор" : "Не удалось создать группу"); return; }
       close(); await loadChats(); openChat(id);
     } }, "Создать"),
   ]);
