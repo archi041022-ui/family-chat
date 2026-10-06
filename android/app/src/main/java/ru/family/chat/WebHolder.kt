@@ -259,6 +259,12 @@ object WebHolder {
             a.runOnUiThread { a.pickContact() }
         }
 
+        /** Открыть настройки приложения (включить разрешение на контакты). */
+        @JavascriptInterface fun openAppSettings() {
+            val a = activity ?: return
+            a.runOnUiThread { a.openAppSettings() }
+        }
+
         /** Список контактов (ответ в window.onContactsList). Спросит разрешение на чтение контактов. */
         @JavascriptInterface fun loadContacts() {
             val a = activity ?: run { js("window.onContactsList && window.onContactsList(null, 'error')"); return }

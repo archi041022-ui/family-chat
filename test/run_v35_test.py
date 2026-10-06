@@ -54,7 +54,8 @@ try:
         A.evaluate("document.querySelectorAll('.sheet-back').forEach(x => x._close && x._close())")
         # отказ в доступе — ручной ввод
         A.evaluate("""() => { window.AndroidBridge = { loadContacts() { setTimeout(() => window.onContactsList(null, 'denied'), 50); } }; void Invite.fromContacts('SEMYA-4825'); }""")
-        A.wait_for_selector("input[type=tel]"); print("contacts list: ok")
+        A.wait_for_selector(".sheet-back:has-text('Контакты недоступны')")
+        A.click(".sheet-back button:has-text('Ввести номер вручную')"); A.wait_for_selector("input[type=tel]"); print("contacts list: ok")
         A.evaluate("document.querySelectorAll('.sheet-back').forEach(x => x._close && x._close())")
         # ── 2. автоудаление после прочтения
         dm = A.evaluate("(id) => S.sb.rpc('get_or_create_dm', { other: id }).then(x => x.data)", ids["Мама"])

@@ -174,7 +174,20 @@ const TabSwipe = {
   blocked() {
     return !!(document.querySelector(".sheet-back, .call:not(.mini), .ve-root, .camera, .video-rec, .vnote-rec, .lightbox, .story-viewer, .scan-editor, .gift-reveal, .welcome, .lock-screen, .auth") || $(".topbar.searching"));
   },
+  FOLDERS: ["all", "personal", "groups", "unread"],
+  /** Внутри раздела «Чаты» свайп листает папки: Все ↔ Личные ↔ Группы ↔ Непрочитанные; с краёв — к соседним разделам. */
+  folderStep(dir) {
+    if ((S.tab || "chats") !== "chats") return null;
+    const k = this.FOLDERS.indexOf(S.folder || "all"), n = k + dir;
+    return n >= 0 && n < this.FOLDERS.length ? this.FOLDERS[n] : null;
+  },
   go(dir) {
+    const f = this.folderStep(dir);
+    if (f) {
+      S.folder = f; renderChatList();
+      const list = $("#chatItems"); if (list) { list.classList.remove("slide-l", "slide-r"); void list.offsetWidth; list.classList.add(dir > 0 ? "slide-l" : "slide-r"); setTimeout(() => list.classList.remove("slide-l", "slide-r"), 260); }
+      return true;
+    }
     const i = this.ORDER.indexOf(S.tab || "chats"); if (i < 0) return false;
     const to = this.ORDER[i + dir]; if (!to) return false;
     showTab(to);
@@ -201,7 +214,7 @@ const TabSwipe = {
         if (!horiz) { active = false; return; }
       }
       dx = ddx;
-      const i = this.ORDER.indexOf(S.tab || "chats"), can = this.ORDER[i + (dx < 0 ? 1 : -1)];
+      const i = this.ORDER.indexOf(S.tab || "chats"), can = this.folderStep(dx < 0 ? 1 : -1) || this.ORDER[i + (dx < 0 ? 1 : -1)];
       if (body && can) { body.style.transition = "none"; body.style.transform = `translateX(${dx * 0.3}px)`; body.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / innerWidth)); }
     }, { passive: true });
     const end = () => {

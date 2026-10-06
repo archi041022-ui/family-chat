@@ -334,8 +334,10 @@ const Tg = {
         h("div", { class: "mid" }, h("b", null, name),
           h("small", null, h("span", { class: "dir", html: r.out ? I.callOut : I.callIn }), label)),
         h("small", { class: "when" }, fmtListTime(r.m.created_at)),
-        h("button", { class: "icon-btn", title: r.video ? "Видеозвонок" : "Позвонить", html: r.video ? I.video : I.phone,
-          onclick: (e) => { e.stopPropagation(); if (r.group) GroupCall.start(r.c.id, true); else Calls.start(r.other, r.video); } })));
+        r.missed && !r.group
+          ? h("button", { class: "btn cb-btn", onclick: (e) => { e.stopPropagation(); Calls.start(r.other, r.video); } }, h("span", { html: r.video ? I.video : I.phone }), "Перезвонить")
+          : h("button", { class: "icon-btn", title: r.video ? "Видеозвонок" : "Позвонить", html: r.video ? I.video : I.phone,
+              onclick: (e) => { e.stopPropagation(); if (r.group) GroupCall.start(r.c.id, true); else Calls.start(r.other, r.video); } })));
     }
   },
   updateCallsBadge() {
@@ -507,7 +509,7 @@ const Tg = {
   },
 };
 
-const APP_VERSION = "3.9";
+const APP_VERSION = "4.0";
 
 // ───────────── Карточка участника «О себе» ─────────────
 Object.assign(Tg, {

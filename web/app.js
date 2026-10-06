@@ -360,22 +360,15 @@ const Invite = {
       search.addEventListener("input", draw);
       window.onContactsList = (arr, err) => {
         if (done) return; done = true; window.onContactsList = null;
-        if (!arr) { close?.(); toast(err === "denied" ? "Нет доступа к контактам — введите номер вручную" : "Не удалось прочитать контакты", 3500); this.manual(code); return; }
-        all = arr; draw();
+        if (!arr) { close?.(); setTimeout(() => this.noAccess(code, err), 150); return; }
+        all = arr; if (!all.length) { close?.(); setTimeout(() => this.noAccess(code, "empty"), 150); return; }
+        draw();
       };
       close = sheet([h("h3", null, "Кого пригласить?"), search, list]);
       try { window.AndroidBridge.loadContacts(); } catch { done = true; close?.(); this.manual(code); }
       return;
     }
-    if (window.AndroidBridge?.pickContact) {
-      let done = false;
-      const fin = (c) => { if (done) return; done = true; window.onContactPicked = null; Lock.ext = false; if (c) setTimeout(() => this.send(c, code), 150); };
-      window.onContactPicked = fin;
-      Lock.ext = true;
-      setTimeout(() => { if (!done && document.visibilityState === "visible") fin(null); }, 120000);
-      try { window.AndroidBridge.pickContact(); } catch { fin(null); toast("Не удалось открыть контакты"); }
-      return;
-    }
+    if (window.AndroidBridge?.pickContact) return this.fromPicker(code);
     // браузер Chrome на Android умеет выбирать контакты сам
     if (navigator.contacts?.select) {
       try {
@@ -384,6 +377,26 @@ const Invite = {
       } catch { /* отменили */ return; }
     }
     this.manual(code);
+  },
+  /** Системное окно выбора контакта (разрешение на чтение всех контактов не нужно). */
+  fromPicker(code) {
+    let done = false;
+    const fin = (c) => { if (done) return; done = true; window.onContactPicked = null; Lock.ext = false; if (c) setTimeout(() => this.send(c, code), 150); };
+    window.onContactPicked = fin;
+    Lock.ext = true;
+    setTimeout(() => { if (!done && document.visibilityState === "visible") fin(null); }, 120000);
+    try { window.AndroidBridge.pickContact(); } catch { fin(null); toast("Не удалось открыть контакты"); }
+  },
+  /** Нет доступа к контактам или список пуст: три способа продолжить. */
+  noAccess(code, why) {
+    let close;
+    const text = why === "denied" ? "Приложению не разрешён доступ к контактам. Разрешите его в настройках телефона (Разрешения → Контакты) или выберите номер другим способом."
+      : why === "empty" ? "Приложение не увидело в телефоне контактов с номерами. Можно выбрать номер через окно телефона или ввести его вручную."
+      : "Не удалось прочитать контакты. Можно выбрать номер через окно телефона или ввести его вручную.";
+    close = sheet([h("h3", null, "Контакты недоступны"), h("p", { class: "sheet-note" }, text),
+      why === "denied" && window.AndroidBridge?.openAppSettings ? h("button", { class: "btn wide", onclick: () => { close(); Lock.ext = true; try { window.AndroidBridge.openAppSettings(); } catch { /* */ } } }, "Открыть настройки приложения") : null,
+      window.AndroidBridge?.pickContact ? h("button", { class: "menu-item", onclick: () => { close(); setTimeout(() => this.fromPicker(code), 150); } }, h("span", { html: I.user }), "Выбрать через окно телефона") : null,
+      h("button", { class: "menu-item", onclick: () => { close(); setTimeout(() => this.manual(code), 150); } }, h("span", { html: I.phone }), "Ввести номер вручную")].filter(Boolean));
   },
   manual(code) {
     let close;
@@ -1022,6 +1035,8 @@ function messageEl(m, c, firstInRun, tail) {
       if (orig) bubble.append(h("div", { class: "tr-orig" }, "🌐 ", orig));
       else if (!out && !m.pending && Tr.chat(c.id).in !== false && Tr.foreign(clean)) Tr.attach(bubble, m);
     }
+    if (isCall && !out && !c.is_group && /без ответа|отклонён/.test(m.body))
+      bubble.append(h("button", { class: "btn cb-btn", onclick: (e) => { e.stopPropagation(); Calls.start(m.user_id, /Видео/.test(m.body)); } }, h("span", { html: /Видео/.test(m.body) ? I.video : I.phone }), "Перезвонить"));
     if (m.body === GC_MARK && !m.media_type && Date.now() - new Date(m.created_at) < 6 * 3600e3)
       bubble.append(h("button", { class: "btn gc-join", onclick: () => GroupCall.join(m.chat_id, true) }, "Присоединиться"));
   }
@@ -1719,6 +1734,7 @@ async function onNewMessage(m) {
   if (Tg.isCallMsg(m) && !(S.callLog || []).some((x) => x.id === m.id)) {
     (S.callLog = S.callLog || []).unshift(m);
     Tg.updateCallsBadge(); if (S.tab === "calls") Tg.renderCalls();
+    if (m.user_id !== S.me.id && /без ответа|отклонён/.test(m.body || "") && Date.now() - new Date(m.created_at) < 60e3) Calls.missedOffer(m);
   }
   S.lastByChat.set(m.chat_id, m);
   if (m.media_path) await signUrls([m.media_path]);
@@ -2099,6 +2115,15 @@ const Calls = {
     this.relay = false; CallRelay.stop(); this.ui?.classList.remove("relayed");
   },
   decline() { this.send(this.peer, { kind: "decline" }); this.logMissed = false; this.reset(); },
+  /** Пропущенный звонок: короткая плашка с кнопкой «Перезвонить» (пока приложение открыто). */
+  missedOffer(m) {
+    const c = S.chats.find((x) => x.id === m.chat_id); if (!c || c.is_group) return;
+    const video = /Видео/.test(m.body || ""), name = S.profiles.get(m.user_id)?.name || "Кто-то";
+    document.querySelectorAll(".toast.missed").forEach((x) => x.remove());
+    const t = h("div", { class: "toast missed" }, h("span", null, `📞 Пропущенный звонок: ${name}`),
+      h("button", { class: "btn", onclick: () => { t.remove(); Calls.start(m.user_id, video); } }, "Перезвонить"));
+    document.body.append(t); setTimeout(() => t.remove(), 9000);
+  },
   tryAutoAnswer() {
     if (!(S.autoAnswerUntil > Date.now())) return;
     if (this.role === "callee" && this.ui && !this.pc && this.offer) { S.autoAnswerUntil = 0; this.accept(); return; }

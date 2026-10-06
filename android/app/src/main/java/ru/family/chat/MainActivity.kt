@@ -381,22 +381,38 @@ class MainActivity : Activity() {
     private fun readContacts() {
         val app = applicationContext
         Thread {
-            val seen = HashSet<String>(); val arr = org.json.JSONArray()
+            val seen = HashSet<String>(); val list = ArrayList<Pair<String, String>>()
+            var failed = false
             try {
+                // без сортировки в запросе: на части телефонов «COLLATE LOCALIZED» вызывает ошибку и список получался пустым
                 app.contentResolver.query(android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI, arrayOf(
                     android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                    android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null,
-                    android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC")?.use { c ->
-                    while (c.moveToNext() && arr.length() < 3000) {
-                        val n = c.getString(0) ?: ""; val ph = c.getString(1) ?: ""
+                    android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { c ->
+                    while (c.moveToNext() && list.size < 5000) {
+                        val n = (try { c.getString(0) } catch (_: Throwable) { null }) ?: ""
+                        val ph = (try { c.getString(1) } catch (_: Throwable) { null }) ?: ""
                         val digits = ph.filter { it.isDigit() }
                         if (digits.length < 5 || !seen.add(n + "|" + digits.takeLast(10))) continue
-                        arr.put(org.json.JSONObject().put("name", n).put("phone", ph))
+                        list.add(n to ph)
                     }
-                }
-            } catch (_: Throwable) {}
+                } ?: run { failed = true }
+            } catch (_: Throwable) { failed = true }
+            if (failed && list.isEmpty()) {
+                WebHolder.js("window.onContactsList && window.onContactsList(null, 'error')")
+                return@Thread
+            }
+            list.sortBy { it.first.lowercase() }
+            val arr = org.json.JSONArray()
+            for ((n, ph) in list) arr.put(org.json.JSONObject().put("name", n).put("phone", ph))
             WebHolder.js("window.onContactsList && window.onContactsList(" + arr.toString() + ")")
         }.start()
+    }
+
+    /** Окно настроек приложения (чтобы включить разрешение на контакты, если оно запрещено насовсем). */
+    fun openAppSettings() {
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        } catch (_: Throwable) { /* */ }
     }
 
     private fun contactResult(data: Intent?) {
