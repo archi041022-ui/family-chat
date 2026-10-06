@@ -1374,8 +1374,8 @@ body.pip .call video.remote { width: 100%; height: 100%; object-fit: cover; }
 
 @keyframes tabSlideL { from { transform: translateX(28px); opacity: .35; } to { transform: none; opacity: 1; } }
 @keyframes tabSlideR { from { transform: translateX(-28px); opacity: .35; } to { transform: none; opacity: 1; } }
-.tab-body.slide-l { animation: tabSlideL .22s ease-out; }
-.tab-body.slide-r { animation: tabSlideR .22s ease-out; }
+.tab-body.slide-l { animation: tabSlideL .26s cubic-bezier(.22,.8,.3,1); }
+.tab-body.slide-r { animation: tabSlideR .26s cubic-bezier(.22,.8,.3,1); }
 
 /* ───────── v3.3: GIF ───────── */
 .gif-box { display: flex; flex-direction: column; min-height: 320px; max-height: 62vh; }
@@ -1412,8 +1412,12 @@ body.pip .call video.remote { width: 100%; height: 100%; object-fit: cover; }
 .bubble > .cb-btn { margin-top: 8px; }
 .toast.missed { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; pointer-events: auto; }
 .toast.missed .btn { padding: 6px 12px; font-size: 14px; min-height: 0; }
-#chatItems.slide-l { animation: itemsInL .22s ease-out; }
-#chatItems.slide-r { animation: itemsInR .22s ease-out; }
+#chatItems.slide-l { animation: itemsInL .26s cubic-bezier(.22,.8,.3,1); }
+#chatItems.slide-r { animation: itemsInR .26s cubic-bezier(.22,.8,.3,1); }
 @keyframes itemsInL { from { transform: translateX(28px); opacity: .35; } to { transform: none; opacity: 1; } }
 @keyframes itemsInR { from { transform: translateX(-28px); opacity: .35; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #chatItems.slide-l, #chatItems.slide-r { animation: none; } }
+/* v4.1: плавные жесты — быстрая прокрутка и аппаратное ускорение при смахивании */
+.tab-body, #chatItems, .messages, .sheet { -webkit-overflow-scrolling: touch; }
+.tab-body, .view { backface-visibility: hidden; }
+.call .cbtn.spk-btn.off { background: #fff; color: #222; }

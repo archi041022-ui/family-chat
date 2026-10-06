@@ -126,34 +126,50 @@ const AsstFab = {
 // ───────── Жест «назад» ─────────
 // Ведите пальцем по экрану — экран уезжает вслед за пальцем; отпустили дальше 90 px — закрывается.
 const SwipeBack = {
+  EASE: "cubic-bezier(.22,.8,.3,1)",
   attach(view, onBack, { both = false, edge = 0 } = {}) {
-    let x0 = 0, y0 = 0, dx = 0, active = false, decided = false, horiz = false;
-    const reset = () => { view.style.transition = "transform .2s, opacity .2s"; view.style.transform = ""; view.style.opacity = ""; setTimeout(() => { view.style.transition = ""; }, 220); };
+    let x0 = 0, y0 = 0, dx = 0, active = false, decided = false, horiz = false, raf = 0, t0 = 0, lastX = 0, lastT = 0, vx = 0;
+    const paint = () => {
+      raf = 0;
+      view.style.transform = `translate3d(${dx}px,0,0)`; view.style.opacity = String(1 - Math.min(0.45, Math.abs(dx) / innerWidth * 0.7));
+    };
+    const reset = () => {
+      view.style.transition = `transform .26s ${this.EASE}, opacity .26s ${this.EASE}`; view.style.transform = ""; view.style.opacity = "";
+      setTimeout(() => { view.style.transition = ""; view.style.willChange = ""; }, 280);
+    };
     view.addEventListener("touchstart", (e) => {
       if (e.touches.length > 1) { active = false; return; }
       const t = e.touches[0];
       if (edge && t.clientX > edge) return;
       if (e.target.closest("input, textarea, [data-noswipe], .task-filters, .msg .bubble, .reactions")) return;
-      x0 = t.clientX; y0 = t.clientY; dx = 0; active = true; decided = false; horiz = false;
+      x0 = t.clientX; y0 = t.clientY; dx = 0; vx = 0; active = true; decided = false; horiz = false; lastX = x0; lastT = t0 = performance.now();
     }, { passive: true });
     view.addEventListener("touchmove", (e) => {
       if (!active) return;
       const t = e.touches[0], ddx = t.clientX - x0, ddy = t.clientY - y0;
       if (!decided) {
-        if (Math.abs(ddx) < 12 && Math.abs(ddy) < 12) return;
+        if (Math.abs(ddx) < 10 && Math.abs(ddy) < 10) return;
         decided = true; horiz = Math.abs(ddx) > Math.abs(ddy) * 1.5 && (both || ddx > 0);
         if (!horiz) { active = false; return; }
+        x0 = t.clientX; view.style.transition = "none"; view.style.willChange = "transform, opacity";   // отсчёт с места, где жест распознан: без рывка
+        lastX = x0; return;
       }
-      dx = both ? ddx : Math.max(0, ddx);
-      view.style.transform = `translateX(${dx}px)`; view.style.opacity = String(1 - Math.min(0.5, Math.abs(dx) / innerWidth));
+      const now = performance.now(), cx = t.clientX - x0;
+      if (now - lastT > 0) vx = 0.8 * vx + 0.2 * ((t.clientX - lastX) / (now - lastT));    // скорость, px/мс (сглаженная)
+      lastX = t.clientX; lastT = now;
+      dx = both ? cx : Math.max(0, cx);
+      if (!raf) raf = requestAnimationFrame(paint);
     }, { passive: true });
     const end = () => {
       if (!active) return; active = false;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
       if (!horiz) return;
-      if (Math.abs(dx) > 90) {
-        view.style.transition = "transform .18s ease-in, opacity .18s";
-        view.style.transform = `translateX(${dx > 0 ? 100 : -100}%)`; view.style.opacity = "0";
-        setTimeout(() => onBack(), 170);
+      const fast = Math.abs(vx) > 0.6 && Math.abs(dx) > 60 && (both || vx > 0);        // быстрый «бросок» тоже закрывает
+      if (Math.abs(dx) > Math.min(110, innerWidth * 0.3) || fast) {
+        const dir = both && dx < 0 ? -1 : 1;
+        view.style.transition = `transform .22s ${this.EASE}, opacity .22s ${this.EASE}`;
+        view.style.transform = `translate3d(${dir * 100}%,0,0)`; view.style.opacity = "0";
+        setTimeout(() => onBack(), 200);
       } else reset();
     };
     view.addEventListener("touchend", end); view.addEventListener("touchcancel", end);
@@ -197,7 +213,8 @@ const TabSwipe = {
   },
   attach(root) {
     if (!root || root._tabSwipe) return; root._tabSwipe = true;
-    let x0 = 0, y0 = 0, t0 = 0, active = false, decided = false, horiz = false, dx = 0, body = null;
+    let x0 = 0, y0 = 0, t0 = 0, active = false, decided = false, horiz = false, dx = 0, body = null, raf = 0, can = false;
+    const paint = () => { raf = 0; if (body && can) { body.style.transform = `translate3d(${dx * 0.4}px,0,0)`; body.style.opacity = String(1 - Math.min(0.3, Math.abs(dx) / innerWidth * 0.5)); } };
     root.addEventListener("touchstart", (e) => {
       active = false;
       if (e.touches.length > 1 || this.ORDER.indexOf(S.tab || "chats") < 0 || this.blocked()) return;
@@ -212,17 +229,21 @@ const TabSwipe = {
         if (Math.abs(ddx) < 12 && Math.abs(ddy) < 12) return;
         decided = true; horiz = Math.abs(ddx) > Math.abs(ddy) * 1.8;
         if (!horiz) { active = false; return; }
+        x0 = t.clientX; if (body) { body.style.transition = "none"; body.style.willChange = "transform, opacity"; }   // без рывка в начале жеста
+        return;
       }
-      dx = ddx;
-      const i = this.ORDER.indexOf(S.tab || "chats"), can = this.folderStep(dx < 0 ? 1 : -1) || this.ORDER[i + (dx < 0 ? 1 : -1)];
-      if (body && can) { body.style.transition = "none"; body.style.transform = `translateX(${dx * 0.3}px)`; body.style.opacity = String(1 - Math.min(0.35, Math.abs(dx) / innerWidth)); }
+      dx = t.clientX - x0;
+      const i = this.ORDER.indexOf(S.tab || "chats"); can = !!(this.folderStep(dx < 0 ? 1 : -1) || this.ORDER[i + (dx < 0 ? 1 : -1)]);
+      if (!raf) raf = requestAnimationFrame(paint);
     }, { passive: true });
     const end = () => {
       if (!active) return; active = false;
-      if (body) { body.style.transition = "transform .18s, opacity .18s"; body.style.transform = ""; body.style.opacity = ""; setTimeout(() => { if (body) body.style.transition = ""; }, 200); }
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      const b = body;
+      if (b) { b.style.transition = "transform .24s cubic-bezier(.22,.8,.3,1), opacity .24s"; b.style.transform = ""; b.style.opacity = ""; setTimeout(() => { b.style.transition = ""; b.style.willChange = ""; }, 260); }
       if (!horiz) return;
       const fast = Date.now() - t0 < 280 && Math.abs(dx) > 40;
-      if (Math.abs(dx) > 70 || fast) this.go(dx < 0 ? 1 : -1);
+      if (Math.abs(dx) > Math.min(80, innerWidth * 0.2) || fast) this.go(dx < 0 ? 1 : -1);
     };
     root.addEventListener("touchend", end); root.addEventListener("touchcancel", end);
   },

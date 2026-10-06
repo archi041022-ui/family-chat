@@ -368,7 +368,7 @@ const Invite = {
       try { window.AndroidBridge.loadContacts(); } catch { done = true; close?.(); this.manual(code); }
       return;
     }
-    if (window.AndroidBridge?.pickContact) return this.fromPicker(code);
+    if (window.AndroidBridge?.pickContact) return this.fromPicker(code);   // в приложении моста pickContact больше нет (v4.1): окно вешало телефон
     // браузер Chrome на Android умеет выбирать контакты сам
     if (navigator.contacts?.select) {
       try {
@@ -390,12 +390,12 @@ const Invite = {
   /** Нет доступа к контактам или список пуст: три способа продолжить. */
   noAccess(code, why) {
     let close;
-    const text = why === "denied" ? "Приложению не разрешён доступ к контактам. Разрешите его в настройках телефона (Разрешения → Контакты) или выберите номер другим способом."
-      : why === "empty" ? "Приложение не увидело в телефоне контактов с номерами. Можно выбрать номер через окно телефона или ввести его вручную."
-      : "Не удалось прочитать контакты. Можно выбрать номер через окно телефона или ввести его вручную.";
+    const text = why === "denied" ? "Приложению не разрешён доступ к контактам. Разрешите его в настройках телефона (Разрешения → Контакты) или отправьте приглашение через другое приложение."
+      : why === "empty" ? "Приложение не увидело в телефоне контактов с номерами. Можно отправить приглашение через другое приложение или ввести номер вручную."
+      : "Не удалось прочитать контакты. Можно отправить приглашение через другое приложение или ввести номер вручную.";
     close = sheet([h("h3", null, "Контакты недоступны"), h("p", { class: "sheet-note" }, text),
       why === "denied" && window.AndroidBridge?.openAppSettings ? h("button", { class: "btn wide", onclick: () => { close(); Lock.ext = true; try { window.AndroidBridge.openAppSettings(); } catch { /* */ } } }, "Открыть настройки приложения") : null,
-      window.AndroidBridge?.pickContact ? h("button", { class: "menu-item", onclick: () => { close(); setTimeout(() => this.fromPicker(code), 150); } }, h("span", { html: I.user }), "Выбрать через окно телефона") : null,
+      h("button", { class: "menu-item", onclick: () => { close(); const t = inviteText(code); copyText(t, "Текст приглашения скопирован"); shareTextOut(t); } }, h("span", { html: I.share }), "Отправить через другое приложение"),
       h("button", { class: "menu-item", onclick: () => { close(); setTimeout(() => this.manual(code), 150); } }, h("span", { html: I.phone }), "Ввести номер вручную")].filter(Boolean));
   },
   manual(code) {
@@ -2153,7 +2153,7 @@ const Calls = {
     this.pc?.close(); this.pc = null;
     this.local?.getTracks().forEach((t) => t.stop()); this.local = null; this.remote = null;
     clearTimeout(this.restartTimer); this.restarts = 0; clearTimeout(this.relayTimer); this.relayStop();
-    this.ui?.remove(); this.ui = null; this.peer = null; this.callId = null; this.connected = false; this.pendingIce = [];
+    this.ui?.remove(); this.ui = null; this.speaker = false; this.peer = null; this.callId = null; this.connected = false; this.pendingIce = [];
   },
 
   // ── интерфейс звонка
@@ -2193,6 +2193,11 @@ const Calls = {
     camBtn.onclick = () => this.toggleCamera(camBtn);
     const flipBtn = h("button", { class: "cbtn", html: I.flip, onclick: () => this.flip() });
     const scrBtn = h("button", { class: "cbtn scr-btn", html: I.screen, onclick: () => (this.screen ? this.stopScreen() : this.startScreen()) });
+    // громкая связь: на Android — через AudioManager, в браузере — выбор динамика, если он поддерживается
+    const canSpk = !!window.AndroidBridge?.setSpeaker;
+    const spkBtn = h("button", { class: "cbtn spk-btn", html: I.speaker, title: "Громкая связь" });
+    spkBtn.onclick = () => this.toggleSpeaker(spkBtn);
+    if (this.speaker) spkBtn.classList.add("off");
     const canShare = !!(window.AndroidBridge?.startScreenShare || navigator.mediaDevices?.getDisplayMedia);
     this.ui = h("div", { class: `call${this.role === "caller" ? " ringing" : ""}` }, remoteV, localV,
       h("button", { class: "call-min", title: "Свернуть звонок", onclick: (e) => { e.stopPropagation(); MiniCall.toggle(this.ui); }, html: I.down }),
@@ -2201,12 +2206,29 @@ const Calls = {
         h("div", { class: "cbtn-wrap" }, micBtn, "Микрофон"),
         h("div", { class: "cbtn-wrap" }, camBtn, "Камера"),
         h("div", { class: "cbtn-wrap" }, flipBtn, "Повернуть"),
+        canSpk ? h("div", { class: "cbtn-wrap" }, spkBtn, "Громкая") : null,
         canShare ? h("div", { class: "cbtn-wrap" }, scrBtn, "Экран") : null,
         CallReact.button((emoji) => this.send(this.peer, { kind: "react", emoji })),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.hangup(true, "local") }), "Завершить")));
     callBackdrop(this.ui, this.peer);
     document.body.append(this.ui);
     this.attach();
+  },
+  /** Громкая связь вкл/выкл (состояние сбрасывается в конце звонка). */
+  toggleSpeaker(btn) {
+    const on = !this.speaker;
+    const done = (ok) => {
+      if (!ok) { toast("Не удалось переключить звук"); return; }
+      this.speaker = on; btn?.classList.toggle("off", on); btn?.setAttribute("aria-pressed", on ? "true" : "false");
+      toast(on ? "Громкая связь включена" : "Громкая связь выключена");
+    };
+    if (window.AndroidBridge?.setSpeaker) {
+      window.onSpeaker = (_o, ok) => { window.onSpeaker = null; done(!!ok); };
+      try { window.AndroidBridge.setSpeaker(on); } catch { window.onSpeaker = null; done(false); }
+      return;
+    }
+    const v = this.ui?.querySelector("video.remote");
+    if (v?.setSinkId) v.setSinkId(on ? "default" : "default").then(() => done(true), () => done(false)); else done(false);
   },
   attach() {
     if (!this.ui) return;

@@ -62,11 +62,14 @@ try:
         tab = lambda pg: pg.evaluate("S.tab")
         # ── 1. свайп между разделами: Меню ↔ Чаты ↔ Контакты ↔ Звонки
         assert tab(A) == "chats"
+        for f in ("personal", "groups", "unread"):                       # в «Чатах» свайп сначала листает папки
+            swipe(A, "#chatList", -180); assert tab(A) == "chats" and A.evaluate("S.folder") == f, (tab(A), A.evaluate("S.folder"))
         swipe(A, "#chatList", -180); assert tab(A) == "contacts", tab(A)
         swipe(A, "#tabContacts", -180); assert tab(A) == "calls", tab(A)
         swipe(A, "#tabCalls", -180); assert tab(A) == "calls"            # дальше раздела нет
         swipe(A, "#tabCalls", 180); assert tab(A) == "contacts"
         swipe(A, "#tabContacts", 180); assert tab(A) == "chats"
+        A.evaluate("() => { S.folder = 'all'; renderChatList(); }")
         swipe(A, "#chatList", 180); assert tab(A) == "menu", tab(A)
         swipe(A, "#tabMenu", 180); assert tab(A) == "menu"               # левее меню разделов нет
         swipe(A, "#tabMenu", -180); assert tab(A) == "chats"

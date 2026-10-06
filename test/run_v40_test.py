@@ -91,15 +91,16 @@ try:
 
         # ── 3. контакты: нет доступа / пусто / системное окно
         A.evaluate("""() => { window.__settings = 0; window.AndroidBridge = { loadContacts() { setTimeout(() => window.onContactsList(null, 'denied'), 30); },
-          openAppSettings() { window.__settings++; }, pickContact() { setTimeout(() => window.onContactPicked({ name: 'Анна Т', phone: '8 900 111-22-33' }), 30); } }; void Invite.fromContacts('SEMYA-4825'); }""")
+          openAppSettings() { window.__settings++; }, shareText(t) { window.__share = t; } }; void Invite.fromContacts('SEMYA-4825'); }""")
         A.wait_for_selector(".sheet-back:has-text('Контакты недоступны')")
         assert "Разрешите" in A.inner_text(".sheet-back")
         A.click(".sheet-back button:has-text('Открыть настройки приложения')"); A.wait_for_timeout(200)
         assert A.evaluate("window.__settings") == 1
         A.evaluate("() => { document.querySelectorAll('.sheet-back').forEach(x => x._close && x._close()); void Invite.fromContacts('SEMYA-4825'); }")
         A.wait_for_selector(".sheet-back:has-text('Контакты недоступны')")
-        A.click(".sheet-back button:has-text('Выбрать через окно телефона')")
-        A.wait_for_selector(".sheet-back:has-text('Как отправить')"); assert "Анна" in A.inner_text(".sheet-back")
+        assert A.locator(".sheet-back button:has-text('Выбрать через окно телефона')").count() == 0   # системное окно (вешало телефон) убрано
+        A.click(".sheet-back button:has-text('Отправить через другое приложение')"); A.wait_for_timeout(300)
+        assert "SEMYA-4825" in (A.evaluate("window.__share") or ""), A.evaluate("window.__share")
         A.evaluate("document.querySelectorAll('.sheet-back').forEach(x => x._close && x._close())")
         # пустой список
         A.evaluate("""() => { window.AndroidBridge.loadContacts = () => setTimeout(() => window.onContactsList([]), 30); void Invite.fromContacts('SEMYA-4825'); }""")

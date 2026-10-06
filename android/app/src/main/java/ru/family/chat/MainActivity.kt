@@ -371,6 +371,28 @@ class MainActivity : Activity() {
         } catch (_: Throwable) { WebHolder.js("window.onContactPicked && window.onContactPicked(null)") }
     }
 
+    // ───────────── Громкая связь во время звонка ─────────────
+    /** Включает или выключает громкую связь; возвращает true, если режим применился. */
+    fun setSpeaker(on: Boolean): Boolean {
+        return try {
+            val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            if (am.mode != android.media.AudioManager.MODE_IN_COMMUNICATION) am.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+            if (Build.VERSION.SDK_INT >= 31) {
+                if (on) {
+                    val d = am.availableCommunicationDevices.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                    if (d != null) am.setCommunicationDevice(d) else am.isSpeakerphoneOn = true
+                } else {
+                    am.clearCommunicationDevice()
+                    am.isSpeakerphoneOn = false
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                am.isSpeakerphoneOn = on
+            }
+            true
+        } catch (_: Throwable) { false }
+    }
+
     /** Список контактов для собственного выбора внутри приложения (без системного окна выбора). */
     fun loadContacts() {
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) readContacts()

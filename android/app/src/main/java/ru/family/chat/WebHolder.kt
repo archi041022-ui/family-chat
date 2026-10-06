@@ -253,10 +253,13 @@ object WebHolder {
             if (u.scheme == "https" || u.scheme == "http" || u.scheme == "tel") openExternal(ctx, u)
         }
 
-        /** Выбрать контакт из телефонной книги (ответ в window.onContactPicked). Разрешение на контакты не нужно. */
-        @JavascriptInterface fun pickContact() {
-            val a = activity ?: return
-            a.runOnUiThread { a.pickContact() }
+        /** Громкая связь в звонке: true — включена. Ответ в window.onSpeaker(on, ok). */
+        @JavascriptInterface fun setSpeaker(on: Boolean) {
+            val a = activity ?: run { js("window.onSpeaker && window.onSpeaker(false, false)"); return }
+            a.runOnUiThread {
+                val ok = a.setSpeaker(on)
+                js("window.onSpeaker && window.onSpeaker($on, $ok)")
+            }
         }
 
         /** Открыть настройки приложения (включить разрешение на контакты). */
@@ -357,6 +360,7 @@ object WebHolder {
 
         @JavascriptInterface fun callState(active: Boolean, video: Boolean) {
             ChatService.callState(ctx, active, video)
+            if (!active) activity?.let { a -> a.runOnUiThread { a.setSpeaker(false) } }   // громкая связь не «залипает» после звонка
             inCall = active                                          // во время звонка при выходе — «картинка в картинке»
             activity?.let { a -> a.runOnUiThread { a.updatePip() } }
         }
