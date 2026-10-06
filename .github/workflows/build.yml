@@ -20,6 +20,9 @@ jobs:
           echo "{\"build\": ${{ github.run_number }}, \"version\": \"$VER\"}" > web/build.json
           cat web/build.json
 
+      - name: Сайт КИРПРОФ (открытая страница по адресу /kirprof/)
+        run: cp -r kirprof web/kirprof
+
       - name: Библиотека Supabase
         run: |
           mkdir -p web/vendor
@@ -56,6 +59,7 @@ jobs:
         run: |
           mkdir -p app/src/main/assets
           cp -r ../web app/src/main/assets/web
+          rm -rf app/src/main/assets/web/kirprof    # сайт мастерской в приложение не входит
           rm -rf app/src/main/assets/web/models     # модель речи скачивается с сайта по запросу, в приложение не входит
           gradle assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../Semya.apk
