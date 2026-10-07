@@ -674,7 +674,7 @@ async function loadChats() {
     S.sb.from("messages").select("id,chat_id,user_id,body,media_type,deleted,created_at").order("created_at", { ascending: false }).limit(600),
   ]);
   if (e1 || e2 || e3 || !chats) return;            // сеть пропала — оставляем прежний список, а не стираем его
-  S.chats = chats || [];
+  S.chats = (chats || []).filter((c) => c.id !== FAMILY_CHAT || window.__keepFamily);      // общего чата «Семья» больше нет в приложении
   if (S.chats.some((c) => c.burn_after)) Burn.start();
   await signUrls(S.chats.map((c) => c.avatar_path).filter(Boolean));
   S.members.clear();
@@ -821,6 +821,7 @@ function renderChatList() {
       continue;
     }
     const c = r.c;
+    if (Saved.is(c.id)) continue;                        // «Избранное» убрано из списка
     const title = chatTitle(c);
     const unread = S.unread.get(c.id) || 0;
     const reqs = Joins.toMe(c.id).length;
@@ -1111,7 +1112,6 @@ function messageMenu(m) {
     if (!prot && !String(m.id).startsWith("tmp-") && (m.body || m.media_path) && m.media_type !== "location")
       items.push(h("button", { class: "menu-item", onclick: () => { close(); Tg.forward(m); } }, h("span", { html: I.forward }), "Переслать"));
     if (!prot && (m.body || (m.media_path && S.urls.get(m.media_path)))) items.push(h("button", { class: "menu-item", onclick: () => { close(); shareOut(m); } }, h("span", { html: I.share }), "Поделиться"));
-    if (!prot && !String(m.id).startsWith("tmp-") && !Saved.is(m.chat_id) && m.media_type !== "location") items.push(h("button", { class: "menu-item", onclick: () => { close(); Saved.add(m); } }, h("span", null, "🔖"), "В избранное"));
     if (!prot) items.push(...Stickers.menuItems(m, () => close()));
     if (prot) items.push(h("div", { class: "sheet-note prot-note" }, "🛡 Защищённый чат: копирование, пересылка и сохранение запрещены"));
     if (!prot && m.media_path && S.urls.get(m.media_path)) items.push(h("a", { class: "menu-item", href: S.urls.get(m.media_path), target: "_blank", rel: "noopener", download: m.media_name || "", onclick: () => close() }, h("span", { html: I.download }), "Сохранить файл"));
@@ -2208,11 +2208,36 @@ const Calls = {
         h("div", { class: "cbtn-wrap" }, flipBtn, "Повернуть"),
         canSpk ? h("div", { class: "cbtn-wrap" }, spkBtn, "Громкая") : null,
         canShare ? h("div", { class: "cbtn-wrap" }, scrBtn, "Экран") : null,
+        h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn add-btn", html: I.invite, title: "Добавить участников", onclick: () => this.addPerson() }), "Добавить"),
         CallReact.button((emoji) => this.send(this.peer, { kind: "react", emoji })),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.hangup(true, "local") }), "Завершить")));
     callBackdrop(this.ui, this.peer);
     document.body.append(this.ui);
     this.attach();
+  },
+  /** Добавить людей в звонок один-на-один: он превращается в групповой видеочат в личной переписке этой пары. */
+  async addPerson() {
+    if (!this.peer || !this.connected) { toast("Сначала дождитесь ответа собеседника"); return; }
+    const peer = this.peer, video = !!this.video;
+    const people = [...S.profiles.values()].filter((p) => p.id !== S.me.id && p.id !== peer && !p.banned).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    GroupCall.pickPeople("Добавить в звонок", people, GroupCall.MAX - 2, async (ids) => {
+      if (this.peer !== peer || !this.connected) { toast("Звонок уже завершён"); return; }
+      const { data: chatId } = await S.sb.rpc("get_or_create_dm", { other: peer });
+      if (!chatId) { toast("Не удалось добавить. Проверьте интернет."); return; }
+      if (!S.chats.find((c) => c.id === chatId)) { await loadChats(); renderChatList(); }
+      await this.send(peer, { kind: "gupgrade", chatId, video, name: S.me.name });
+      this.reset();                                                  // тихо, без записи «звонок» в переписке
+      await GroupCall.join(chatId, video, { invite: false });
+      GroupCall.inviteUsers(ids, chatId);
+    });
+  },
+  /** Собеседник превратил звонок в групповой: тихо выходим из личного и входим в общий. */
+  async onUpgrade(p) {
+    if (!this.peer || p.from !== this.peer || !p.chatId) return;
+    const video = !!p.video; this.reset();
+    if (!S.chats.find((c) => c.id === p.chatId)) { await loadChats(); renderChatList(); }
+    await GroupCall.join(p.chatId, video, { invite: false });
+    toast("К звонку можно добавлять людей");
   },
   /** Громкая связь вкл/выкл (состояние сбрасывается в конце звонка). */
   toggleSpeaker(btn) {

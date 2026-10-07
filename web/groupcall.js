@@ -104,6 +104,44 @@ const GroupCall = {
     if (opts.invite) this.invite(chatId);
     this.renderBanner();
   },
+  // ── добавить людей в идущий видеочат (любого из списка, не только участников чата)
+  /** Окно выбора людей: галочки, лимит мест, кнопка «Позвать». */
+  pickPeople(title, people, room, onDone) {
+    let close;
+    const boxes = people.map((p) => h("label", null, h("input", { type: "checkbox", value: p.id }), avatarEl(p.id, "sm"), p.name, p.family_role ? h("small", { class: "sub" }, " · " + p.family_role) : null));
+    const go = h("button", { class: "btn wide", style: { marginTop: "12px" }, onclick: () => {
+      const ids = boxes.map((l) => l.querySelector("input")).filter((i) => i.checked).map((i) => i.value);
+      if (!ids.length) { toast("Отметьте, кого позвать"); return; }
+      close(); onDone(ids);
+    } }, "Позвать");
+    const count = () => { const n = boxes.filter((l) => l.querySelector("input").checked).length; go.textContent = n ? `Позвать (${n})` : "Позвать"; };
+    boxes.forEach((l) => l.querySelector("input").addEventListener("change", (e) => {
+      if (boxes.filter((x) => x.querySelector("input").checked).length > room) { e.target.checked = false; toast(`В видеочате не больше ${this.MAX} человек`); }
+      count();
+    }));
+    close = sheet([h("h3", null, title), h("p", { class: "sheet-note" }, `Можно позвать ещё ${room}.`), h("div", { class: "people-pick" }, boxes.length ? boxes : [h("p", { class: "empty-chat" }, "Звать больше некого")]), go]);
+    return close;
+  },
+  addPeople() {
+    if (!this.active) return;
+    const inCall = new Set([S.me.id, ...this.peers.keys()]);
+    const room = this.MAX - inCall.size;
+    if (room <= 0) { toast(`В видеочате уже ${this.MAX} человек: это максимум`); return; }
+    const people = [...S.profiles.values()].filter((p) => !inCall.has(p.id) && !p.banned).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    this.pickPeople("Добавить в видеочат", people, room, (ids) => this.inviteUsers(ids));
+  },
+  /** Отправить приглашения выбранным людям (с повтором, пока телефон просыпается). */
+  inviteUsers(ids, chatId = this.chatId) {
+    ids = (ids || []).filter((u) => u && u !== S.me.id);
+    if (!ids.length || !chatId) return;
+    const c = S.chats.find((x) => x.id === chatId);
+    const title = c && c.is_group ? chatTitle(c) : "Видеочат";
+    const send = () => { if (this.chatId !== chatId || !this.active) return; for (const u of ids) Calls.send(u, { kind: "ginvite", chatId, video: this.video, name: S.me.name, title, callId: "g-" + chatId }).catch?.(() => {}); };
+    send();
+    S.sb.rpc("wake_call", { targets: ids, video: !!this.video }).then(() => {}, () => {});
+    setTimeout(send, 7000); setTimeout(send, 15000);
+    toast(ids.length === 1 ? `${S.profiles.get(ids[0])?.name || "Участник"}: приглашение отправлено` : "Приглашения отправлены");
+  },
   async invite(chatId = this.chatId) {
     const ids = (S.members.get(chatId) || []).map((m) => m.user_id).filter((u) => u !== S.me.id && !S.profiles.get(u)?.banned);
     const send = () => { if (this.chatId !== chatId || !this.active) return; for (const u of ids) Calls.send(u, { kind: "ginvite", chatId, video: this.video, name: S.me.name, callId: "g-" + chatId }).catch(() => {}); };
@@ -295,7 +333,7 @@ const GroupCall = {
         h("div", { class: "cbtn-wrap" }, camBtn, "Камера"),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.flip, onclick: () => this.flip() }), "Повернуть"),
         window.AndroidBridge?.setSpeaker ? h("div", { class: "cbtn-wrap" }, spkBtn, "Громкая") : null,
-        h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn", html: I.group, onclick: () => this.invite() }), "Позвать"),
+        h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn add-btn", html: I.invite, title: "Добавить участников", onclick: () => this.addPeople() }), "Добавить"),
         CallReact.button((emoji) => this.emit({ kind: "react", emoji })),
         h("div", { class: "cbtn-wrap" }, h("button", { class: "cbtn red", html: I.hang, onclick: () => this.leave() }), "Выйти")));
     callBackdrop(this.ui, null, c);
@@ -403,7 +441,7 @@ const GroupCall = {
     if (Date.now() - (this.declined?.get(p.chatId) || 0) < 30000) return;   // повтор приглашения после «Отклонить»
     let c = S.chats.find((x) => x.id === p.chatId);
     if (!c) { await loadChats(); renderChatList(); c = S.chats.find((x) => x.id === p.chatId); }
-    if (!c) return;
+    if (!c) c = { id: p.chatId, title: p.title || "Видеочат", is_group: true };      // позвали из чата, где меня нет: входим по приглашению
     const title = chatTitle(c);
     this.inviteUi = h("div", { class: "call ringing gc-invite" },
       h("div", { class: "who" }, chatAvatar(c, "xl"), h("b", null, title),
@@ -437,6 +475,7 @@ addEventListener("DOMContentLoaded", function hookCalls() {
   Calls.onSignal = async function (p) {
     if (p.to !== S.me.id) return;
     if (p.kind === "ginvite") { GroupCall.onInvite(p); return; }
+    if (p.kind === "gupgrade") { Calls.onUpgrade(p); return; }
     if (p.kind === "offer" && (GroupCall.active || GroupCall.inviteUi)) { this.send(p.from, { kind: "busy", callId: p.callId }); return; }
     return prevSignal.call(this, p);
   };

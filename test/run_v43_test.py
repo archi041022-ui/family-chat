@@ -114,7 +114,7 @@ try:
         drag(200); assert A.evaluate("S.folder") == "all"
         drag(-30); assert A.evaluate("S.folder") == "all"                      # короткий жест: возврат на место
         assert A.evaluate("document.querySelector('#tabChats').style.transform") == ""
-        drag(-80, 4, 0); assert A.evaluate("S.folder") == "personal", (A.evaluate("S.folder"), A.evaluate("window.__tx.slice(-6)"))              # быстрый короткий жест засчитывается
+        drag(-80, 4, 8); assert A.evaluate("S.folder") == "personal", (A.evaluate("S.folder"), A.evaluate("window.__tx.slice(-6)"))              # быстрый короткий жест засчитывается
         print("smooth swipe: ok")
         b.close()
 finally:

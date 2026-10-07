@@ -322,8 +322,6 @@ const Tg = {
     this.updateCallsBadge();
     const rows = this.callRows();
     box.append(h("button", { class: "menu-item tg-action", onclick: () => this.newCallSheet() }, h("span", { class: "tg-ico", style: { background: "#2EAD6B" }, html: I.phone }), "Новый звонок"));
-    const fam = S.chats.find((c) => c.id === FAMILY_CHAT);
-    if (fam) box.append(h("button", { class: "menu-item tg-action", onclick: () => GroupCall.start(FAMILY_CHAT, true) }, h("span", { class: "tg-ico", style: { background: "#9B5DE5" }, html: I.video }), "Видеочат с семьёй"));
     box.append(h("div", { class: "list-caption" }, "Недавние"));
     if (!rows.length) { box.append(h("p", { class: "empty-chat" }, "Звонков пока не было")); return; }
     for (const r of rows.slice(0, 100)) {

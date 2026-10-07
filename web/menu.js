@@ -38,9 +38,8 @@ const Menu = {
         tile("#D9466F", MI.film, "Видеоредактор", () => VideoEditor.open()),
         tile("#D98A1E", MI.scan, "Сканер → PDF", () => Camera.open("doc")),
         tile("#8A57D6", I.story, "Истории и статусы", () => showTab("stories"), unseen),
-        tile("#14919B", I.video, "Видеочат семьи", () => GroupCall.start(FAMILY_CHAT, true))),
+        ),
       section("Общение",
-        tile("#3E7BE6", MI.bookmark, "Избранное", () => Saved.open()),
         tile("#3E7BE6", MI.compass, "Группы и каналы", () => Joins.directory()),
         canCreate ? tile("#3E7BE6", I.group, "Создать группу", () => newGroupSheet()) : null,
         canCreate ? tile("#3E7BE6", MI.megaphone, "Создать канал", () => Channels.create()) : null,
@@ -246,7 +245,7 @@ const TabSwipe = {
       const b = body; if (!b) return;
       const settle = () => { b.style.transition = ""; b.style.transform = ""; b.style.opacity = ""; b.style.willChange = ""; };
       const dir = dx < 0 ? 1 : -1;
-      const commit = horiz && can && (Math.abs(dx) > Math.min(72, innerWidth * 0.18) || (Math.abs(vx) > 0.4 && Math.abs(dx) > 28));
+      const commit = horiz && can && (Math.abs(dx) > Math.min(72, innerWidth * 0.18) || (Math.abs(vx) > 0.3 && Math.abs(dx) > 26));
       if (!commit) {                                           // вернуть на место мягко
         b.style.transition = `transform .26s ${EASE}, opacity .26s`; b.style.transform = "translate3d(0,0,0)"; b.style.opacity = "";
         setTimeout(settle, 280); return;

@@ -59,7 +59,7 @@ try:
         assert A.evaluate("S.filter") == ""
         # меню — открыть и закрыть той же кнопкой
         A.click("#tabBtnMenu"); A.wait_for_selector("#tabMenu:not(.hidden)")
-        for t in ["Конфиденциальность", "Подарки", "Стикеры", "Избранное", "Мои задачи", "Настройки"]: assert A.locator(f"#tabMenu .mn-tile:has-text('{t}')").count() == 1, t
+        for t in ["Конфиденциальность", "Подарки", "Стикеры", "Мои задачи", "Настройки"]: assert A.locator(f"#tabMenu .mn-tile:has-text('{t}')").count() == 1, t
         shot(A, "z2_menu")
         A.click("#tabBtnMenu"); A.wait_for_selector("#tabChats:not(.hidden)"); assert A.evaluate("S.tab") == "chats"
         A.evaluate("openChat(FAMILY_CHAT)"); A.wait_for_selector("#chatView .topbar >> text=Семья"); A.click(".back-btn")
@@ -153,12 +153,9 @@ try:
         print("voice queue: ok")
         B.evaluate("__aud.forEach(a => a.pause())")
         # ── 5. избранное и стикеры
-        A.click(".msg.out .bubble >> nth=-1", button="right"); A.click(".sheet .menu-item:has-text('В избранное')")
-        A.wait_for_selector("text=Сохранено в «Избранное»"); A.click(".back-btn")
-        A.click("#tabBtnChats"); A.wait_for_selector("#chatItems .chat-item:has-text('Избранное') .saved-av")
-        menu(A, "Избранное"); A.wait_for_selector("#chatView .topbar >> text=Избранное"); A.wait_for_selector("#chatSub >> text=для себя"); A.wait_for_selector(".messages audio")
-        assert A.locator("#chatView .topbar button[title='Аудиозвонок']").count() == 0
-        shot(A, "z9_saved"); A.click(".back-btn")
+        A.click(".msg.out .bubble >> nth=-1", button="right"); A.wait_for_selector(".sheet .menu-item")
+        assert A.locator(".sheet .menu-item:has-text('В избранное')").count() == 0      # «Избранного» больше нет
+        A.keyboard.press("Escape"); A.evaluate("document.querySelectorAll('.sheet-back').forEach(e => e.remove())")
         # свой стикер из картинки
         import base64
         png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")

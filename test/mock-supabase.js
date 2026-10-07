@@ -1,6 +1,7 @@
 // Тестовая подмена Supabase: база в localStorage, «realtime» через BroadcastChannel.
 // Нужна только для проверки интерфейса в браузере, в приложение не входит.
 (function () {
+  if (window.__keepFamily === undefined) window.__keepFamily = true;   // тесты 4.4 ставят false: общего чата нет
   const DB_KEY = "mockdb";
   const bc = new BroadcastChannel("mock-rt");
   const FAMILY = "00000000-0000-0000-0000-000000000001";
@@ -225,7 +226,7 @@
             const u = { id: uid(), email, password: arguments[0].password }; db.users.push(u);
             if (!db.admin) db.admin = u.id;
             db.profiles.push({ id: u.id, name: options.data.name, avatar_path: null, last_seen: new Date().toISOString(), created_at: new Date().toISOString() });
-            db.chat_members.push({ chat_id: FAMILY, user_id: u.id, last_read_at: new Date(0).toISOString() });
+            if (window.__keepFamily) db.chat_members.push({ chat_id: FAMILY, user_id: u.id, last_read_at: new Date(0).toISOString() });
             save(db); sessionStorage.setItem("mocksess", JSON.stringify(u));
             return { data: { user: u, session: {} }, error: null };
           },

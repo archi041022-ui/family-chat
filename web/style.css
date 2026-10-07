@@ -1450,3 +1450,6 @@ body.pip .call video.remote { width: 100%; height: 100%; object-fit: cover; }
 .adm-log { display: flex; justify-content: space-between; gap: 12px; padding: 9px 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); font-size: 14.5px; }
 .adm-log small { color: var(--muted); white-space: nowrap; font-size: 12px; }
 .admin-row .mid small { white-space: normal; }
+
+/* v4.4: окна выбора поверх звонка */
+.call ~ .sheet-back { z-index: 80; }

@@ -350,7 +350,7 @@ const Push = {
     const visible = appVisible();
     if (visible) {
       // в открытом приложении сообщения, заявки и задачи и так видны — подсказываем только о новом
-      if (n.kind === "story" || n.kind === "story_react" || n.kind === "reaction" || n.kind === "approved") toast(`${n.title}: ${n.body || ""}`, 4500);
+      if (n.kind === "story" || n.kind === "story_react" || n.kind === "reaction" || n.kind === "approved" || n.kind === "welcome") toast(`${n.title}: ${n.body || ""}`, 4500);
       if (n.kind === "story") Stories.load?.().then(() => Stories.renderAll?.()).catch(() => {});
       return;
     }
