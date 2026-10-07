@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════
 --  Обновление 4.4: регистрация без общего чата «Семья».
---  Новый участник больше не добавляется в общий чат; все остальные получают оповещение «👋 … теперь с нами».
+--  Новый участник больше не добавляется в общий чат; оповещений остальным о новичке нет.
 --  Сам общий чат владелец удаляет отдельной командой (внизу, в комментарии): она необратимая.
 -- ═══════════════════════════════════════════════════════════════
 
@@ -21,9 +21,6 @@ create or replace function public.log_profile_created() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   insert into admin_log(actor, kind, ref, title) values (new.id, 'join', new.id, new.name);
-  insert into notices(user_id, kind, actor, title, body)
-    select p.id, 'welcome', new.id, '👋 Новый участник', new.name || ' теперь с нами. Поздоровайтесь!'
-    from profiles p where p.id <> new.id and not coalesce(p.banned, false);
   return new;
 end $$;
 
