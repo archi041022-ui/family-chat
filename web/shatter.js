@@ -11,7 +11,7 @@ const Shatter = {
     for (let i = 0; i < src.length; i++) {
       const d = dst[i], s = src[i];
       if (!d || !s) continue;
-      if (budget || i === 0) { try { d.style.cssText = getComputedStyle(s).cssText; } catch { /* оставим как есть */ } }
+      if (budget || i === 0) { try { const cs = getComputedStyle(s); let txt = cs.cssText; if (!txt) { txt = ""; for (let k = 0; k < cs.length; k++) txt += cs[k] + ":" + cs.getPropertyValue(cs[k]) + ";"; } d.style.cssText = txt; } catch { /* оставим как есть */ } }
       d.removeAttribute("id"); d.removeAttribute("onclick");
       if (s.tagName === "VIDEO") {                                   // видео заменяем кадром, чтобы осколки не декодировали поток
         let rep = null;
@@ -53,7 +53,7 @@ const Shatter = {
       let finished = false;
       const done = () => { if (!finished) { finished = true; resolve(); } };
       try {
-        if (!el || !el.getBoundingClientRect || matchMedia("(prefers-reduced-motion: reduce)").matches) { done(); return; }
+        if (!el || !el.getBoundingClientRect) { done(); return; }
         const r = el.getBoundingClientRect();
         if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > innerHeight) { done(); return; }
         const W = r.width, H = r.height, big = W * H > 90000, rays = big ? 6 : 9;

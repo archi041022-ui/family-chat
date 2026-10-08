@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 39
-        versionName = "4.5"
+        versionName = "4.5.1"
     }
 
     // Постоянный ключ подписи: новые версии ставятся поверх старой
