@@ -37,6 +37,17 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/web/models && mv /tmp/vosk-ru.tar.gz $GITHUB_WORKSPACE/web/models/
           ls -la $GITHUB_WORKSPACE/web/models
 
+      - name: Фото → текст (Tesseract, русский словарь) — движок в приложении, тяжёлые файлы на сайте
+        run: |
+          mkdir -p /tmp/ocrnpm && cd /tmp/ocrnpm && npm init -y > /dev/null && npm install --silent tesseract.js@5.1.1 @tesseract.js-data/rus@1.0.0
+          cd $GITHUB_WORKSPACE && mkdir -p web/vendor web/models/ocr/core web/models/ocr/lang
+          cp /tmp/ocrnpm/node_modules/tesseract.js/dist/tesseract.min.js web/vendor/tesseract.min.js
+          cp /tmp/ocrnpm/node_modules/tesseract.js/dist/worker.min.js web/vendor/tesseract-worker.min.js
+          cp /tmp/ocrnpm/node_modules/tesseract.js-core/tesseract-core*.js web/models/ocr/core/
+          F=$(find /tmp/ocrnpm/node_modules/@tesseract.js-data/rus -name rus.traineddata.gz | grep best_int | head -1)
+          test -n "$F" && cp "$F" web/models/ocr/lang/rus.traineddata.gz
+          ls -la web/models/ocr/core web/models/ocr/lang web/vendor
+
       - name: Сайт (GitHub Pages)
         if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
@@ -91,3 +102,32 @@ jobs:
           pip install -q playwright && python -m playwright install --with-deps chromium > /dev/null
       - name: Расшифровка тестовой фразы
         run: python test/stt_ci.py
+
+  ocr-test:
+    # проверка «Фото → текст» в настоящем браузере
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Подготовка
+        run: |
+          mkdir -p /tmp/ocrnpm && cd /tmp/ocrnpm && npm init -y > /dev/null && npm install --silent tesseract.js@5.1.1 @tesseract.js-data/rus@1.0.0
+          cd $GITHUB_WORKSPACE && mkdir -p web/vendor web/models/ocr/core web/models/ocr/lang web/_ci
+          cp /tmp/ocrnpm/node_modules/tesseract.js/dist/tesseract.min.js web/vendor/tesseract.min.js
+          cp /tmp/ocrnpm/node_modules/tesseract.js/dist/worker.min.js web/vendor/tesseract-worker.min.js
+          cp /tmp/ocrnpm/node_modules/tesseract.js-core/tesseract-core*.js web/models/ocr/core/
+          F=$(find /tmp/ocrnpm/node_modules/@tesseract.js-data/rus -name rus.traineddata.gz | grep best_int | head -1)
+          test -n "$F" && cp "$F" web/models/ocr/lang/rus.traineddata.gz
+          pip install -q playwright pillow && python -m playwright install --with-deps chromium > /dev/null
+          python - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          import glob
+          font = ImageFont.truetype(glob.glob("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")[0], 54)
+          im = Image.new("RGB", (1600, 700), (238, 234, 224))
+          d = ImageDraw.Draw(im)
+          for i, line in enumerate(["Привет, мама!", "Как дела? Семья дома.", "Купить хлеб и молоко"]):
+              d.text((80, 80 + i * 170), line, fill=(30, 30, 60), font=font)
+          im = im.rotate(1.5, expand=False, fillcolor=(238, 234, 224))
+          im.save("web/_ci/page.jpg", quality=85)
+          PY
+      - name: Распознавание тестовой страницы
+        run: python test/ocr_ci.py

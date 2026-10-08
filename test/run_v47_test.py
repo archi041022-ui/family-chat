@@ -89,6 +89,15 @@ try:
         assert cmd("напоминай о пропущенных звонках") is True and A.evaluate("MaksPlus.enabled()")
         assert cmd("что я пропустил") is True and "Пропущенные звонки" in A.evaluate("window.__spoken.at(-1)")
         print("напоминания: ok")
+        # «Фото → текст»: плитки обе, окно открывается, команда Макса
+        A.evaluate("document.querySelectorAll('.sheet-back, .sheet, .toast').forEach(e => e.remove())"); A.evaluate("Maks.leave(); S.tab === 'menu' || showTab('menu')"); A.wait_for_timeout(500)
+        lbls = A.evaluate("[...document.querySelectorAll('#tabMenu .mn-lbl')].map(e => e.textContent)")
+        assert "Фото → текст" in lbls and "Рукопись → текст (Claude)" in lbls, lbls
+        A.evaluate("showTab('chats')")
+        assert cmd("открой фото в текст") is True; A.wait_for_selector(".sheet h3:has-text('Фото → текст')")
+        assert A.locator(".sheet input[type=file]").count() == 2
+        A.evaluate("document.querySelectorAll('.sheet-back').forEach(e => e.remove())")
+        print("фото в текст (окно): ok")
         b.close()
 finally:
     srv.terminate()

@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>OCR CI</title>
+<script>window.CHAT_CONFIG = { ocrBase: location.origin + "/models/ocr/" };</script>
+<script src="/ocr.js"></script>
+<script>Ocr.libUrl = "/vendor/tesseract.min.js"; Ocr.workerUrl = "/vendor/tesseract-worker.min.js";
+window.runOcr = async (url) => { const b = await (await fetch(url)).blob(); const t0 = performance.now(); const text = await Ocr.recognize(b); return { text, ms: Math.round(performance.now() - t0) }; };
+</script>
