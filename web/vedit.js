@@ -349,13 +349,23 @@ const VideoEditor = {
       [...tools.children].forEach((b) => b.classList.toggle("on", b.dataset.t === name));
       panel.innerHTML = ""; panel.append(...(this.panels[name]?.call(this, p) || []));
     };
-    const T = [["clip", "✂️", "Обрезка"], ["speed", "⏩", "Скорость"], ["filters", "🎨", "Фильтры"], ["text", "Aa", "Текст"],
+    const T = [["clip", "✂️", "Обрезка"], ["sound", "🔇", "Звук"], ["speed", "⏩", "Скорость"], ["view", "🔄", "Кадр"], ["filters", "🎨", "Фильтры"], ["text", "Aa", "Текст"],
       ["stickers", "😊", "Стикеры"], ["music", "🎵", "Музыка"], ["effects", "✨", "Эффекты"], ["transitions", "🔀", "Переходы"], ["order", "↔️", "Порядок"]];
     for (const [k, ic, l] of T) tools.append(h("button", { "data-t": k, onclick: () => tool(k) }, h("span", null, ic), h("small", null, l)));
     this.tool = tool;
     drawTimeline(); tool("clip");
     p.seek(0);
     this.dragOverlays(canvas, p);
+  },
+  /** Разрезать выбранный клип на два в месте, где стоит указатель воспроизведения. */
+  async splitAtPlayhead(p) {
+    const st = this.st, i = st.sel, c = st.clips[i]; if (!c || c.kind !== "video") return toast("Разрезать можно видео");
+    const local = p.t - this.clipStart(i), cut = c.in + local * c.speed;
+    if (!(cut > c.in + 0.5 && cut < c.out - 0.5)) return toast("Поставьте указатель в середину клипа, не ближе 0,5 с от краёв");
+    const d = await this.makeClip(c.blob, c.kind, c.dur, c.speed); if (!d) return;
+    Object.assign(d, { in: cut, out: c.out, mute: c.mute, rot: c.rot, flip: c.flip });
+    c.out = cut; st.clips.splice(i + 1, 0, d); st.sel = i + 1;
+    this.redraw(); this.tool("clip"); toast("Клип разрезан на две части");
   },
   clipStart(i) { let t = 0; for (let k = 0; k < i; k++) t += this.len(this.st.clips[k]); return t; },
   addMore(done) {
@@ -386,7 +396,33 @@ const VideoEditor = {
       upd();
       if (c.kind === "image") return [lbl, h("label", { class: "ve-range" }, "Длительность", b)];
       return [lbl, h("label", { class: "ve-range" }, "Начало", a), h("label", { class: "ve-range" }, "Конец", b),
-        h("label", { class: "ve-check" }, h("input", { type: "checkbox", checked: !c.mute, onchange: (e) => { c.mute = !e.target.checked; p.applyVolumes(); } }), "Звук этого клипа")];
+        h("label", { class: "ve-check" }, h("input", { type: "checkbox", checked: !c.mute, onchange: (e) => { c.mute = !e.target.checked; p.applyVolumes(); } }), "Звук этого клипа"),
+        h("button", { class: "menu-item", onclick: () => this.splitAtPlayhead(p) }, h("span", null, "✂️"), "Разрезать клип в этом месте")];
+    },
+    sound(p) {
+      const st = this.st, vids = st.clips.filter((c) => c.kind === "video");
+      if (!vids.length) return [h("p", { class: "sheet-note" }, "В монтаже только фото: у них нет звука. Музыку можно добавить во вкладке «Музыка».")];
+      const allMuted = vids.every((c) => c.mute) || st.origVol === 0, c = st.clips[st.sel];
+      const out = [h("div", { class: "ve-row-lbl" }, "Звук записанного видео"),
+        h("button", { class: `menu-item${allMuted ? " on" : ""}`, onclick: () => {
+          if (allMuted) { vids.forEach((x) => { x.mute = false; }); if (st.origVol === 0) st.origVol = 1; toast("Звук видео включён"); }
+          else { vids.forEach((x) => { x.mute = true; }); toast("Звук убран со всего видео"); }
+          p.applyVolumes(); this.tool("sound");
+        } }, h("span", null, allMuted ? "🔊" : "🔇"), allMuted ? "Вернуть звук видео" : "Убрать звук со всего видео")];
+      if (c && c.kind === "video" && vids.length > 1) out.push(h("label", { class: "ve-check" }, h("input", { type: "checkbox", checked: !c.mute, onchange: (e) => { c.mute = !e.target.checked; p.applyVolumes(); this.tool("sound"); } }), `Звук клипа ${st.sel + 1}`));
+      out.push(h("label", { class: "ve-range" }, "Громкость звука видео", h("input", { type: "range", min: 0, max: 100, value: st.origVol * 100, oninput: (e) => { st.origVol = e.target.value / 100; p.applyVolumes(); } })),
+        h("p", { class: "sheet-note" }, "Можно убрать звук совсем и поставить свою музыку во вкладке «Музыка»."));
+      return out;
+    },
+    view(p) {
+      const st = this.st, c = st.clips[st.sel]; if (!c) return [];
+      const redraw = () => { p.redrawFrame(); this.redraw(); this.tool("view"); };
+      return [h("div", { class: "ve-row-lbl" }, `Кадр клипа ${st.sel + 1}: поворот ${c.rot || 0}°${c.flip ? ", отражён" : ""}`),
+        h("div", { class: "ve-chips wrap" },
+          h("button", { onclick: () => { c.rot = ((c.rot || 0) + 270) % 360; redraw(); } }, "↺ Влево"),
+          h("button", { onclick: () => { c.rot = ((c.rot || 0) + 90) % 360; redraw(); } }, "↻ Вправо"),
+          h("button", { class: c.flip ? "on" : "", onclick: () => { c.flip = !c.flip; redraw(); } }, "⇋ Отразить"),
+          h("button", { onclick: () => { c.rot = 0; c.flip = false; redraw(); } }, "Сбросить"))];
     },
     speed(p) {
       const st = this.st, c = st.clips[st.sel]; if (!c) return [];
@@ -488,7 +524,7 @@ const VideoEditor = {
           h("button", { onclick: async () => {
             if (this.total() + this.len(c) > this.MAX) return toast("Будет длиннее минуты");
             const d = await this.makeClip(c.blob, c.kind, c.kind === "video" ? c.dur : null, c.speed);
-            if (d) { Object.assign(d, { in: c.in, out: c.out, mute: c.mute }); st.clips.splice(i + 1, 0, d); this.redraw(); this.tool("order"); }
+            if (d) { Object.assign(d, { in: c.in, out: c.out, mute: c.mute, rot: c.rot, flip: c.flip }); st.clips.splice(i + 1, 0, d); this.redraw(); this.tool("order"); }
           } }, "Повторить")),
         h("button", { class: "menu-item danger", onclick: () => {
           st.clips.splice(i, 1); c.el.pause(); c.el.remove?.(); URL.revokeObjectURL(c.url);
@@ -811,15 +847,22 @@ class VEPlayer {
       if (tr === "slide" && e) ctx.translate(outK ? -W * outK * outK : W * inK * inK, 0);
       if (tr === "spin" && e) { ctx.translate(W / 2, H / 2); ctx.rotate((outK ? 1 : -1) * e * e * 0.6); ctx.scale(1 + e * 0.4, 1 + e * 0.4); ctx.translate(-W / 2, -H / 2); }
       if (fx.has("shake")) { ctx.translate(Math.sin(t * 41) * 5 + Math.sin(t * 13) * 3, Math.cos(t * 37) * 5); zoom *= 1.04; }
+      let CW = W, CH = H;
+      const rot = a.c.rot || 0;
+      if (rot || a.c.flip) {                                                    // поворот и отражение выбранного клипа
+        ctx.translate(W / 2, H / 2); ctx.rotate(rot * Math.PI / 180); if (a.c.flip) ctx.scale(-1, 1);
+        if (rot % 180) { CW = H; CH = W; }
+        ctx.translate(-CW / 2, -CH / 2);
+      }
       let filter = this.filterCss();
       if (fx.has("rainbow")) filter = (filter === "none" ? "" : filter + " ") + `hue-rotate(${Math.round(t * 120) % 360}deg)`;
       if (tr === "blur" && e) filter = (filter === "none" ? "" : filter + " ") + `blur(${(e * 14).toFixed(1)}px)`;
       try {
         if (fx.has("blurbg")) {                                                // размытый фон: горизонтальное видео целиком
           ctx.filter = (filter === "none" ? "" : filter + " ") + "blur(22px) brightness(.7)";
-          VideoEditor.cover(ctx, a.c.el, W, H, 1.15);
-          ctx.filter = filter; VideoEditor.contain(ctx, a.c.el, W, H, zoom);
-        } else { ctx.filter = filter; VideoEditor.cover(ctx, a.c.el, W, H, zoom); }
+          VideoEditor.cover(ctx, a.c.el, CW, CH, 1.15);
+          ctx.filter = filter; VideoEditor.contain(ctx, a.c.el, CW, CH, zoom);
+        } else { ctx.filter = filter; VideoEditor.cover(ctx, a.c.el, CW, CH, zoom); }
       } catch { /* кадр ещё не готов */ }
       ctx.filter = "none";
       ctx.restore();

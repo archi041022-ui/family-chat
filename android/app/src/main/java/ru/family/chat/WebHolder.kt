@@ -34,6 +34,17 @@ object WebHolder {
 
     @Volatile var foreground = false
     @Volatile var inCall = false
+    @Volatile private var beepsMuted = false
+    /** На время «режима Макс» глушим системные сигналы распознавания; сами возвращаем звук обратно. */
+    fun muteBeeps(ctx: Context, on: Boolean) {
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            if (on == beepsMuted) return
+            val streams = intArrayOf(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.STREAM_SYSTEM)
+            for (st in streams) am.adjustStreamVolume(st, if (on) android.media.AudioManager.ADJUST_MUTE else android.media.AudioManager.ADJUST_UNMUTE, 0)
+            beepsMuted = on
+        } catch (_: Throwable) { /* нет прав — сигналы останутся */ }
+    }
 
     fun exists() = web != null
 
@@ -336,6 +347,8 @@ object WebHolder {
         }
 
                 @JavascriptInterface fun stopSpeaking() = Speech.stop()
+
+        @JavascriptInterface fun muteBeeps(on: Boolean) { activity?.runOnUiThread { WebHolder.muteBeeps(ctx, on) } }
 
         @JavascriptInterface fun resetVoice() { android.os.Handler(android.os.Looper.getMainLooper()).post { Speech.reset() } }
 

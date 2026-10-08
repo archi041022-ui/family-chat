@@ -736,6 +736,7 @@ function buildShell() {
   Stories.renderAll();
   StoryTop.attach($("#chatList"), $("#storyStrip"));
   AsstFab.init();
+  Maks.init();
   S.tab = S.tab || "chats";
   TabSwipe.attach($("#side"));
   // В браузере «назад» (кнопка или свайп) сначала закрывает окна внутри мессенджера, а не уходит со страницы
@@ -2066,22 +2067,37 @@ const Calls = {
 
   async accept() {
     if (this.pc || this.accepting) return;
-    this.accepting = true; setTimeout(() => { this.accepting = false; }, 3000);
+    this.accepting = true;                                   // сбрасывается, когда соединение создано или попытка не удалась
     clearTimeout(this.ringTimer); this.stopRing(); window.AndroidBridge?.cancelCall?.();
     const cid = this.callId;
     let got;
     try { got = await this.media(this.video); }
-    catch {
+    catch (e1) {
       try { got = await this.media(false); this.video = false; }
-      catch { toast("Нет доступа к микрофону"); if (this.callId === cid) this.decline(); return; }
+      catch (e2) {
+        const nm = (e2 && e2.name) || (e1 && e1.name) || "";
+        if (window.AndroidBridge) { this.accepting = false; toast("Нет доступа к микрофону"); if (this.callId === cid) this.decline(); return; }
+        if (/NotFound|Overconstrained|NotReadable/.test(nm)) {           // в браузере нет микрофона: отвечаем «на приём»
+          got = new MediaStream(); this.video = false;
+          toast("Микрофон не найден или занят. Вы будете слышать собеседника, но он вас нет.", 6000);
+        } else {                                                         // доступ не разрешён: звонок не сбрасываем, даём разрешить и ответить снова
+          this.accepting = false;
+          toast("Разрешите микрофон в браузере (значок замка слева от адреса) и нажмите «Ответить» ещё раз.", 8000);
+          if (this.callId === cid && this.role === "callee" && !this.pc) {
+            this.ringtone();
+            this.ringTimer = setTimeout(() => { if (this.role === "callee" && !this.pc) { this.logMissed = true; this.reset(); } }, 55000);
+          }
+          return;
+        }
+      }
     }
-    if (this.callId !== cid || !this.offer) { got?.getTracks?.().forEach((t) => t.stop()); return; }   // пока шёл запрос доступа, звонок уже сбросили
+    if (this.callId !== cid || !this.offer) { got?.getTracks?.().forEach((t) => t.stop()); this.accepting = false; return; }   // пока шёл запрос доступа, звонок уже сбросили
     this.local = got;
     window.AndroidBridge?.callState?.(true, !!this.video);
     this.showUi("Соединение…");
-    await Ice.get();
-    if (!this.local || this.callId !== cid) return;
-    this.pc = this.makePc();
+    await Promise.race([Ice.get(), new Promise((r) => setTimeout(r, 4000))]);        // не ждём серверы дольше 4 секунд
+    if (!this.local || this.callId !== cid) { this.accepting = false; return; }
+    this.pc = this.makePc(); this.accepting = false;
     await this.pc.setRemoteDescription({ type: "offer", sdp: this.offer });
     for (const c of this.pendingIce.splice(0)) await this.pc.addIceCandidate(c).catch(() => {});
     const answer = await this.pc.createAnswer();
@@ -2214,6 +2230,40 @@ const Calls = {
     callBackdrop(this.ui, this.peer);
     document.body.append(this.ui);
     this.attach();
+    this.pip(this.ui, localV, remoteV);
+  },
+  /** Плавающее окошко как в Telegram: тянется пальцем, прилипает к углам, касание меняет местами своё видео и собеседника. */
+  pip(ui, localV, remoteV) {
+    const W = 110, H = 160, M = 14;
+    const topY = () => M + (parseInt(getComputedStyle(ui).getPropertyValue("--safe-top")) || 0);
+    const botY = () => Math.max(topY(), ui.clientHeight - H - 190);
+    const put = (x, y) => { ui.style.setProperty("--pip-x", Math.round(x) + "px"); ui.style.setProperty("--pip-y", Math.round(y) + "px"); };
+    const home = () => put(ui.clientWidth - W - M, topY());
+    home();
+    new ResizeObserver(() => { const x = parseFloat(ui.style.getPropertyValue("--pip-x")), y = parseFloat(ui.style.getPropertyValue("--pip-y")); if (isNaN(x)) home(); else put(Math.min(Math.max(M, x), ui.clientWidth - W - M), Math.min(Math.max(topY(), y), botY())); }).observe(ui);
+    for (const el of [localV, remoteV]) {
+      let d = null;
+      const small = () => ui.classList.contains("swap") === (el === remoteV);     // это окошко сейчас маленькое
+      el.addEventListener("pointerdown", (e) => {
+        if (!small() || !ui.classList.contains("has-video")) return;
+        d = { x: e.clientX, y: e.clientY, ox: parseFloat(ui.style.getPropertyValue("--pip-x")), oy: parseFloat(ui.style.getPropertyValue("--pip-y")), moved: false };
+        try { el.setPointerCapture(e.pointerId); } catch { /* */ }
+      });
+      el.addEventListener("pointermove", (e) => {
+        if (!d) return;
+        const dx = e.clientX - d.x, dy = e.clientY - d.y;
+        if (!d.moved && Math.abs(dx) + Math.abs(dy) < 8) return;
+        d.moved = true; ui.classList.add("pip-drag");
+        put(Math.min(Math.max(0, d.ox + dx), ui.clientWidth - W), Math.min(Math.max(0, d.oy + dy), ui.clientHeight - H));
+      });
+      const end = () => {
+        if (!d) return; const moved = d.moved; d = null; ui.classList.remove("pip-drag");
+        if (!moved) { ui.classList.toggle("swap"); return; }                       // касание без перетаскивания: поменять местами
+        const x = parseFloat(ui.style.getPropertyValue("--pip-x")), y = parseFloat(ui.style.getPropertyValue("--pip-y"));
+        put(x + W / 2 < ui.clientWidth / 2 ? M : ui.clientWidth - W - M, y + H / 2 < ui.clientHeight / 2 ? topY() : botY());   // к ближайшему углу
+      };
+      el.addEventListener("pointerup", end); el.addEventListener("pointercancel", () => { d = null; ui.classList.remove("pip-drag"); });
+    }
   },
   /** Добавить людей в звонок один-на-один: он превращается в групповой видеочат в личной переписке этой пары. */
   async addPerson() {

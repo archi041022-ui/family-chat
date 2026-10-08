@@ -147,6 +147,7 @@ const Assistant = {
     Voice2.stop();
     this.fromVoice = fromVoice;
     this.history.push({ role: "user", content: text, at: Date.now() });
+    { const bare = Maks.strip(text); if (bare) text = bare; }          // «Макс, …» — обращение по имени убираем
     // звонки и сообщения выполняются прямо в приложении, без нейросети
     // в чате: «позвони», «напиши ему …» — без имени, для собеседника открытого чата
     if (this.ctxChat && !this.pending) {
@@ -158,6 +159,7 @@ const Assistant = {
         return;
       }
     }
+    try { if (await Maks.command(text)) return; } catch { /* обычный вопрос */ }
     try { if (this.taskCommand(text)) return; } catch { /* обычный вопрос */ }
     try { if (await this.command(text)) return; } catch { /* обычный вопрос */ }
     // простое — отвечаем сразу, без интернета
@@ -247,6 +249,7 @@ const Assistant = {
         h("span", null, "Голос телефона", h("small", { class: "sub" }, this.settings.sysVoice?.name ? this.settings.sysVoice.label || this.settings.sysVoice.name : "выбирается автоматически"))) : null,
       window.AndroidBridge?.openStore ? h("button", { class: "menu-item", onclick: () => this.downloadVoices() }, h("span", { html: I.download }), "Скачать новые голоса из интернета") : null,
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.speak, onchange: (e) => { this.settings.speak = e.target.checked; this.save(); } }), "Озвучивать ответы"),
+      h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: !!this.settings.wake, onchange: (e) => { Maks.setWake(e.target.checked); if (e.target.checked) toast("Скажите: «Макс, открой настройки». Работает, пока приложение открыто"); } }), h("span", null, "Отзываться на имя «Макс»", h("small", null, "Микрофон слушает только пока приложение открыто. Сверху виден значок «Макс»"))),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.handsfree, onchange: (e) => { this.settings.handsfree = e.target.checked; this.save(); } }), "Разговор голосом: после ответа снова слушать"),
       h("div", { class: "section-title", style: { padding: "10px 4px 6px" } }, "Чей голос использовать"),
       h("div", { class: "segmented" }, ...[["auto", "Авто"], ["device", "Телефона"], ["online", "Интернет"]].map(([v, l]) =>
@@ -586,7 +589,7 @@ Object.assign(Assistant, {
     const t = text.toLowerCase().replace(/ё/g, "е").replace(/[?!.,]+/g, " ").replace(/\s+/g, " ").trim();
     const name = S.me?.name ? S.me.name.split(" ")[0] : "";
     const now = new Date();
-    if (/^(привет|здравствуй|здравствуйте|добрый (день|вечер)|доброе утро|доброй ночи|хай|салам)( ассистент| джарвис)?$/.test(t))
+    if (/^(привет|здравствуй|здравствуйте|добрый (день|вечер)|доброе утро|доброй ночи|хай|салам)( ассистент| джарвис| макс)?$/.test(t))
       return `Здравствуйте${name ? ", " + name : ""}! Чем помочь? Могу подсказать погоду, новости, курс валют, позвонить или написать кому-то из семьи.`;
     if (/(который|сколько) (сейчас )?(час|времени)|^время$|точное время|сколько время/.test(t))
       return `Сейчас ${now.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}.`;
@@ -595,7 +598,7 @@ Object.assign(Assistant, {
     if (/^(спасибо|благодарю|спс|супер спасибо|большое спасибо)/.test(t)) return "Пожалуйста! Обращайтесь.";
     if (/^(как (у тебя )?дела|как ты|как жизнь)$/.test(t)) return "Всё отлично, готов помогать! Спросите о погоде, новостях или попросите позвонить кому-нибудь.";
     if (/^(что ты умеешь|кто ты|что умеешь|помощь|помоги|что ты можешь)$/.test(t))
-      return "Я умею: рассказать погоду и прогноз, свежие новости, курс доллара и евро, ответить на вопросы. А ещё — позвонить («Позвони маме»), начать видеочат («Видеочат с группой Друзья») отправить сообщение под диктовку («Напиши папе, что я задержусь»), вести список задач и напоминать («Напомни завтра в 9 позвонить бабушке», «Поручи маме купить хлеб», «Мои задачи»).";
+      return "Я Макс, ваш помощник. Я умею: рассказать погоду и прогноз, свежие новости, курс доллара и евро, ответить на вопросы. А ещё — позвонить («Позвони маме»), начать видеочат («Видеочат с группой Друзья») отправить сообщение под диктовку («Напиши папе, что я задержусь»), вести список задач и напоминать («Напомни завтра в 9 позвонить бабушке», «Поручи маме купить хлеб», «Мои задачи»).";
     // арифметика: «сколько будет 25 умножить на 4», «посчитай 120/3»
     const m = t.match(/^(?:сколько будет|посчитай|вычисли|реши)?\s*(-?\d+(?:[.,]\d+)?)\s*(\+|плюс|-|минус|\*|×|x|х|умножить на|умноженное на|\/|:|разделить на|делить на|поделить на)\s*(-?\d+(?:[.,]\d+)?)$/);
     if (m && (/^(сколько будет|посчитай|вычисли|реши)/.test(t) || /[+\-*/×:]/.test(m[2]))) {

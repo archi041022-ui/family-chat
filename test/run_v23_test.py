@@ -78,7 +78,7 @@ try:
         A.click(".msg.out .bubble:has-text('Первое')", button="right"); A.click(".sheet >> text=Выбрать несколько")
         A.wait_for_selector("#selBar"); A.click(".msg.out:has-text('Второе')"); A.wait_for_selector("#selBar >> text=Выбрано: 2"); shot(A, "v3_A_select")
         A.click("#selBar button[title='Удалить']"); A.click(".sheet >> text=Удалить у всех")
-        A.wait_for_selector(".dust-layer"); shot(A, "v4_A_dust")
+        A.wait_for_selector(".shatter-layer"); shot(A, "v4_A_dust")
         A.wait_for_function("!document.querySelector('.msg .text') || ![...document.querySelectorAll('.msg .text')].some(t => /Первое|Второе/.test(t.textContent))", timeout=8000)
         B.wait_for_function("![...document.querySelectorAll('.msg .text')].some(t => /Первое|Второе/.test(t.textContent))", timeout=8000)
         assert A.locator(".msg .text >> text=Третье").count() == 1

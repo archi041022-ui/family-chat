@@ -102,6 +102,11 @@ class MainActivity : Activity() {
         WebHolder.js("window.onPip && window.onPip($isInPictureInPictureMode)")
     }
 
+    override fun onStop() {
+        WebHolder.muteBeeps(this, false)          // звук сигналов всегда возвращаем при уходе из приложения
+        super.onStop()
+    }
+
     override fun onPause() {
         super.onPause()
         WebHolder.foreground = false

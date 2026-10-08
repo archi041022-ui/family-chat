@@ -761,6 +761,15 @@ const Welcome = {
     }
     return box;
   },
+  /** Голосовое приветствие: ассистент здоровается с новым участником. */
+  speak(first) {
+    try {
+      if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; }
+      if (Assistant.settings.speak === false) return;
+      const txt = `Добро пожаловать в семью${first ? ", " + first : ""}! Меня зовут Макс, я ваш помощник. Я умею открывать разделы приложения, звонить, писать сообщения и рассказывать погоду. Просто скажите: «Макс, открой настройки».`;
+      setTimeout(() => Voice2.speak(txt, Assistant.settings.voice), 1200);
+    } catch { /* без голоса карточка всё равно покажется */ }
+  },
   show() {
     const first = (S.me.name || "").split(" ")[0];
     const slides = [
@@ -787,6 +796,7 @@ const Welcome = {
       card, dots,
       h("button", { class: "btn wl-go", onclick: () => { clearInterval(timer); el.classList.add("out"); setTimeout(() => el.remove(), 500); } }, "Начать общение 🎉"));
     document.body.append(el);
+    this.speak(first);
     setTimeout(showSlide, 1600);
     const timer = setInterval(() => { i = (i + 1) % slides.length; showSlide(); }, 3200);
     navigator.vibrate?.([30, 60, 30]);

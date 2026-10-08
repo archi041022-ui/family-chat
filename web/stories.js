@@ -315,6 +315,7 @@ const Stories = {
       if (error) { toast("Не удалось удалить"); return; }
       if (s.media_path) S.sb.storage.from("media").remove([s.media_path]).catch(() => {});
       this.list = this.list.filter((x) => x.id !== s.id);
+      try { await FX.dust(root.querySelector(".sv-media, .sv-stage, video, img") || root); } catch { /* */ }
       items.splice(idx, 1); bars.children[idx]?.remove();
       toast("История удалена");
       if (!items.length) { end(); return; }
