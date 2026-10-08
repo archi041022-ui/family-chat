@@ -40,6 +40,16 @@ try:
         A.evaluate("document.querySelectorAll('.welcome').forEach(e => e.remove())")
         assert A.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
         A.click("#chatList >> text=Семья"); A.wait_for_selector(".composer .send")
+        # фон-фото подстраивается под экран и не растягивается на длину переписки
+        A.evaluate("""async () => { const c = document.createElement('canvas'); c.width = 800; c.height = 400; const x = c.getContext('2d'); x.fillStyle = '#c33'; x.fillRect(0, 0, 800, 400);
+          const blob = await new Promise(r => c.toBlob(r, 'image/png')); await Store.set(Wallpaper.key('default'), blob); Wallpaper.urls.clear(); Prefs.set('wp_default', 'photo'); await Wallpaper.apply(S.current); }""")
+        A.evaluate("() => { for (let i = 0; i < 25; i++) { const d = document.createElement('div'); d.style.height = '60px'; d.className = 'filler'; document.querySelector('#msgs').append(d); } }")
+        st = A.evaluate("() => { const m = document.querySelector('#msgs'), s = getComputedStyle(m); return [s.backgroundAttachment, s.backgroundSize, m.classList.contains('wp-photo')]; }")
+        assert st[0].startswith("scroll") and "cover" in st[1] and st[2], st
+        A.evaluate("document.querySelectorAll('.filler').forEach(e => e.remove())")
+        assert A.evaluate("Maks.addressed('Мокс открой настройки') && Maks.addressed('max, привет') && !Maks.addressed('Максим')")
+        assert A.evaluate("Maks.strip('Маск, открой настройки')") == "открой настройки"
+        print("фон-фото под экран, варианты слова «Макс»: ok")
         A.fill("#input", "Удаляемое"); A.click(".composer .send"); A.wait_for_selector(".msg.out .text >> text=Удаляемое")
         shot(A, "v46_before"); A.click(".msg.out .bubble:has-text('Удаляемое')", button="right")
         A.click(".sheet >> text=Удалить у всех")

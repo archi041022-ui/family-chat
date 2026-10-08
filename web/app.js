@@ -1732,6 +1732,7 @@ async function onNewMessage(m) {
   if (m.body === WELCOME_MARK && m.user_id !== S.me.id) Welcome.celebrate(m);
   // оповещение по этому сообщению уже могло прийти с сервера — не повторяем
   const dup = Push.shown.has(m.id); Push.mark(m.id);
+  try { MaksPlus.learn(m); } catch { /* */ }
   if (Tg.isCallMsg(m) && !(S.callLog || []).some((x) => x.id === m.id)) {
     (S.callLog = S.callLog || []).unshift(m);
     Tg.updateCallsBadge(); if (S.tab === "calls") Tg.renderCalls();

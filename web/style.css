@@ -802,6 +802,7 @@ input, textarea { font: inherit; color: inherit; }
 @keyframes emojiPop { from { transform: scale(.3) rotate(-15deg); opacity: 0; } }
 /* свой фон чата */
 .messages.has-wp { background-size: cover !important; }
+.messages.wp-photo { background-attachment: scroll !important; background-position: center center !important; background-repeat: no-repeat !important; }
 .messages.wp-photo .day, .messages.has-wp .day { background: rgba(0,0,0,.35); color: #fff; }
 .messages.wp-photo .empty-chat, .messages.has-wp .empty-chat { color: #fff; text-shadow: 0 1px 4px #000a; }
 .wp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }

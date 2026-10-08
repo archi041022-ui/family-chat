@@ -358,6 +358,13 @@ object WebHolder {
             a.runOnUiThread { a.startListening() }
         }
 
+        /** Слушать обращение «Макс»: несколько вариантов распознавания, длинные паузы. */
+        @JavascriptInterface fun listenWake() {
+            val a = activity
+            if (a == null) { WebHolder.js("window.onSpeechResult && window.onSpeechResult(null, 'error')"); return }
+            a.runOnUiThread { a.startListening(true) }
+        }
+
         @JavascriptInterface fun shareFile(url: String, mime: String, name: String, text: String?) =
             Sharing.shareFile(ctx, url, mime, name, text)
 

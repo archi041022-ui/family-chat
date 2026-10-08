@@ -136,7 +136,12 @@ object Speech {
     }
 
     /** Распознаёт одну фразу и передаёт текст странице (window.onSpeechResult). */
+    /** Режим «слушаю имя Макс»: больше вариантов распознавания, терпеливее к паузам, берём вариант с обращением. */
+    @Volatile var wake = false
+    private val WAKE = Regex("(^|[^а-яёa-z])(макс|мокс|маск|мэкс|макc|max|mux)([^а-яёa-z]|$)", RegexOption.IGNORE_CASE)
+
     fun listen(activity: MainActivity) {
+        val wakeMode = wake; wake = false
         if (!SpeechRecognizer.isRecognitionAvailable(activity)) { result(null, "unavailable"); return }
         try {
             recognizer?.destroy()
@@ -144,7 +149,8 @@ object Speech {
             recognizer = r
             r.setRecognitionListener(object : RecognitionListener {
                 override fun onResults(results: Bundle?) {
-                    val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    val alts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val text = if (wakeMode) (alts?.firstOrNull { WAKE.containsMatchIn(it) } ?: alts?.firstOrNull()) else alts?.firstOrNull()
                     result(text, if (text.isNullOrBlank()) "no_match" else null); cleanup()
                 }
                 override fun onError(error: Int) {
@@ -165,7 +171,11 @@ object Speech {
             val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, if (wakeMode) 6 else 1)
+            if (wakeMode) i.putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 1800L)
+                .putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1500L)
+                .putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 4000L)
+                .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, activity.packageName)
             r.startListening(i)
         } catch (_: Throwable) { result(null, "error"); cleanup() }
     }

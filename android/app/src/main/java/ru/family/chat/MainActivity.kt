@@ -275,11 +275,12 @@ class MainActivity : Activity() {
         requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
     }
 
-    fun startListening() {
+    fun startListening(wake: Boolean = false) {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
             return
         }
+        Speech.wake = wake
         Speech.listen(this)
     }
 

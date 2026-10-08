@@ -64,8 +64,10 @@ const Maks = {
     return String(raw || "").trim().replace(/[.!?]+$/, "").replace(/(^|\s)(пожалуйста|быстро|срочно)(?=[\s,]|$),?/gi, " ").replace(/\s+/g, " ").trim();
   },
   /** Убрать обращение: «Макс, открой настройки» → «открой настройки». */
-  strip(raw) { return String(raw || "").replace(/^\s*(?:эй|привет|слушай|ок|окей|хей|ну)?[\s,]*макс[\s,!.:-]*/i, "").trim(); },
-  addressed(raw) { return /(^|[^а-яё])макс([^а-яё]|$)/i.test(String(raw || "")); },
+  /** Распознавание часто слышит «Макс» как «Мокс», «Маск», «Max»: приводим к одному виду. */
+  norm(raw) { return String(raw || "").replace(/(^|[^а-яёa-z])(?:макс|мокс|маск|мэкс|макc|max|mux)(?=[^а-яёa-z]|$)/gi, "$1Макс"); },
+  strip(raw) { return this.norm(raw).replace(/^\s*(?:эй|привет|слушай|ок|окей|хей|ну|алло|привет,)?[\s,]*макс[\s,!.:-]*/i, "").trim(); },
+  addressed(raw) { return /(^|[^а-яё])макс([^а-яё]|$)/i.test(this.norm(raw)); },
 
   // ───────── Команды ─────────
   /** true — команда выполнена (дальше ассистент ничего не делает) */
@@ -193,18 +195,18 @@ const Maks = {
         if (err === "permission") { toast("Разрешите доступ к микрофону, чтобы я слышал имя Макс"); this.setWake(false); return; }
         if (err === "unavailable") { toast("На телефоне нет службы распознавания речи"); this.setWake(false); return; }
         if (text) this.hear(text);
-        this.timer = setTimeout(() => this.loop(), text ? 600 : 400);
+        this.timer = setTimeout(() => this.loop(), text ? 600 : err === "error" ? 1200 : 250);
       };
       window.onSpeechResult = this.handler;
-      try { window.AndroidBridge.listen(); } catch { this.listening = false; this.timer = setTimeout(() => this.loop(), 3000); }
+      try { (window.AndroidBridge.listenWake || window.AndroidBridge.listen).call(window.AndroidBridge); } catch { this.listening = false; this.timer = setTimeout(() => this.loop(), 3000); }
       return;
     }
     // обычный браузер: нет службы распознавания — режим недоступен
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { toast("Голосовой режим не поддерживается в этом браузере"); this.setWake(false); return; }
     this.listening = true;
-    const r = new SR(); r.lang = "ru-RU"; r.interimResults = false; let got = null;
-    r.onresult = (e) => { got = e.results[0][0].transcript; };
+    const r = new SR(); r.lang = "ru-RU"; r.interimResults = false; r.maxAlternatives = 5; let got = null;
+    r.onresult = (e) => { const alts = [...e.results[0]].map((a) => a.transcript); got = alts.find((a) => this.addressed(a)) || alts[0]; };
     r.onerror = () => {}; r.onend = () => { this.listening = false; if (got) this.hear(got); this.timer = setTimeout(() => this.loop(), 500); };
     try { r.start(); } catch { this.listening = false; this.timer = setTimeout(() => this.loop(), 3000); }
   },

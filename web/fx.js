@@ -74,7 +74,8 @@ const Wallpaper = {
     box.classList.toggle("has-wp", !!w?.css);
     box.classList.toggle("wp-photo", !!w?.photo);
     box.style.background = w?.css || "";
-    if (w?.css) box.style.backgroundAttachment = "local";
+    // фото всегда занимает видимую область экрана целиком (не растягивается на всю длину переписки и не уезжает при прокрутке)
+    if (w?.css) { box.style.backgroundAttachment = w.photo ? "scroll" : "local"; if (w.photo) { box.style.backgroundSize = "cover"; box.style.backgroundPosition = "center center"; box.style.backgroundRepeat = "no-repeat"; } }
   },
   sheet(chatId) {
     let close;

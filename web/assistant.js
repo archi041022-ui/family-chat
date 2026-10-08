@@ -250,6 +250,9 @@ const Assistant = {
       window.AndroidBridge?.openStore ? h("button", { class: "menu-item", onclick: () => this.downloadVoices() }, h("span", { html: I.download }), "Скачать новые голоса из интернета") : null,
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.speak, onchange: (e) => { this.settings.speak = e.target.checked; this.save(); } }), "Озвучивать ответы"),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: !!this.settings.wake, onchange: (e) => { Maks.setWake(e.target.checked); if (e.target.checked) toast("Скажите: «Макс, открой настройки». Работает, пока приложение открыто"); } }), h("span", null, "Отзываться на имя «Макс»", h("small", null, "Микрофон слушает только пока приложение открыто. Сверху виден значок «Макс»"))),
+      h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: MaksPlus.enabled(), onchange: (e) => Prefs.set("maks_remind", e.target.checked) }), h("span", null, "Напоминать о пропущенном", h("small", null, "О пропущенных звонках и непрочитанных сообщениях, пока приложение открыто"))),
+      h("button", { class: "menu-item", onclick: () => { close?.(); MaksPlus.memorySheet(); } }, h("span", null, "🧠"), "Что помнит Макс"),
+      h("button", { class: "menu-item", onclick: () => { close?.(); MaksPlus.notesSheet(); } }, h("span", null, "📝"), "Заметки"),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.handsfree, onchange: (e) => { this.settings.handsfree = e.target.checked; this.save(); } }), "Разговор голосом: после ответа снова слушать"),
       h("div", { class: "section-title", style: { padding: "10px 4px 6px" } }, "Чей голос использовать"),
       h("div", { class: "segmented" }, ...[["auto", "Авто"], ["device", "Телефона"], ["online", "Интернет"]].map(([v, l]) =>
