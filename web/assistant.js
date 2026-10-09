@@ -290,6 +290,11 @@ const Assistant = {
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.speak, onchange: (e) => { this.settings.speak = e.target.checked; this.save(); } }), "Озвучивать ответы"),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: !!this.settings.wake, onchange: (e) => { Maks.setWake(e.target.checked); if (e.target.checked) toast("Скажите: «Макс, открой настройки». Работает, пока приложение открыто"); } }), h("span", null, "Отзываться на имя «Макс»", h("small", null, "Микрофон слушает только пока приложение открыто. Сверху виден значок «Макс»"))),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: MaksPlus.enabled(), onchange: (e) => Prefs.set("maks_remind", e.target.checked) }), h("span", null, "Напоминать о пропущенном", h("small", null, "О пропущенных звонках и непрочитанных сообщениях, пока приложение открыто"))),
+      window.AndroidBridge?.agentOverlay ? h("label", { class: "toggle-row" }, h("input", { type: "checkbox", id: "agentBubble", checked: window.AndroidBridge.agentOverlayState?.() !== "off", onchange: (e) => {
+        const r = window.AndroidBridge.agentOverlay(e.target.checked);
+        if (r === "permission") toast("Разрешите «Поверх других приложений» для «Семьи», затем вернитесь");
+        else toast(e.target.checked ? "Кнопка ассистента появится поверх других приложений" : "Кнопка убрана");
+      } }), h("span", null, "Кнопка ассистента поверх приложений", h("small", null, "Плавающий круг: нажмите — ассистент слушает. Также есть ярлык на значке и плитка в шторке"))) : null,
       h("button", { class: "menu-item", onclick: () => { close?.(); MaksPlus.memorySheet(); } }, h("span", null, "🧠"), "Что помнит Макс"),
       h("button", { class: "menu-item", onclick: () => { close?.(); MaksPlus.notesSheet(); } }, h("span", null, "📝"), "Заметки"),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.handsfree, onchange: (e) => { this.settings.handsfree = e.target.checked; this.save(); } }), "Разговор голосом: после ответа снова слушать"),
@@ -830,3 +835,18 @@ Object.assign(Assistant, {
     ]);
   },
 });
+
+// ───────────── Встроено в телефон: плавающая кнопка, ярлык, плитка ─────────────
+window.onOpenAgent = () => {
+  try {
+    if (typeof S === "undefined" || !S.me) { window.__agentPending = true; return; }       // ещё не вошли — откроем после входа
+    if (Assistant.mini) Assistant.closeMini?.();
+    Assistant.openMini();
+  } catch { /* */ }
+};
+setInterval(() => {
+  try {
+    if (window.__agentPending && typeof S !== "undefined" && S.me) { window.__agentPending = false; window.onOpenAgent(); return; }
+    if (window.AndroidBridge?.takeLaunchAction?.() === true) window.onOpenAgent();
+  } catch { /* */ }
+}, 1500);

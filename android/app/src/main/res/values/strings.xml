@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Семья</string>
+    <string name="shortcut_agent">Ассистент</string>
+    <string name="shortcut_agent_long">Спросить ассистента</string>
 </resources>

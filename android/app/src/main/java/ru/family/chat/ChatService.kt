@@ -33,8 +33,10 @@ class ChatService : Service() {
         // WebView должен создаваться в главном потоке
         Handler(Looper.getMainLooper()).post { WebHolder.obtain(this) }
         applyReliable()
+        handler.post { AgentOverlay.show(this) }
         handler.postDelayed(keepAlive, KEEPALIVE_MS)
     }
+
 
     // Проверка связи с сервером каждые 20 секунд: если соединение уснуло — мессенджер переподключается,
     // поэтому входящие звонки доходят и при выключенном экране.
@@ -140,6 +142,7 @@ class ChatService : Service() {
     }
 
     override fun onDestroy() {
+        AgentOverlay.hide(this)
         screen?.stop(); screen = null
         release()
         handler.removeCallbacks(keepAlive)

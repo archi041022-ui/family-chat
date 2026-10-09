@@ -38,6 +38,7 @@ class MainActivity : Activity() {
         web = w
         openChatFrom(intent)
         callFrom(intent)
+        agentFrom(intent)
         if (Sharing.isShare(intent)) Sharing.accept(this, intent)
         askStartupPermissions()
     }
@@ -47,7 +48,16 @@ class MainActivity : Activity() {
         setIntent(intent)
         openChatFrom(intent)
         callFrom(intent)
+        agentFrom(intent)
         if (Sharing.isShare(intent)) Sharing.accept(this, intent)
+    }
+
+    /** Пришли с плавающей кнопки, ярлыка или плитки — открываем ассистента. */
+    private fun agentFrom(i: Intent?) {
+        if (i?.action != AgentOverlay.ACTION_OPEN) return
+        i.setAction(null)
+        WebHolder.launchAgent = true
+        WebHolder.js("window.onOpenAgent && window.onOpenAgent()")
     }
 
     /** Нажали «Ответить» в уведомлении о звонке — отвечаем, как только звонок дойдёт до страницы. */
@@ -72,6 +82,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         WebHolder.foreground = true
+        AgentOverlay.hide(this)                       // в самом приложении кнопка не нужна
         Notifier.clearMessages(this)
         Notifier.cancelCall(this)
         WebHolder.js("window.onAppForeground && window.onAppForeground()")
@@ -110,6 +121,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         WebHolder.foreground = false
+        if (AgentOverlay.enabled(this)) { if (!ChatService.running) ChatService.start(this); AgentOverlay.show(this) }
         WebHolder.js("window.onAppBackground && window.onAppBackground()")
     }
 

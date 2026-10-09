@@ -24,6 +24,9 @@ import java.lang.ref.WeakReference
  */
 @SuppressLint("StaticFieldLeak")
 object WebHolder {
+    /** Запрос «открыть ассистента», пока страница ещё не готова (холодный запуск). */
+    @Volatile var launchAgent = false
+
     const val HOST = "appassets.androidplatform.net"
     const val START = "https://$HOST/assets/web/index.html"
 
@@ -357,6 +360,21 @@ object WebHolder {
             if (a == null) { WebHolder.js("window.onSpeechResult && window.onSpeechResult(null, 'error')"); return }
             a.runOnUiThread { a.startListening() }
         }
+
+        /** Забрать отложенный запрос на открытие ассистента (true один раз). */
+        @JavascriptInterface fun takeLaunchAction(): Boolean { val v = launchAgent; launchAgent = false; return v }
+
+        /** Плавающая кнопка: "ok" — включена, "permission" — открыт экран разрешения, "off" — выключена. */
+        @JavascriptInterface fun agentOverlay(on: Boolean): String {
+            if (!on) { AgentOverlay.setEnabled(ctx, false); return "off" }
+            if (!AgentOverlay.canDraw(ctx)) {
+                ctx.getSharedPreferences("family", Context.MODE_PRIVATE).edit().putBoolean("agent_bubble", true).apply()
+                AgentOverlay.askPermission(ctx); return "permission"
+            }
+            AgentOverlay.setEnabled(ctx, true); return "ok"
+        }
+        @JavascriptInterface fun agentOverlayState(): String =
+            if (!AgentOverlay.enabled(ctx)) "off" else if (!AgentOverlay.canDraw(ctx)) "permission" else "ok"
 
         @JavascriptInterface fun stopListen() { val a = activity; if (a != null) a.runOnUiThread { Speech.cancel() } }
 

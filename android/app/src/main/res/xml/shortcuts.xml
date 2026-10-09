@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="agent" android:enabled="true" android:shortcutShortLabel="@string/shortcut_agent" android:shortcutLongLabel="@string/shortcut_agent_long">
+        <intent android:action="ru.family.chat.OPEN_AGENT" android:targetPackage="ru.family.chat" android:targetClass="ru.family.chat.MainActivity" />
+    </shortcut>
+</shortcuts>
