@@ -26,6 +26,7 @@ import java.lang.ref.WeakReference
 object WebHolder {
     /** Запрос «открыть ассистента», пока страница ещё не готова (холодный запуск). */
     @Volatile var launchAgent = false
+    @Volatile var launchText = ""
 
     const val HOST = "appassets.androidplatform.net"
     const val START = "https://$HOST/assets/web/index.html"
@@ -363,6 +364,22 @@ object WebHolder {
 
         /** Забрать отложенный запрос на открытие ассистента (true один раз). */
         @JavascriptInterface fun takeLaunchAction(): Boolean { val v = launchAgent; launchAgent = false; return v }
+
+        @JavascriptInterface fun takeLaunchText(): String { val v = launchText; launchText = ""; return v }
+
+        /** Голосовая активация «Макс» при закрытом приложении: "ok" | "permission" | "mic" | "off". */
+        @JavascriptInterface fun wakeBg(on: Boolean): String {
+            if (!on) { WakeListener.setEnabled(ctx, false); return "off" }
+            if (ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                activity?.runOnUiThread { activity?.requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 17) }; return "mic"
+            }
+            if (!AgentOverlay.canDraw(ctx)) {
+                ctx.getSharedPreferences("family", Context.MODE_PRIVATE).edit().putBoolean("bg_wake", true).apply()
+                AgentOverlay.askPermission(ctx); return "permission"
+            }
+            WakeListener.setEnabled(ctx, true); return "ok"
+        }
+        @JavascriptInterface fun wakeBgState(): String = if (WakeListener.enabled(ctx)) "on" else "off"
 
         /** Плавающая кнопка: "ok" — включена, "permission" — открыт экран разрешения, "off" — выключена. */
         @JavascriptInterface fun agentOverlay(on: Boolean): String {

@@ -295,6 +295,12 @@ const Assistant = {
         if (r === "permission") toast("Разрешите «Поверх других приложений» для «Семьи», затем вернитесь");
         else toast(e.target.checked ? "Кнопка ассистента появится поверх других приложений" : "Кнопка убрана");
       } }), h("span", null, "Кнопка ассистента поверх приложений", h("small", null, "Плавающий круг: нажмите — ассистент слушает. Также есть ярлык на значке и плитка в шторке"))) : null,
+      window.AndroidBridge?.wakeBg ? h("label", { class: "toggle-row" }, h("input", { type: "checkbox", id: "wakeBg", checked: window.AndroidBridge.wakeBgState?.() === "on", onchange: (e) => {
+        const r = window.AndroidBridge.wakeBg(e.target.checked);
+        if (r === "mic") { toast("Разрешите микрофон и включите ещё раз"); e.target.checked = false; }
+        else if (r === "permission") toast("Разрешите «Поверх других приложений» для «Семьи», затем вернитесь");
+        else toast(e.target.checked ? "Скажите «Макс…» — даже когда приложение закрыто" : "Фоновое слушание выключено");
+      } }), h("span", null, "Голос «Макс» при закрытом приложении", h("small", null, "Включайте, когда «Семья» открыта. После перезагрузки телефона откройте приложение один раз. Расходует батарею; в звонке не слушает"))) : null,
       h("button", { class: "menu-item", onclick: () => { close?.(); MaksPlus.memorySheet(); } }, h("span", null, "🧠"), "Что помнит Макс"),
       h("button", { class: "menu-item", onclick: () => { close?.(); MaksPlus.notesSheet(); } }, h("span", null, "📝"), "Заметки"),
       h("label", { class: "toggle-row" }, h("input", { type: "checkbox", checked: this.settings.handsfree, onchange: (e) => { this.settings.handsfree = e.target.checked; this.save(); } }), "Разговор голосом: после ответа снова слушать"),
@@ -742,7 +748,7 @@ Object.assign(Assistant, {
 Object.assign(Assistant, {
   // Кнопка рядом с микрофоном в любой переписке: ассистент открывается поверх чата.
   // «Позвони», «напиши ему…», «видеозвонок» без имени относятся к собеседнику открытого чата.
-  openMini() {
+  openMini(opts) {
     if (!this.loaded) { this.load(); this.loaded = true; }
     const chatId = S.current;
     const c = S.chats.find((x) => x.id === chatId);
@@ -764,7 +770,7 @@ Object.assign(Assistant, {
     ], () => { this.mini = false; this.ctxChat = null; Voice2.stop(); });
     this.closeMini = () => { close(); };
     this.render(true);
-    setTimeout(() => this.listen(mic), 250);          // сразу слушаем — можно просто говорить
+    if (!opts?.noListen) setTimeout(() => this.listen(mic), 250);          // сразу слушаем — можно просто говорить
   },
 
   // команды без имени — для открытого чата
@@ -837,16 +843,20 @@ Object.assign(Assistant, {
 });
 
 // ───────────── Встроено в телефон: плавающая кнопка, ярлык, плитка ─────────────
-window.onOpenAgent = () => {
+window.onOpenAgent = (text) => {
   try {
-    if (typeof S === "undefined" || !S.me) { window.__agentPending = true; return; }       // ещё не вошли — откроем после входа
+    if (typeof S === "undefined" || !S.me) { window.__agentPending = true; window.__agentText = text || ""; return; }       // ещё не вошли — откроем после входа
     if (Assistant.mini) Assistant.closeMini?.();
-    Assistant.openMini();
+    // «Макс, позвони маме» — после имени идёт команда: выполняем сразу
+    const m = String(text || "").match(/(?:^|[^а-яёa-z])(?:макс|мокс|маск|мэкс|max|mux)(?![а-яё])[\s,.!:—-]*([\s\S]*)$/i);
+    const cmd = m ? m[1].trim() : "";
+    if (cmd.length > 2) { Assistant.openMini({ noListen: true }); setTimeout(() => Assistant.ask(cmd, true), 350); }
+    else Assistant.openMini();
   } catch { /* */ }
 };
 setInterval(() => {
   try {
-    if (window.__agentPending && typeof S !== "undefined" && S.me) { window.__agentPending = false; window.onOpenAgent(); return; }
-    if (window.AndroidBridge?.takeLaunchAction?.() === true) window.onOpenAgent();
+    if (window.__agentPending && typeof S !== "undefined" && S.me) { window.__agentPending = false; const t = window.__agentText; window.__agentText = ""; window.onOpenAgent(t); return; }
+    if (window.AndroidBridge?.takeLaunchAction?.() === true) window.onOpenAgent(window.AndroidBridge.takeLaunchText?.() || "");
   } catch { /* */ }
 }, 1500);

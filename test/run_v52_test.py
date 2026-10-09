@@ -61,6 +61,22 @@ try:
         A.evaluate("window.__perm = true; document.querySelector('#agentBubble').click(); document.querySelector('#agentBubble').click()"); A.wait_for_timeout(200)
         assert A.evaluate("window.__calls.filter(c => c === 'overlay:false').length") >= 1
         print("переключатель «кнопка поверх приложений»: ok")
+        # голосовая активация при закрытом приложении: фраза с командой
+        A.evaluate("Assistant.closeMini?.()"); A.wait_for_timeout(300)
+        A.evaluate("window.__calls = []; window.__asked = null; Assistant.ask = (t, v) => { window.__asked = [t, v]; }; window.onOpenAgent('Макс, позвони маме')")
+        A.wait_for_function("window.__asked !== null", timeout=3000)
+        assert A.evaluate("window.__asked") == ["позвони маме", True], A.evaluate("window.__asked")
+        assert "listen" not in A.evaluate("window.__calls")
+        A.evaluate("Assistant.closeMini?.()"); A.wait_for_timeout(300)
+        A.evaluate("window.__asked = null; window.onOpenAgent('Макс')"); A.wait_for_selector("#asstInput")
+        assert A.evaluate("window.__asked") is None
+        print("«Макс, команда» из фона: ok")
+        # переключатель фонового слушания
+        A.evaluate("window.__calls = []; window.AndroidBridge.wakeBg = (on) => { window.__calls.push('wake:' + on); return on ? 'ok' : 'off'; }; window.AndroidBridge.wakeBgState = () => 'off'")
+        A.evaluate("document.querySelectorAll('.sheet-back').forEach(e => e.remove()); Assistant.settingsSheet()"); A.wait_for_selector("#wakeBg")
+        A.evaluate("document.querySelector('#wakeBg').click()"); A.wait_for_timeout(200)
+        assert "wake:true" in A.evaluate("window.__calls")
+        print("переключатель «Макс при закрытом приложении»: ok")
         b.close()
 finally:
     srv.terminate()

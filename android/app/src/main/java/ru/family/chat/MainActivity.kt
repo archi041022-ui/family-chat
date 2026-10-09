@@ -56,8 +56,10 @@ class MainActivity : Activity() {
     private fun agentFrom(i: Intent?) {
         if (i?.action != AgentOverlay.ACTION_OPEN) return
         i.setAction(null)
-        WebHolder.launchAgent = true
-        WebHolder.js("window.onOpenAgent && window.onOpenAgent()")
+        val text = i.getStringExtra("agent_text") ?: ""
+        i.removeExtra("agent_text")
+        WebHolder.launchAgent = true; WebHolder.launchText = text
+        WebHolder.js("window.onOpenAgent && window.onOpenAgent(" + JSONObject.quote(text) + ")")
     }
 
     /** Нажали «Ответить» в уведомлении о звонке — отвечаем, как только звонок дойдёт до страницы. */
@@ -83,6 +85,7 @@ class MainActivity : Activity() {
         super.onResume()
         WebHolder.foreground = true
         AgentOverlay.hide(this)                       // в самом приложении кнопка не нужна
+        if (WakeListener.enabled(this)) { if (!ChatService.running) ChatService.start(this); ChatService.refreshTypes(this) }
         Notifier.clearMessages(this)
         Notifier.cancelCall(this)
         WebHolder.js("window.onAppForeground && window.onAppForeground()")

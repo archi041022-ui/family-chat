@@ -22,6 +22,11 @@ class ChatService : Service() {
     private var video = false
     private var callTypesOk = false      // микрофон/камера уже разрешены для этого звонка
     private var screen: ScreenCapture? = null
+    private var wakeTypeOk = false       // служба получила тип «микрофон» для голосовой активации
+
+    private fun syncWake() {
+        if (wakeTypeOk && WakeListener.enabled(this) && !inCall) WakeListener.start(this) else if (!WakeListener.enabled(this) || !wakeTypeOk) WakeListener.stop()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,8 +75,10 @@ class ChatService : Service() {
                 WebHolder.js("window.declineIncoming && window.declineIncoming()")
             }
             ACTION_RELIABLE -> applyReliable()
+            ACTION_WAKE -> { wakeTypeOk = WebHolder.foreground && WakeListener.enabled(this) && WakeListener.canRun(this); goForeground(); syncWake() }
             ACTION_CALL -> {
                 inCall = intent.getBooleanExtra("active", false)
+                inCallNow = inCall
                 if (inCall) Sounds.ringStop()                       // разговор начался — мелодия не нужна
                 video = intent.getBooleanExtra("video", false)
                 if (!inCall) { callTypesOk = false; stopScreen() }
@@ -100,6 +107,7 @@ class ChatService : Service() {
         if (Build.VERSION.SDK_INT >= 34) {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             // во время звонка микрофон и камера продолжают работать, даже если свернуть приложение
+            if (wakeTypeOk && WakeListener.enabled(this)) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             if (inCall && (WebHolder.foreground || callTypesOk)) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 if (video) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
@@ -118,6 +126,7 @@ class ChatService : Service() {
             }
         } else if (Build.VERSION.SDK_INT >= 29) {
             var type = 0
+            if (wakeTypeOk && WakeListener.enabled(this)) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             if (inCall) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or (if (video) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
             if (sharing) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             try { startForeground(Notifier.ID_SERVICE, n, type) } catch (_: Throwable) { startForeground(Notifier.ID_SERVICE, n) }
@@ -142,7 +151,7 @@ class ChatService : Service() {
     }
 
     override fun onDestroy() {
-        AgentOverlay.hide(this)
+        AgentOverlay.hide(this); WakeListener.stop()
         screen?.stop(); screen = null
         release()
         handler.removeCallbacks(keepAlive)
@@ -158,6 +167,7 @@ class ChatService : Service() {
         const val ACTION_SCREEN_STOP = "ru.family.chat.SCREEN_STOP"
         const val ACTION_DECLINE = "ru.family.chat.DECLINE"
         const val ACTION_RELIABLE = "ru.family.chat.RELIABLE"
+        const val ACTION_WAKE = "ru.family.chat.WAKE"
         private const val KEEPALIVE_MS = 20_000L
 
         fun reliableChanged(ctx: Context) {
@@ -166,6 +176,13 @@ class ChatService : Service() {
         }
         @Volatile var sharing = false
         @Volatile var running = false
+        @Volatile var inCallNow = false
+
+        /** Пересоздать тип службы (микрофон для голосовой активации) — только когда приложение на экране. */
+        fun refreshTypes(ctx: Context) {
+            if (!running) return
+            try { ctx.startService(Intent(ctx, ChatService::class.java).setAction(ACTION_WAKE)) } catch (_: Throwable) {}
+        }
 
         fun start(ctx: Context) {
             running = true
