@@ -845,7 +845,12 @@ Object.assign(Assistant, {
 // ───────────── Встроено в телефон: плавающая кнопка, ярлык, плитка ─────────────
 window.onOpenAgent = (text) => {
   try {
-    if (typeof S === "undefined" || !S.me) { window.__agentPending = true; window.__agentText = text || ""; return; }       // ещё не вошли — откроем после входа
+    // нативная сторона и опрос могут вызвать это дважды за один запуск — второй вызов гасим, иначе откроются два ассистента
+    try { window.AndroidBridge?.takeLaunchAction?.(); window.AndroidBridge?.takeLaunchText?.(); } catch { /* */ }
+    if (Date.now() - (window.__agentAt || 0) < 2500) return;
+    window.__agentAt = Date.now();
+    try { Maks.pauseForMedia?.(); window.AndroidBridge?.stopListen?.(); } catch { /* */ }       // «Макс» в приложении замолкает: говорит один ассистент
+    if (typeof S === "undefined" || !S.me) { window.__agentPending = true; window.__agentText = text || ""; window.__agentAt = 0; return; }       // ещё не вошли — откроем после входа
     if (Assistant.mini) Assistant.closeMini?.();
     // «Макс, позвони маме» — после имени идёт команда: выполняем сразу
     const m = String(text || "").match(/(?:^|[^а-яёa-z])(?:макс|мокс|маск|мэкс|max|mux)(?![а-яё])[\s,.!:—-]*([\s\S]*)$/i);

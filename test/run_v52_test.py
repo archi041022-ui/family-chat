@@ -44,12 +44,12 @@ try:
         register(A, "papa", "Папа"); A.wait_for_selector("#chatList", timeout=10000); A.wait_for_timeout(1500)
         A.evaluate("document.querySelectorAll('.welcome').forEach(e => e.remove())")
         # открытие по нажатию на кнопку/ярлык (приложение запущено)
-        A.evaluate("window.onOpenAgent()"); A.wait_for_selector("#asstInput", timeout=4000)
+        A.evaluate("window.__agentAt = 0; window.onOpenAgent()"); A.wait_for_selector("#asstInput", timeout=4000)
         assert A.evaluate("Assistant.mini") is True
         print("onOpenAgent открывает ассистента: ok")
         A.evaluate("Assistant.closeMini()"); A.wait_for_timeout(400)
         # холодный запуск: нативная сторона оставила флаг
-        A.evaluate("window.__launch = true"); A.wait_for_selector("#asstInput", timeout=5000)
+        A.evaluate("window.__agentAt = 0; window.__launch = true"); A.wait_for_selector("#asstInput", timeout=5000)
         assert A.evaluate("window.__launch") is False
         print("отложенный запуск подхватывается: ok")
         A.evaluate("Assistant.closeMini()"); A.wait_for_timeout(400)
@@ -63,13 +63,21 @@ try:
         print("переключатель «кнопка поверх приложений»: ok")
         # голосовая активация при закрытом приложении: фраза с командой
         A.evaluate("Assistant.closeMini?.()"); A.wait_for_timeout(300)
-        A.evaluate("window.__calls = []; window.__asked = null; Assistant.ask = (t, v) => { window.__asked = [t, v]; }; window.onOpenAgent('Макс, позвони маме')")
+        A.evaluate("window.__agentAt = 0; window.__calls = []; window.__asked = null; Assistant.ask = (t, v) => { window.__asked = [t, v]; }; window.onOpenAgent('Макс, позвони маме')")
         A.wait_for_function("window.__asked !== null", timeout=3000)
         assert A.evaluate("window.__asked") == ["позвони маме", True], A.evaluate("window.__asked")
         assert "listen" not in A.evaluate("window.__calls")
         A.evaluate("Assistant.closeMini?.()"); A.wait_for_timeout(300)
-        A.evaluate("window.__asked = null; window.onOpenAgent('Макс')"); A.wait_for_selector("#asstInput")
+        A.evaluate("window.__agentAt = 0; window.__asked = null; window.onOpenAgent('Макс')"); A.wait_for_selector("#asstInput")
         assert A.evaluate("window.__asked") is None
+        # двойной вызов (нативный + опрос) не открывает второго ассистента и не повторяет команду
+        A.evaluate("Assistant.closeMini?.()"); A.wait_for_timeout(300)
+        A.evaluate("window.__asked = []; window.__agentAt = 0; Assistant.ask = (t, v) => { window.__asked.push(t); }; window.onOpenAgent('Макс, открой почту'); window.onOpenAgent('Макс, открой почту')")
+        A.wait_for_timeout(900)
+        assert A.evaluate("window.__asked") == ["открой почту"], A.evaluate("window.__asked")
+        assert A.evaluate("document.querySelectorAll('#asstInput').length") == 1
+        assert A.evaluate("Maks.on = true; Maks.canListen()") is False
+        A.evaluate("Maks.on = false")
         print("«Макс, команда» из фона: ok")
         # переключатель фонового слушания
         A.evaluate("window.__calls = []; window.AndroidBridge.wakeBg = (on) => { window.__calls.push('wake:' + on); return on ? 'ok' : 'off'; }; window.AndroidBridge.wakeBgState = () => 'off'")

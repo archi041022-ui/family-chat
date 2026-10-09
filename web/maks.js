@@ -181,7 +181,7 @@ const Maks = {
   },
   /** Слушаем только когда приложение на экране и никто не говорит: не мешаем звонкам, озвучке и ручному вводу. */
   canListen() {
-    return this.on && !document.hidden && !Assistant.listening && !Assistant.busy && !this.busy
+    return this.on && !document.hidden && !Assistant.listening && !Assistant.mini && !Assistant.busy && !this.busy
       && !(typeof Calls !== "undefined" && (Calls.pc || Calls.ui)) && !(typeof GroupCall !== "undefined" && GroupCall.active)
       && !Media.playing() && !VideoEditor.root && !document.querySelector(".camera, .video-rec, .vnote-rec, .lock-screen, .auth") && !Voice2.waiting && !Voice2.audio && !window.speechSynthesis?.speaking;
   },

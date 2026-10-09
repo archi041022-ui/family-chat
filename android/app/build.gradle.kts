@@ -11,8 +11,8 @@ android {
         applicationId = "ru.family.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "4.12"
+        versionCode = 42
+        versionName = "4.13"
     }
 
     // Постоянный ключ подписи: новые версии ставятся поверх старой
