@@ -4,6 +4,8 @@
 // Голоса-персонажи ассистента: высота и скорость голоса + манера обращения
 const VOICES = [
   { id: "female", icon: "👩", name: "Женский", desc: "Обычный женский голос", gender: "female", pitch: 1, rate: 1 },
+  { id: "soft", icon: "🌸", name: "Нежный", desc: "Приятный мягкий женский голос", gender: "female", pitch: 1.05, rate: 0.93,
+    style: "приятная, спокойная и доброжелательная помощница, говорит мягко и тепло", hello: "Здравствуйте! Рада вас слышать. Чем могу помочь?" },
   { id: "male", icon: "👨", name: "Мужской", desc: "Обычный мужской голос", gender: "male", pitch: 1, rate: 1 },
   { id: "jarvis", icon: "🤖", name: "Джарвис", desc: "Невозмутимый дворецкий, обращается «Сэр»", gender: "male", pitch: 0.86, rate: 0.95, address: "Сэр",
     style: "вежливый невозмутимый британский дворецкий с лёгкой иронией", hello: "К вашим услугам, сэр. Все системы работают нормально." },
@@ -172,6 +174,7 @@ const Assistant = {
     if (!reply) {
       let geo = null;
       if (this.isWeather(text) && !/\s(в|во)\s+[А-ЯЁ]/.test(text) && !this.settings.city) geo = await this.location();
+      let viaFn = null, fnErr = null;
       try {
         const call = S.sb.functions.invoke("assistant", {
           body: { messages: this.history.slice(-10).map(({ role, content }) => ({ role, content })), lat: geo?.lat, lon: geo?.lon, city: this.settings.city || undefined, name: this.llmName() },
@@ -179,15 +182,51 @@ const Assistant = {
         const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 35000));
         const { data, error } = await Promise.race([call, timeout]);
         if (error) throw error;
-        reply = data?.reply || "Не получилось ответить, попробуйте ещё раз.";
-      } catch (e) {
-        reply = String(e?.message) === "timeout" ? "Сервер долго не отвечает. Спросите ещё раз чуть позже." : "Нет связи с ассистентом. Проверьте интернет и попробуйте ещё раз.";
+        viaFn = data;
+      } catch (e) { fnErr = e; }
+      // нейросеть на сервере не ответила (или сервер недоступен) — пробуем напрямую с телефона: у него другой адрес, и ему обычно отвечают
+      if (!viaFn || viaFn.source === "data") {
+        this.setSub("пробую другой путь…");
+        const direct = await this.directLLM(viaFn?.reply && viaFn.source === "data" && !/^Сейчас не получается/.test(viaFn.reply) ? viaFn.reply : "");
+        if (direct) reply = direct;
+      }
+      if (!reply && viaFn && !(viaFn.source === "data" && /^Сейчас не получается связаться/.test(viaFn.reply || ""))) reply = viaFn.reply || null;
+      if (!reply) {
+        reply = String(fnErr?.message) === "timeout" ? "Сервер долго не отвечает. Спросите ещё раз чуть позже."
+          : navigator.onLine === false ? "Нет интернета на телефоне. Проверьте сеть. Команды «позвони маме», «напиши папе», «открой настройки» работают и без сети."
+          : "Нейросеть сейчас не отвечает. Команды работают как обычно: «позвони маме», «напиши папе привет», «создай заметку», «открой настройки». Попробуйте задать вопрос ещё раз чуть позже.";
       }
     }
     this.busy = false; this.setSub();
     this.history.push({ role: "assistant", content: reply, at: Date.now() });
     this.save(); this.render();
     this.voice(reply);
+  },
+  /** Запрос к нейросети напрямую с телефона (запасной путь). Возвращает текст или null. */
+  async directLLM(context) {
+    const msgs = this.history.slice(-10).map(({ role, content }) => ({ role: role === "assistant" ? "assistant" : "user", content: String(content).slice(0, 2000) }));
+    if (!msgs.length) return null;
+    const now = new Date().toLocaleString("ru-RU", { dateStyle: "full", timeStyle: "short" });
+    const system = `Ты — дружелюбный голосовой помощник семейного мессенджера «Семья». Собеседника зовут ${this.llmName()}. Сейчас ${now}. Отвечай по-русски, коротко (2–5 предложений), без markdown. ` +
+      `Ты умеешь звонить, писать сообщения, создавать заметки, группы и каналы, открывать настройки — если просят об этом, попроси назвать имя: «позвони маме», «напиши папе привет». Не говори, что у тебя нет доступа к интернету или телефону.` +
+      (context ? `\n\nСвежие данные:\n${context}` : "");
+    const tries = [
+      () => fetch("https://text.pollinations.ai/openai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "openai", messages: [{ role: "system", content: system }, ...msgs], private: true }) })
+        .then(async (r) => { if (!r.ok) throw new Error(r.status); const j = await r.json(); return j.choices?.[0]?.message?.content; }),
+      () => fetch("https://text.pollinations.ai/openai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "mistral", messages: [{ role: "system", content: system }, ...msgs], private: true }) })
+        .then(async (r) => { if (!r.ok) throw new Error(r.status); const j = await r.json(); return j.choices?.[0]?.message?.content; }),
+      () => fetch(`https://text.pollinations.ai/${encodeURIComponent(msgs.at(-1).content.slice(0, 600))}?model=openai&private=true&system=${encodeURIComponent(system.slice(0, 900))}`)
+        .then(async (r) => { if (!r.ok) throw new Error(r.status); return r.text(); }),
+    ];
+    for (const go of tries) {
+      try {
+        const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 14000);
+        let txt; try { txt = await Promise.race([go(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 14000))]); } finally { clearTimeout(timer); }
+        txt = String(txt || "").trim().replace(/\*\*/g, "").replace(/^#+\s*/gm, "");
+        if (txt && !/^\s*[{<]/.test(txt)) return txt;
+      } catch { /* следующий способ */ }
+    }
+    return null;
   },
   llmName() {
     const p = this.preset(), n = S.me?.name || "друг";
@@ -318,7 +357,14 @@ Object.assign(Assistant, {
   },
 
   async command(raw) {
-    const text = raw.trim().replace(/[.!]+$/, "").replace(/(^|\s)(пожалуйста|срочно|быстро)(?=[\s,]|$),?/gi, " ").replace(/\s+/g, " ").trim();
+    let text = raw.trim().replace(/[.!]+$/, "").replace(/(^|\s)(пожалуйста|срочно|быстро)(?=[\s,]|$),?/gi, " ").replace(/\s+/g, " ").trim();
+    // «ну давай позвони», «можешь написать маме», «мне нужно позвонить папе», «хочу набрать Свету» → простая команда
+    if (!this.pending) {
+      text = text.replace(/^(?:(?:ну|а|так|слушай|давай|ладно|эй|окей|ок)[,\s]+)+/i, "").replace(/^(?:ты\s+)?(?:можешь|мог бы|смог бы|сможешь|умеешь)(?:\s+ли\s+ты)?\s+/i, "")
+        .replace(/^(?:мне\s+(?:надо|нужно)|я\s+хочу|хочу|надо|нужно|помоги(?:\s+мне)?|мне\s+бы)\s+/i, "")
+        .replace(/^(?:давай\s+)?позвоним\s+/i, "позвони ").replace(/^(?:дозвонись|свяжись)\s+(?:до|с|со)\s+/i, "позвони ").replace(/^(?:пошли|черкни|набросай)\s+/i, "напиши ")
+        .replace(/^(?:набери|напиши)\s+сообщение\s+/i, "напиши ").replace(/^отправь\s+(?:смс|сообщение)\s+(?:для\s+|на\s+)?/i, "напиши ").replace(/^отправь\s+(?:ей|ему|им)\s+/i, "напиши ").trim();
+    }
     const low = text.toLowerCase().replace(/ё/g, "е");
     const p = this.pending;
 
@@ -379,7 +425,7 @@ Object.assign(Assistant, {
       const t = this.findTarget(words.map((w) => w.replace(/[,:—-]+$/, "")), groupOnly);
       // «напиши стих», «скажи, который час» — это не сообщение человеку, а вопрос ассистенту
       if (!t) { if (groupOnly) { this.notFound(words[0] || "", true); return true; } return false; }
-      let body = words.slice(t.used).join(" ").replace(/^[,:—-]+\s*/, "").replace(/^(что|чтобы|текст|сообщение)\s+/i, "").trim();
+      let body = words.slice(t.used).join(" ").replace(/^[,:—-]+\s*/, "").replace(/^(?:(?:что|чтобы|текст|сообщение)\s+)+/i, "").trim();
       if (!body) {
         this.pending = { type: "dictate", target: t };
         this.say(`Что написать? ${t.kind === "chat" ? "Группа: «" + t.name + "»" : "Получатель: " + t.name}. Продиктуйте или напишите текст.`);

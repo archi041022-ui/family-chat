@@ -132,14 +132,14 @@ Deno.serve(async (req) => {
       tasks.push(rates().then((t) => { parts.push(t); }).catch(() => {}));
     await Promise.all(tasks);
     const context = parts.join("\n\n");
-    let reply: string, source = "llm";
+    let reply: string, source = "llm", detail = "";
     try {
       reply = await askLLM(messages.slice(-10).map((m: Msg) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content).slice(0, 2000) })), context, name);
-    } catch {
-      source = "data";
+    } catch (e) {
+      source = "data"; detail = String(e).slice(0, 200);
       reply = context || "Сейчас не получается связаться с нейросетью. Я могу подсказать погоду, новости и курсы валют — спросите, например: «Какая погода завтра?»";
     }
-    return new Response(JSON.stringify({ reply, source }), { headers: { ...CORS, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ reply, source, detail }), { headers: { ...CORS, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
   }

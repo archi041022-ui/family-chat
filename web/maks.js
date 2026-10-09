@@ -213,8 +213,9 @@ const Maks = {
   },
   /** Услышали фразу: если в ней есть «Макс» — выполняем остальное как команду. Без обращения фраза игнорируется. */
   async hear(text) {
-    if (!this.addressed(text)) return;
-    const cmd = this.strip(text);
+    const inCook = typeof Cook !== "undefined" && Cook.active && Cook.looksLikeCmd(text);        // во время рецепта имя говорить не нужно
+    if (!this.addressed(text) && !inCook) return;
+    const cmd = this.addressed(text) ? this.strip(text) : String(text).trim();
     if (!Assistant.loaded) { Assistant.load(); Assistant.loaded = true; }
     this.busy = true;
     try {
