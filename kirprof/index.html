@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#151a22">
+<meta name="description" content="КИРПРОФ: перетяжка и обивка мягкой мебели. Каталог услуг, расчёт стоимости, заявка, личный кабинет со скидками, карта и отзывы клиентов.">
+<title>КИРПРОФ</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+<div class="app">
+<header>
+  <a class="brand" href="#" data-go="home" aria-label="КИРПРОФ"><img src="logo.png" alt="КИРПРОФ" width="83" height="40"></a>
+  <span class="hdr-ph" id="hdrPh"></span>
+</header>
+
+<main class="pager" id="pager">
+
+<div class="panel-v" id="v-home" role="region" aria-label="Главная"><div class="inner">
+  <div class="hero">
+    <div>
+      <span class="eyebrow">Перетяжка и обивка мягкой мебели</span>
+      <h1>Мебель, которая снова <em>радует</em></h1>
+      <p>Заменим ткань, поролон и пружины, отремонтируем каркас. Выберите услугу и цвет ткани, рассчитайте стоимость и оставьте заявку. Или просто скажите ассистенту, что нужно.</p>
+      <div class="btns"><a class="btn" href="#" data-go="services">Выбрать услугу</a><a class="btn ghost" href="#" data-go="services" data-to="calc">Рассчитать стоимость</a></div>
+    </div>
+    <div class="stage">
+      <div id="heroSvg"></div>
+      <div class="cap"><small id="heroName">Ткань: терракот, рогожка</small><div class="swatches" id="heroSw" role="group" aria-label="Цвет ткани"></div></div>
+    </div>
+  </div>
+  <div class="facts">
+    <div class="fact"><b>3–10 дней</b><span>срок работы в зависимости от модели</span></div>
+    <div class="fact"><b>Выезд</b><span>замер и вывоз мебели по городу</span></div>
+    <div class="fact"><b>12 месяцев</b><span>гарантия на работу и материалы</span></div>
+  </div>
+  <div class="sec" id="how">
+    <div class="head"><span class="eyebrow">Порядок работы</span><h2>Как мы работаем</h2></div>
+    <ol class="steps">
+      <li><b>Заявка и фото</b><span>Опишите мебель, пришлите фото. Назовём цену по фото.</span></li>
+      <li><b>Замер и ткань</b><span>Мастер приедет с образцами тканей и согласует материал.</span></li>
+      <li><b>Работа в мастерской</b><span>Разбираем, меняем набивку и обивку, собираем.</span></li>
+      <li><b>Доставка</b><span>Привозим, проверяем, подписываем гарантию.</span></li>
+    </ol>
+  </div>
+  <div class="sec">
+    <div class="head"><span class="eyebrow">Постоянным клиентам</span><h2>Скидки и подарки</h2>
+    <p class="sub">Зарегистрируйтесь в личном кабинете: приветственная скидка, уровни лояльности, промокоды и подарочные сертификаты.</p></div>
+    <div class="btns"><a class="btn teal" href="#" data-go="cabinet">Открыть личный кабинет</a></div>
+  </div>
+</div></div>
+
+<div class="panel-v" id="v-services" role="region" aria-label="Услуги"><div class="inner">
+  <section id="catalog">
+    <div class="head"><span class="eyebrow">Каталог</span><h2>Услуги</h2>
+    <p class="sub">Цены ориентировочные и указаны за работу без ткани. Точную стоимость назовём после замера или по фото.</p></div>
+    <div class="filters" id="filters" role="group" aria-label="Категория"></div>
+    <div class="grid" id="grid"></div>
+  </section>
+  <section class="sec" id="calc">
+    <div class="head"><span class="eyebrow">Расчёт</span><h2>Калькулятор стоимости</h2>
+    <p class="sub">Получите примерную сумму и добавьте расчёт в заявку.</p></div>
+    <div class="panel"><div class="calc">
+      <label for="cType">Предмет мебели<select id="cType"></select></label>
+      <label for="cMat">Материал обивки<select id="cMat"></select></label>
+      <label for="cSize">Размер или число мест<select id="cSize"></select></label>
+      <label for="cOwn">Ткань<select id="cOwn"><option value="0">Подберёте вы</option><option value="1">Привезу свою</option></select></label>
+      <div class="checks" role="group" aria-label="Дополнительно">
+        <label><input type="checkbox" id="xFoam"> Замена поролона</label>
+        <label><input type="checkbox" id="xFrame"> Ремонт каркаса</label>
+        <label><input type="checkbox" id="xSpring"> Замена пружинного блока</label>
+        <label><input type="checkbox" id="xDeliv"> Вывоз и доставка</label>
+      </div>
+      <div class="total"><span>Ориентировочно<br><span class="note" id="cNote"></span></span><b id="cSum">0 ₽</b></div>
+      <div class="btns" style="grid-column:1/-1"><button class="btn" id="cAdd" type="button">Добавить расчёт в заявку</button></div>
+    </div></div>
+  </section>
+</div></div>
+
+<div class="panel-v" id="v-reviews" role="region" aria-label="Отзывы"><div class="inner">
+  <section id="reviews">
+    <div class="head"><span class="eyebrow">Отзывы клиентов</span><h2>Что говорят о нас</h2>
+    <p class="sub">Каждый клиент может оставить один отзыв с фото работ, а позже изменить или удалить его.</p></div>
+    <div class="rv-top">
+      <div class="score" id="score" aria-live="polite"><b>–</b><span>Оценок пока нет</span></div>
+      <div class="panel">
+        <form class="rform" id="rform" novalidate>
+          <div><label style="margin-bottom:8px">Ваша оценка</label>
+            <div class="rate" id="rate" role="radiogroup" aria-label="Оценка от 1 до 5"></div></div>
+          <div class="rrow">
+            <label for="rName">Имя<input id="rName" maxlength="40" autocomplete="given-name" placeholder="Как вас представить"></label>
+            <label for="rText">Отзыв<textarea id="rText" maxlength="600" placeholder="Что перетягивали, как прошла работа, довольны ли результатом"></textarea></label>
+          </div>
+          <div class="attach">
+            <label>Фото работ <span id="pCount" style="letter-spacing:.04em;text-transform:none"></span></label>
+            <div class="thumbs" id="thumbs"></div>
+            <input id="rFiles" type="file" accept="image/*" multiple hidden>
+            <div><button class="btn ghost small" id="pickPhoto" type="button">Добавить фото (до 3)</button></div>
+          </div>
+          <div class="err" id="rErr" role="alert"></div>
+          <div class="btns"><button class="btn" id="rSend" type="submit">Опубликовать отзыв</button><button class="btn ghost" id="rDel" type="button" hidden>Удалить мой отзыв</button></div>
+          <span class="note" id="rNote"></span>
+        </form>
+      </div>
+    </div>
+    <ul class="rlist" id="rlist"><li><span class="empty">Загружаем отзывы…</span></li></ul>
+  </section>
+</div></div>
+
+<div class="panel-v" id="v-cart" role="region" aria-label="Заявка"><div class="inner">
+  <section id="order">
+    <div class="head"><span class="eyebrow">Оформление</span><h2>Заявка</h2>
+    <p class="sub">Заполните данные и отправьте заявку мастерской. Скидка и сертификат учитываются автоматически.</p></div>
+    <div class="order">
+      <div class="panel"><h3 style="font-size:20px">Ваш заказ</h3>
+        <ul class="lines" id="lines"></ul>
+        <div class="promo">
+          <input id="promo" placeholder="Промокод или сертификат" autocomplete="off" aria-label="Промокод или сертификат" maxlength="40">
+          <button class="btn ghost small" id="promoBtn" type="button">Применить</button>
+        </div>
+        <div class="err" id="promoErr" role="alert"></div>
+        <div class="sumrows" id="sumrows"></div>
+        <div class="total" style="padding-top:14px;margin-top:14px"><span>К оплате, ориентировочно</span><b id="orderSum">0 ₽</b></div>
+      </div>
+      <form class="panel form" id="form" novalidate>
+        <label for="fName">Имя<input id="fName" autocomplete="name" required></label>
+        <label for="fPhone">Телефон<input id="fPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+7 ___ ___-__-__" required></label>
+        <label class="full" for="fMail">Почта для ответа<input id="fMail" type="email" autocomplete="email"></label>
+        <label class="full" for="fAddr">Адрес или район<input id="fAddr" autocomplete="street-address"></label>
+        <label class="full" for="fNote">Комментарий<textarea id="fNote" placeholder="Модель, состояние, удобное время для звонка"></textarea></label>
+        <div class="err full" id="err" role="alert"></div>
+        <div class="full btns"><button class="btn" id="sendOrder" type="submit">Отправить заявку</button></div>
+        <div class="done-box full" id="doneBox">
+          <b id="doneTitle">Заявка отправлена</b>
+          <span id="doneText"></span>
+          <pre id="txt" hidden></pre>
+          <div class="btns">
+            <button class="btn ghost small" type="button" id="copy">Скопировать текст заявки</button>
+            <a class="btn ghost small" id="mailto" href="#">Открыть в почте</a>
+          </div>
+          <span class="note">Мастерская получила заявку и свяжется с вами. Копию текста можно переслать на <b id="shopMail2" style="user-select:all"></b>, фото мебели прикрепите к письму.</span>
+        </div>
+      </form>
+    </div>
+  </section>
+</div></div>
+
+<div class="panel-v" id="v-cabinet" role="region" aria-label="Личный кабинет"><div class="inner">
+  <section id="cabinet">
+    <div class="head"><span class="eyebrow">Для постоянных клиентов</span><h2>Личный кабинет</h2>
+    <p class="sub" id="cabSub">Войдите, чтобы видеть свои скидки, купоны и подарочные сертификаты.</p></div>
+
+    <div id="cabOut">
+      <div class="cab">
+        <div class="panel">
+          <div class="seg" role="tablist" aria-label="Вход или регистрация"><button type="button" role="tab" id="segIn" aria-selected="true">Вход</button><button type="button" role="tab" id="segUp" aria-selected="false">Регистрация</button></div>
+          <form class="form" id="authForm" novalidate style="grid-template-columns:1fr">
+            <label for="aName" id="aNameL" hidden>Имя<input id="aName" maxlength="40" autocomplete="given-name"></label>
+            <label for="aMail">Почта<input id="aMail" type="email" autocomplete="email" inputmode="email"></label>
+            <label for="aPass">Пароль<input id="aPass" type="password" autocomplete="current-password" minlength="8"></label>
+            <div class="err" id="aErr" role="alert"></div>
+            <div class="btns"><button class="btn" id="aSend" type="submit">Войти</button></div>
+            <span class="note" id="aNote">Пароль хранится в зашифрованном виде и виден только вам.</span>
+          </form>
+        </div>
+        <div>
+          <p class="sub2">Что даёт кабинет</p>
+          <ul class="perks">
+            <li><b>Скидка 5% сразу</b><span>Приветственный купон после регистрации.</span></li>
+            <li><b>Уровни лояльности</b><span>3%, 5% и 7% на все следующие заказы по мере выполнения работ.</span></li>
+            <li><b>Купоны и сертификаты</b><span>Храните промокоды и подарочные сертификаты в одном месте и применяйте в заявке.</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="cabIn" hidden>
+      <div class="cab">
+        <div class="me">
+          <div class="panel">
+            <div class="lvl"><div><span class="sub2" style="margin:0">Ваш уровень</span><b id="lvName">Клиент</b></div><span class="badge" id="lvPct">0%</span></div>
+            <div class="bar" style="margin-top:12px"><i id="lvBar" style="width:0%"></i></div>
+            <p class="note" id="lvNote" style="margin:10px 0 0"></p>
+          </div>
+          <div class="panel">
+            <p class="sub2">Ваши коды</p>
+            <ul class="codes" id="codes"></ul>
+            <div class="promo"><input id="addCode" placeholder="Добавить код сертификата" autocomplete="off" maxlength="40" aria-label="Код сертификата"><button class="btn ghost small" id="addCodeBtn" type="button">Добавить</button></div>
+            <div class="err" id="codeErr" role="alert"></div>
+          </div>
+        </div>
+        <div class="me">
+          <div class="panel">
+            <p class="sub2">Подарочный сертификат</p>
+            <p class="note" style="margin:0 0 12px">Подарите близким обновлённую мебель. Выберите сумму и добавьте сертификат в заявку, код пришлём после оплаты.</p>
+            <div class="amts" id="amts" role="group" aria-label="Сумма сертификата"></div>
+            <div class="btns" style="margin-top:14px"><button class="btn" id="certAdd" type="button">Заказать сертификат</button></div>
+          </div>
+          <div class="panel">
+            <p class="sub2">Мои заявки</p>
+            <ul class="hist" id="hist"></ul>
+          </div>
+          <div class="panel">
+            <p class="sub2">Профиль</p>
+            <form class="form" id="profForm" novalidate>
+              <label for="pName">Имя<input id="pName" maxlength="40"></label>
+              <label for="pPhone">Телефон<input id="pPhone" type="tel" maxlength="30"></label>
+              <div class="full note" id="pMail"></div>
+              <div class="err full" id="pErr" role="alert"></div>
+              <div class="full btns"><button class="btn small" type="submit">Сохранить</button><button class="btn ghost small" id="logout" type="button">Выйти</button></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div></div>
+
+<div class="panel-v" id="v-contacts" role="region" aria-label="Контакты и карта"><div class="inner">
+  <section id="contacts">
+    <div class="head"><span class="eyebrow">Связь</span><h2>Контакты и как добраться</h2>
+    <p class="sub">Приезжайте в мастерскую или вызовите мастера на дом. Маршрут можно построить прямо здесь.</p></div>
+    <div class="demo-note" id="demoNote" hidden>Адрес и точка на карте пока примерные. Владелец мастерской заменит их на настоящие.</div>
+    <dl class="contacts panel" style="margin:0 0 20px">
+      <div><dt>Почта для заказов</dt><dd id="shopMail"></dd></div>
+      <div><dt>Телефон</dt><dd id="shopPhone"></dd></div>
+      <div><dt>Мастерская</dt><dd id="shopAddr"></dd></div>
+      <div><dt>Часы работы</dt><dd id="shopHours"></dd></div>
+    </dl>
+    <div class="mapbox"><div id="map" aria-label="Карта проезда"></div></div>
+    <div class="route">
+      <div class="info" id="routeInfo" role="status"></div>
+      <div class="btns"><button class="btn" id="routeMe" type="button">Построить маршрут от меня</button></div>
+      <div class="r2"><input id="routeFrom" placeholder="Или введите адрес, откуда поедете" autocomplete="street-address" aria-label="Адрес отправления"><button class="btn ghost small" id="routeGo" type="button">Построить</button></div>
+      <div class="err" id="routeErr" role="alert"></div>
+      <div class="links" id="extLinks"></div>
+    </div>
+    <footer><span>КИРПРОФ. Перетяжка и обивка мягкой мебели.</span><span>Цены ориентировочные, не являются публичной офертой.</span></footer>
+  </section>
+</div></div>
+
+</main>
+
+<nav class="tabbar" role="tablist" aria-label="Разделы">
+  <button class="tb" role="tab" type="button" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11L12 4l8.5 7M6 9.5V20h12V9.5"/></svg>Главная</button>
+  <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>Услуги</button>
+  <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8z"/></svg>Отзывы</button>
+  <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 016 0v2"/></svg>Заявка<b id="cnt" data-n="0">0</b></button>
+  <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.6-3.6 3.6-5.5 7-5.5s6.4 1.9 7 5.5"/></svg>Кабинет</button>
+  <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 005 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Контакты</button>
+</nav>
+
+<button class="afab" id="afab" type="button" aria-label="Открыть голосового ассистента"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21"/></svg></button>
+</div>
+
+<div class="asst" id="asst" hidden role="dialog" aria-modal="true" aria-label="Ассистент КИРПРОФ">
+  <div class="asheet">
+    <div class="ahead"><b>Ассистент КИРПРОФ</b>
+      <div class="tools">
+        <button class="ibtn" id="aSpeak" type="button" aria-label="Озвучивать ответы" title="Озвучивать ответы"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg></button>
+        <button class="ibtn" id="aGear" type="button" aria-label="Настройки голоса" title="Настройки голоса"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
+        <button class="ibtn" id="aClose" type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+    </div>
+    <div class="aset" id="aSet" hidden>
+      <label for="aVoice">Голос<select id="aVoice"></select></label>
+      <div class="r"><label for="aRate">Скорость речи<input id="aRate" type="range" min="0.7" max="1.4" step="0.05" value="1"></label><button class="btn ghost small" id="aTest" type="button">Проверить голос</button></div>
+      <span class="note" id="aSetNote"></span>
+    </div>
+    <div class="amsgs" id="aMsgs" aria-live="polite"></div>
+    <div class="achips" id="aChips"></div>
+    <form class="ainp" id="aForm" autocomplete="off">
+      <button class="ibtn mic" id="aMic" type="button" aria-label="Говорить" title="Говорить"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21"/></svg></button>
+      <input id="aText" placeholder="Скажите или напишите команду" aria-label="Команда ассистенту" maxlength="300">
+      <button class="btn small" type="submit">Отправить</button>
+    </form>
+  </div>
+</div>
+
+<div class="box" id="box" hidden><img id="boxImg" alt="Фото работы"><button id="boxClose" type="button" aria-label="Закрыть">×</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
+<script src="api.js?v=3"></script>
+<script src="app.js?v=3"></script>
+<script src="reviews.js?v=3"></script>
+<script src="cabinet.js?v=3"></script>
+<script src="map.js?v=3"></script>
+<script src="assistant.js?v=3"></script>
+<script src="boot.js?v=3"></script>
+</body>
+</html>
