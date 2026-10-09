@@ -38,6 +38,7 @@ const Menu = {
         tile("#D9466F", MI.film, "Видеоредактор", () => VideoEditor.open()),
         tile("#D98A1E", MI.scan, "Сканер → PDF", () => Camera.open("doc")),
         tile("#D98A1E", MI.scan, "Фото → текст", () => Ocr.open()),
+        tile("#6B5BD6", I.mic || MI.scan, "ИИ-агент для сайта", () => { const u = APP_LINKS.site.replace(/\/?$/, "/") + "agent/index.html"; Lock.ext = true; if (window.AndroidBridge?.openUrl) window.AndroidBridge.openUrl(u); else window.open(u, "_blank", "noopener"); }),
         tile("#D98A1E", MI.scan, "Рукопись → текст (Claude)", () => { const u = "https://claude.ai/artifact/TMjFqbaBXai4QhsVFvT5PW"; Lock.ext = true; if (window.AndroidBridge?.openUrl) window.AndroidBridge.openUrl(u); else window.open(u, "_blank", "noopener"); }),
         tile("#8A57D6", I.story, "Истории и статусы", () => showTab("stories"), unseen),
         ),
