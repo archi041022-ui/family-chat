@@ -180,6 +180,9 @@ object Speech {
         } catch (_: Throwable) { result(null, "error"); cleanup() }
     }
 
+    /** Остановить прослушивание (например, когда началось воспроизведение голосового). */
+    fun cancel() { try { recognizer?.cancel() } catch (_: Throwable) {}; cleanup() }
+
     private fun cleanup() { try { recognizer?.destroy() } catch (_: Throwable) {}; recognizer = null }
 
     private fun result(text: String?, err: String?) {

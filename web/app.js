@@ -979,11 +979,29 @@ async function onScrollTop(e) {
   loadingOlder = false;
 }
 
+/** Воспроизведение голосовых и видео не должно обрываться: плеер переживает перерисовку чата, а звуки приложения ждут конца. */
+const Media = {
+  take(box) {
+    const m = new Map();
+    box.querySelectorAll(".msg audio, .msg video").forEach((a) => { if (!a.paused || a.currentTime > 0.05) { const id = a.closest(".msg")?.dataset.id; if (id && !m.has(id + a.tagName)) m.set(id + a.tagName, [id, a]); } });
+    return m;
+  },
+  put(box, kept) {
+    for (const [id, a] of kept.values()) { const el = box.querySelector(`.msg[data-id="${id}"] ${a.tagName.toLowerCase()}`); if (el && el !== a) el.replaceWith(a); }
+  },
+  /** Что-то сейчас играет (голосовое, видео, кружок)? */
+  playing() { return [...document.querySelectorAll("audio, video")].some((a) => !a.paused && !a.ended && a.readyState >= 2 && !a.muted); },
+};
+document.addEventListener("play", (e) => {                         // пошло воспроизведение — микрофон Макса и озвучка не мешают
+  if (e.target?.tagName === "AUDIO" || e.target?.tagName === "VIDEO") { try { Maks.pauseForMedia?.(); Voice2.stop?.(); } catch { /* */ } }
+}, true);
+
 function renderMessages(toBottom) {
   const box = $("#msgs"); if (!box) return;
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
   const list = (S.msgs.get(S.current) || []).filter((m) => !Select.isHidden(m));
   const c = S.chats.find((x) => x.id === S.current);
+  const kept = Media.take(box);
   box.innerHTML = "";
   if (S.hasMore.get(S.current)) box.append(h("div", { class: "load-more" }, "Прокрутите вверх для старых сообщений"));
   if (!list.length) box.append(h("div", { class: "empty-chat" }, "Здесь пока пусто.\nНапишите первым! 👋"));
@@ -999,6 +1017,7 @@ function renderMessages(toBottom) {
     if (Select.on && Select.ids.has(m.id)) el.classList.add("selected");
     box.append(el);
   });
+  Media.put(box, kept);
   if (toBottom || nearBottom) box.scrollTop = box.scrollHeight;
 }
 
@@ -1141,6 +1160,7 @@ function rerenderMessage(id) {
   const list = S.msgs.get(S.current) || []; const i = list.findIndex((x) => x.id === id); if (i < 0) return;
   const c = S.chats.find((x) => x.id === S.current);
   const fresh = messageEl(list[i], c, old.classList.contains("first-in-run"), old.classList.contains("tail"));
+  for (const a of old.querySelectorAll("audio, video")) { if (!a.paused || a.currentTime > 0.05) { const f = fresh.querySelector(a.tagName.toLowerCase()); if (f) f.replaceWith(a); } }
   old.replaceWith(fresh);
 }
 async function deleteMessage(m) {
@@ -1779,6 +1799,7 @@ function onReaction(r, added) {
 // звук и системное уведомление о новом сообщении
 let audioCtx;
 function beep(freqs = [880, 1320], dur = 0.09) {
+  if (Media.playing()) return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     freqs.forEach((f, i) => {

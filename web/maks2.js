@@ -261,7 +261,7 @@ const MaksPlus = {
       if (!calls.length && !total) { if (force) this.say("Ничего не пропущено. Всё в порядке."); return; }
       const key = calls.map((c) => c.id).join(",") + "|" + total;
       if (!force) {
-        if (!this.enabled() || document.hidden || Calls.ui || Calls.pc || (typeof GroupCall !== "undefined" && GroupCall.active)) return;
+        if (!this.enabled() || document.hidden || Media.playing() || Calls.ui || Calls.pc || (typeof GroupCall !== "undefined" && GroupCall.active)) return;
         const now = Date.now();
         if (key === this.lastKey) { if (now - this.lastRemind < 45 * 60e3 || this.sameCount >= 3) return; this.sameCount++; }
         else { if (now - this.lastRemind < 3 * 60e3) return; this.sameCount = 1; }

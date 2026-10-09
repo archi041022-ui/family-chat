@@ -131,6 +131,7 @@ const Snd = {
   },
   // звук нового сообщения в открытом приложении
   message() {
+    if (typeof Media !== "undefined" && Media.playing()) { try { navigator.vibrate?.(60); } catch { /* */ } return; }     // не перебиваем голосовое
     if (window.AndroidBridge?.playMessageSound) { window.AndroidBridge.playMessageSound(); return; }
     this.once("msg").then((ok) => { if (!ok) beep(); });
   },

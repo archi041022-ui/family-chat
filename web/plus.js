@@ -92,7 +92,7 @@ const Voice2Text = {
       if (t != null) { draw("text", t); return; }
       if (this.busy.has(m.id)) { draw("busy"); return; }
       // входящие расшифровываются сами, если модель уже скачана
-      if (m.user_id !== S.me.id && this.auto() && Date.now() - new Date(m.created_at) < 3 * 864e5 && await STT.cached()) this.run(m, draw, false);
+      if (m.user_id !== S.me.id && this.auto() && Date.now() - new Date(m.created_at) < 3 * 864e5 && await STT.cached()) { for (let k = 0; k < 120 && Media.playing(); k++) await new Promise((r) => setTimeout(r, 1000)); this.run(m, draw, false); }
     });
     return box;
   },

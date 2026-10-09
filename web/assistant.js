@@ -27,7 +27,7 @@ const Assistant = {
   history: [],
   busy: false,
   geo: null,          // { lat, lon, at }
-  settings: { voice: "female", speak: true, city: "", handsfree: true, voiceEngine: "auto", sysVoice: null },
+  settings: { voice: "female", speak: true, city: "", handsfree: true, voiceEngine: "auto", sysVoice: null, pitchAdj: 1, rateAdj: 1 },
   preset(id) { return VOICES.find((v) => v.id === (id || this.settings.voice)) || VOICES[0]; },
   // ответ в манере выбранного персонажа (для быстрых ответов без нейросети)
   persona(text) {
@@ -299,6 +299,17 @@ const Assistant = {
           this.settings.voiceEngine = v; this.save(); Voice2.native = null; Voice2.slow = 0;
           e.target.parentNode.querySelectorAll(".seg").forEach((b) => b.classList.toggle("on", b === e.target));
         } }, l))),
+      h("div", { class: "section-title", style: { padding: "10px 4px 2px" } }, "Тембр и скорость речи"),
+      ...[["pitchAdj", "Тембр", "ниже", "выше"], ["rateAdj", "Скорость", "медленнее", "быстрее"]].map(([key, name, lo, hi]) => {
+        const val = h("b", null, "");
+        const show = () => { val.textContent = Math.round((+this.settings[key] || 1) * 100) + "%"; };
+        const inp = h("input", { type: "range", min: "60", max: "160", step: "5", value: String(Math.round((+this.settings[key] || 1) * 100)), class: "voice-slider",
+          oninput: (e) => { this.settings[key] = +e.target.value / 100; show(); },
+          onchange: () => { this.save(); Voice2.speak("Так я буду говорить.", this.settings.voice); } });
+        show();
+        return h("label", { class: "slider-row" }, h("span", { class: "slider-top" }, h("span", null, name), val), inp, h("span", { class: "slider-ends" }, h("small", null, lo), h("small", null, hi)));
+      }),
+      h("button", { class: "menu-item", onclick: () => { this.settings.pitchAdj = 1; this.settings.rateAdj = 1; this.save(); document.querySelectorAll(".voice-slider").forEach((s) => { s.value = "100"; s.closest(".slider-row").querySelector("b").textContent = "100%"; }); Voice2.speak("Голос по умолчанию.", this.settings.voice); } }, h("span", { html: I.close }), "Сбросить тембр и скорость"),
       h("button", { class: "menu-item", onclick: () => { window.AndroidBridge?.resetVoice?.(); Voice2.native = null; Voice2.slow = 0; Voice2.speak("Проверка голоса. Так я буду отвечать.", this.settings.voice); } }, h("span", { html: I.speaker }), "Проверить голос"),
       h("label", { class: "field", style: { marginTop: "10px" } }, h("span", null, "Город для погоды"), city),
       h("button", { class: "btn wide", onclick: () => { this.settings.city = city.value.trim(); this.save(); close(); toast("Сохранено"); } }, "Сохранить"),
@@ -524,7 +535,9 @@ const Voice2 = {
     this.stop();
     this.onEnd = onEnd || null;
     if (!t) { this.finish(); return; }
-    const pr = Assistant.preset(voiceId);
+    const base = Assistant.preset(voiceId), clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+    const pa = clamp(+Assistant.settings.pitchAdj || 1, 0.6, 1.6), ra = clamp(+Assistant.settings.rateAdj || 1, 0.6, 1.6);     // ползунки «Тембр» и «Скорость»
+    const pr = { ...base, pitch: clamp((base.pitch || 1) * pa, 0.4, 2.2), rate: clamp((base.rate || 1) * ra, 0.5, 2) };
     const gender = pr.gender;
     this.cur = t; this.gender = gender; this.pr = pr;
     const m = this.mode();

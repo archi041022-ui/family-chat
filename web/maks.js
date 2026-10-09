@@ -183,7 +183,14 @@ const Maks = {
   canListen() {
     return this.on && !document.hidden && !Assistant.listening && !Assistant.busy && !this.busy
       && !(typeof Calls !== "undefined" && (Calls.pc || Calls.ui)) && !(typeof GroupCall !== "undefined" && GroupCall.active)
-      && !VideoEditor.root && !document.querySelector(".camera, .video-rec, .vnote-rec, .lock-screen, .auth") && !Voice2.waiting && !Voice2.audio && !window.speechSynthesis?.speaking;
+      && !Media.playing() && !VideoEditor.root && !document.querySelector(".camera, .video-rec, .vnote-rec, .lock-screen, .auth") && !Voice2.waiting && !Voice2.audio && !window.speechSynthesis?.speaking;
+  },
+  /** Началось воспроизведение: прекращаем слушать, чтобы микрофон не отбирал звук у голосового. */
+  pauseForMedia() {
+    if (!this.on || !this.listening) return;
+    window.onSpeechResult = null; this.listening = false;
+    try { window.AndroidBridge?.stopListen?.(); } catch { /* */ }
+    clearTimeout(this.timer); this.timer = setTimeout(() => this.loop(), 2000);
   },
   loop() {
     clearTimeout(this.timer);

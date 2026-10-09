@@ -30,7 +30,7 @@ const Shatter = {
   /** Короткий звон: шум с затуханием и несколько высоких «дзынь». */
   sound() {
     try {
-      const AC = window.AudioContext || window.webkitAudioContext; if (!AC || document.hidden) return;
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC || document.hidden || (typeof Media !== "undefined" && Media.playing())) return;
       const ac = this.ac || (this.ac = new AC()); if (ac.state === "suspended") ac.resume().catch(() => {});
       const t0 = ac.currentTime, len = Math.floor(ac.sampleRate * 0.45), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);

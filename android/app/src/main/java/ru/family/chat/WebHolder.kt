@@ -358,6 +358,8 @@ object WebHolder {
             a.runOnUiThread { a.startListening() }
         }
 
+        @JavascriptInterface fun stopListen() { val a = activity; if (a != null) a.runOnUiThread { Speech.cancel() } }
+
         /** Слушать обращение «Макс»: несколько вариантов распознавания, длинные паузы. */
         @JavascriptInterface fun listenWake() {
             val a = activity
