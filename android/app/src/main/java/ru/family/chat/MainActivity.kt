@@ -88,6 +88,7 @@ class MainActivity : Activity() {
         if (WakeListener.enabled(this)) { if (!ChatService.running) ChatService.start(this); ChatService.refreshTypes(this) }
         Notifier.clearMessages(this)
         Notifier.cancelCall(this)
+        if (!WebHolder.inCall && !ChatService.inCallNow) resetAudio()   // звонка нет — звук в обычном режиме
         WebHolder.js("window.onAppForeground && window.onAppForeground()")
     }
 
@@ -390,6 +391,18 @@ class MainActivity : Activity() {
         try {
             startActivityForResult(Intent(Intent.ACTION_PICK, android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI), REQ_CONTACT)
         } catch (_: Throwable) { WebHolder.js("window.onContactPicked && window.onContactPicked(null)") }
+    }
+
+    // ───────────── Обычный режим звука вне звонка ─────────────
+    /** После звонка телефон оставался в «режиме разговора»: голосовые и видео шли в разговорный динамик и почти не были слышны. */
+    fun resetAudio() {
+        try {
+            val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice()
+            @Suppress("DEPRECATION")
+            if (am.isSpeakerphoneOn) am.isSpeakerphoneOn = false
+            if (am.mode != android.media.AudioManager.MODE_NORMAL) am.mode = android.media.AudioManager.MODE_NORMAL
+        } catch (_: Throwable) { /* */ }
     }
 
     // ───────────── Громкая связь во время звонка ─────────────

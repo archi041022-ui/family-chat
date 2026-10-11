@@ -691,10 +691,12 @@ async function loadChats() {
 }
 const myMember = (chatId) => (S.members.get(chatId) || []).find((m) => m.user_id === S.me.id);
 async function signUrls(paths) {
-  const need = [...new Set(paths)].filter((p) => p && !S.urls.has(p));
+  S.urlAt = S.urlAt || new Map();
+  const stale = Date.now() - 6 * 86400e3;                          // ссылки живут 7 дней — заранее берём новые
+  const need = [...new Set(paths)].filter((p) => p && (!S.urls.has(p) || (S.urlAt.get(p) || 0) < stale));
   for (let i = 0; i < need.length; i += 100) {
     const { data } = await S.sb.storage.from("media").createSignedUrls(need.slice(i, i + 100), 60 * 60 * 24 * 7);
-    for (const d of data || []) if (d.signedUrl) S.urls.set(d.path, d.signedUrl);
+    for (const d of data || []) if (d.signedUrl) { S.urls.set(d.path, d.signedUrl); S.urlAt.set(d.path, Date.now()); }
   }
 }
 
@@ -990,11 +992,33 @@ const Media = {
     for (const [id, a] of kept.values()) { const el = box.querySelector(`.msg[data-id="${id}"] ${a.tagName.toLowerCase()}`); if (el && el !== a) el.replaceWith(a); }
   },
   /** Что-то сейчас играет (голосовое, видео, кружок)? */
-  playing() { return [...document.querySelectorAll("audio, video")].some((a) => !a.paused && !a.ended && a.readyState >= 2 && !a.muted); },
+  // идёт или подгружается (на медленной сети звук начинается не сразу — микрофон Макса в это время не должен включаться и обрывать голосовое)
+  playing() { return [...document.querySelectorAll("audio, video")].some((a) => !a.paused && !a.ended && !a.muted && !a.error && (a.readyState >= 2 || a.networkState === 2)); },
 };
 document.addEventListener("play", (e) => {                         // пошло воспроизведение — микрофон Макса и озвучка не мешают
-  if (e.target?.tagName === "AUDIO" || e.target?.tagName === "VIDEO") { try { Maks.pauseForMedia?.(); Voice2.stop?.(); } catch { /* */ } }
+  if (e.target?.tagName === "AUDIO" || e.target?.tagName === "VIDEO") {
+    try { Maks.pauseForMedia?.(); Voice2.stop?.(); } catch { /* */ }
+    // после звонка телефон мог остаться в «режиме разговора» — звук шёл в тихий разговорный динамик
+    if (!(typeof Calls !== "undefined" && (Calls.pc || Calls.ui)) && !(typeof GroupCall !== "undefined" && GroupCall.active)) try { window.AndroidBridge?.audioNormal?.(); } catch { /* */ }
+  }
 }, true);
+// голосовое или видео не загрузилось (ссылка устарела, пока приложение долго было открыто) — берём новую ссылку и пробуем ещё раз
+document.addEventListener("error", async (e) => {
+  const a = e.target;
+  if (!(a instanceof HTMLMediaElement) || a._reSigned) return;
+  const id = a.closest(".msg")?.dataset.id; if (!id) return;
+  const m = (S.msgs.get(S.current) || []).find((x) => String(x.id) === id); if (!m?.media_path) return;
+  a._reSigned = true;
+  try {
+    S.urls.delete(m.media_path); S.urlAt?.delete?.(m.media_path);
+    await signUrls([m.media_path]);
+    const u = S.urls.get(m.media_path); if (!u) return;
+    const wasPlaying = a.dataset.wantPlay === "1";
+    a.src = u; a.load();
+    if (wasPlaying) a.play().catch(() => {});
+  } catch { /* */ }
+}, true);
+document.addEventListener("click", (e) => { const a = e.target; if (a instanceof HTMLMediaElement) a.dataset.wantPlay = "1"; }, true);
 
 function renderMessages(toBottom) {
   const box = $("#msgs"); if (!box) return;

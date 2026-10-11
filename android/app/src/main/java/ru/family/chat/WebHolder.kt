@@ -415,9 +415,15 @@ object WebHolder {
 
         @JavascriptInterface fun stopScreenShare() = ChatService.screenStop(ctx)
 
+        /** Перед воспроизведением голосового/видео: если звонка нет — вернуть обычный режим звука (динамик, нормальная громкость). */
+        @JavascriptInterface fun audioNormal() {
+            if (inCall || ChatService.inCallNow) return
+            activity?.let { a -> a.runOnUiThread { a.resetAudio() } }
+        }
+
         @JavascriptInterface fun callState(active: Boolean, video: Boolean) {
             ChatService.callState(ctx, active, video)
-            if (!active) activity?.let { a -> a.runOnUiThread { a.setSpeaker(false) } }   // громкая связь не «залипает» после звонка
+            if (!active) activity?.let { a -> a.runOnUiThread { a.resetAudio() } }   // после звонка — обычный режим звука и громкая связь выключена
             inCall = active                                          // во время звонка при выходе — «картинка в картинке»
             activity?.let { a -> a.runOnUiThread { a.updatePip() } }
         }
