@@ -1,0 +1,40 @@
+name: КИРПРОФ — выкладка сайта на kirprof.ru
+
+# Выкладывает папку kirprof/ на хостинг Рег.ру по FTP, если заданы секреты репозитория
+# (Settings → Secrets and variables → Actions → New repository secret):
+#   KIRPROF_FTP_HOST      адрес FTP-сервера из личного кабинета Рег.ру, например ftp.xxxx.hosting.reg.ru
+#   KIRPROF_FTP_USER      логин FTP
+#   KIRPROF_FTP_PASSWORD  пароль FTP
+#   KIRPROF_FTP_DIR       (необязательно) папка сайта на сервере, по умолчанию /www/kirprof.ru/
+#   KIRPROF_FTP_PROTOCOL  (необязательно) ftp, ftps или ftps-legacy; по умолчанию ftp
+# Пока секретов нет, шаг пропускается и сборка остаётся зелёной.
+on:
+  push:
+    branches: [ main ]
+    paths: [ "kirprof/**", ".github/workflows/kirprof-deploy.yml" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверка настроек
+        id: cfg
+        env:
+          HOST: ${{ secrets.KIRPROF_FTP_HOST }}
+        run: |
+          if [ -n "$HOST" ]; then echo "on=1" >> "$GITHUB_OUTPUT"; else echo "Секреты FTP не заданы — выкладка пропущена"; fi
+      - name: Выкладка на хостинг
+        if: steps.cfg.outputs.on == '1'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.KIRPROF_FTP_HOST }}
+          username: ${{ secrets.KIRPROF_FTP_USER }}
+          password: ${{ secrets.KIRPROF_FTP_PASSWORD }}
+          protocol: ${{ secrets.KIRPROF_FTP_PROTOCOL || 'ftp' }}
+          local-dir: ./kirprof/
+          server-dir: ${{ secrets.KIRPROF_FTP_DIR || '/www/kirprof.ru/' }}
+          exclude: |
+            **/.git*
+            **/.git*/**

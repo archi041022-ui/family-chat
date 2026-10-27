@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Base64
@@ -38,6 +39,8 @@ class MainActivity : Activity() {
     private var micReq: PermissionRequest? = null
     private var geoCb: GeolocationPermissions.Callback? = null
     private var geoOrigin: String? = null
+    private var onSite = false
+    private val siteHost: String? = BuildConfig.SITE_URL.takeIf { it.startsWith("https://") }?.let { Uri.parse(it).host }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,12 +58,16 @@ class MainActivity : Activity() {
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             addJavascriptInterface(Bridge(), "KirprofBridge")
             webViewClient = object : WebViewClient() {
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                    // сайт по адресу недоступен (нет связи, домен ещё не настроен): открываем копию из приложения
+                    if (request.isForMainFrame && onSite) { onSite = false; view.loadUrl(ASSET_URL) }
+                }
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     loader.shouldInterceptRequest(request.url)
 
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val u = request.url
-                    if (u.host == "appassets.androidplatform.net") return false
+                    if (u.host == "appassets.androidplatform.net" || (siteHost != null && u.host == siteHost)) return false
                     try { startActivity(Intent(Intent.ACTION_VIEW, u)) } catch (_: Throwable) { }
                     return true
                 }
@@ -100,8 +107,11 @@ class MainActivity : Activity() {
             }
         }
         root.addView(web, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        if (savedInstanceState != null) web.restoreState(savedInstanceState) else web.loadUrl("https://appassets.androidplatform.net/assets/kirprof/index.html")
+        if (savedInstanceState != null) web.restoreState(savedInstanceState)
+        else { onSite = siteHost != null; web.loadUrl(if (onSite) BuildConfig.SITE_URL else ASSET_URL) }
     }
+
+    override fun onResume() { super.onResume(); Updater.check(this) }
 
     override fun onSaveInstanceState(out: Bundle) { super.onSaveInstanceState(out); web.saveState(out) }
 
@@ -133,13 +143,36 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // страница сама решает, что закрыть (окно, раздел); иначе выходим
-        web.evaluateJavascript("(function(){try{if(typeof AS!=='undefined'&&AS.open){closeAsst();return 1}if(typeof go==='function'&&KP.tab&&KP.tab!=='home'){go('home');return 1}}catch(e){}return 0})()") { r ->
+        web.evaluateJavascript("(function(){try{if(document.body&&document.body.dataset.admin){location.href='index.html';return 1}if(typeof AS!=='undefined'&&AS.open){closeAsst();return 1}if(typeof go==='function'&&KP.tab&&KP.tab!=='home'){go('home');return 1}}catch(e){}return 0})()") { r ->
             if (r != "1") finish()
         }
     }
 
-    /** Методы для страницы: сохранить готовую картинку примерки в галерею. */
+    /** Методы для страницы: сохранить картинку примерки в галерею и таблицу заявок в «Загрузки». */
     inner class Bridge {
+        @JavascriptInterface
+        fun saveText(text: String, name: String, mime: String) {
+            Thread {
+                try {
+                    val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "kirprof.txt" }
+                    val bytes = text.toByteArray(Charsets.UTF_8)
+                    if (Build.VERSION.SDK_INT >= 29) {
+                        val v = ContentValues().apply {
+                            put(MediaStore.Downloads.DISPLAY_NAME, safe); put(MediaStore.Downloads.MIME_TYPE, mime.ifBlank { "text/plain" })
+                            put(MediaStore.Downloads.RELATIVE_PATH, "Download/КИРПРОФ")
+                        }
+                        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v) ?: throw IllegalStateException("insert")
+                        contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    } else {
+                        File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir, safe).writeBytes(bytes)
+                    }
+                    runOnUiThread { Toast.makeText(this@MainActivity, "Файл сохранён в «Загрузки»", Toast.LENGTH_LONG).show() }
+                } catch (_: Throwable) {
+                    runOnUiThread { Toast.makeText(this@MainActivity, "Не удалось сохранить файл", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
         @JavascriptInterface
         fun saveImage(dataUrl: String, name: String) {
             Thread {
@@ -167,6 +200,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val ASSET_URL = "https://appassets.androidplatform.net/assets/kirprof/index.html"
         private const val REQ_FILE = 41
         private const val REQ_MIC = 42
         private const val REQ_GEO = 43

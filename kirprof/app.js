@@ -215,6 +215,15 @@ function initPager() {
   });
   mark(0);
 }
+/** Данные мастерской, которые владелец меняет в панели: контакты, объявление, «о мастерской». */
+async function loadSettings() {
+  try {
+    const st = await rpc("kp_settings_get");
+    if (st && st.shop && typeof st.shop === "object") { Object.assign(KP.shop, st.shop, { demo: false }); initShop(); }
+    const b = $("#banner"); if (st && typeof st.banner === "string" && st.banner.trim()) { b.textContent = st.banner.trim(); b.hidden = false; } else b.hidden = true;
+    const ab = $("#aboutTxt"); if (st && typeof st.about === "string" && st.about.trim()) { ab.textContent = st.about.trim(); ab.hidden = false; } else ab.hidden = true;
+  } catch (e) { /* без связи или база ещё не обновлена: остаются прежние данные */ }
+}
 function initShop() {
   const s = KP.shop;
   $("#hdrPh").textContent = s.phone; $("#shopMail").textContent = s.mail; $("#shopMail2").textContent = s.mail;

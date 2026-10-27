@@ -45,9 +45,10 @@ const FIT = {
     }
   },
   hex(c) { const n = parseInt(c.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; },
-  makeTex(ti, ci) {
-    const key = ti + ":" + ci; if (this.cache[key]) return this.cache[key];
-    const T = this.T, id = new ImageData(T, T), d = id.data, [r, g, b] = this.hex(this.colors[ci][1]), ty = this.types[ti].id;
+  makeTex(ti, ci) { return this.makeTexHex(this.types[ti].id, this.colors[ci][1]); },
+  makeTexHex(ty, hex) {
+    const key = ty + ":" + hex; if (this.cache[key]) return this.cache[key];
+    const T = this.T, id = new ImageData(T, T), d = id.data, [r, g, b] = this.hex(hex);
     for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
       const m = this.mod(ty, x, y), i = (y * T + x) * 4;
       d[i] = Math.min(255, r * m); d[i + 1] = Math.min(255, g * m); d[i + 2] = Math.min(255, b * m); d[i + 3] = 255;
@@ -63,8 +64,21 @@ const FIT = {
     g.save(); g.scale(1, -1); g.drawImage(c, 0, -h * 2); g.restore(); g.save(); g.scale(-1, -1); g.drawImage(c, -h * 2, -h * 2); g.restore();
     return { data: g.getImageData(0, 0, h * 2, h * 2), T: h * 2 };
   },
-  curTex() { return this.st.custom || this.makeTex(this.st.type, this.st.color); },
-  matName() { return this.st.custom ? "своя ткань (по фото образца)" : this.types[this.st.type].n.toLowerCase() + ", " + this.colors[this.st.color][0].toLowerCase(); },
+  curTex() { return this.st.custom || this.makeTex(Math.max(0, this.st.type), this.st.color); },
+  matName() {
+    const m = this.st.cat; if (m) return m.name + (m.article ? ", арт. " + m.article : "") + (m.price ? ", " + m.price + " ₽" : "");
+    if (this.st.type === -1 && !this.st.custom) return "выберите материал из каталога";
+    return this.st.custom ? "своя ткань (по фото образца)" : this.types[this.st.type].n.toLowerCase() + ", " + this.colors[this.st.color][0].toLowerCase();
+  },
+  /** Материал из каталога мастерской: фото образца или рисунок по виду и цвету. */
+  async pickCat(m) {
+    this.st.cat = m;
+    if (m.photo) {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = m.photo; });
+      this.st.custom = this.customTex(img);
+    } else { this.st.custom = this.makeTexHex(["rog", "vel", "chen", "jac", "eco", "lea"].includes(m.kind) ? m.kind : "vel", m.color); }
+    this.st.catGloss = (this.types.find(t => t.id === m.kind) || { gloss: 0 }).gloss;
+  },
 
   /* ───── фото ───── */
   async load(src) {
@@ -132,7 +146,7 @@ const FIT = {
     const { W, H } = this, cv = $("#fitCv"), g = cv.getContext("2d"), out = new ImageData(W, H), o = out.data, b = this.base.data, soft = this.soft, luma = this.luma;
     const tex = this.area && !this.showOrig ? this.curTex() : null, td = tex ? tex.data.data : null, T = tex ? tex.T : 1;
     const th = this.st.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), k = 100 / this.st.scale, inten = this.st.inten / 100;
-    const gloss = this.st.custom ? 0.3 : this.types[this.st.type].gloss, lm = this.lm;
+    const gloss = this.st.cat ? (this.st.cat.photo ? 0.3 : this.st.catGloss) : this.st.custom ? 0.3 : (this.types[this.st.type] || { gloss: 0 }).gloss, lm = this.lm;
     for (let y = 0, p = 0; y < H; y++) for (let x = 0; x < W; x++, p++) {
       const i = p * 4, a = soft[p];
       if (!a) { o[i] = b[i]; o[i + 1] = b[i + 1]; o[i + 2] = b[i + 2]; o[i + 3] = 255; continue; }
@@ -203,24 +217,44 @@ function initFit() {
   const hold = on => () => { F.showOrig = on; F.draw(); };
   const cmp = $("#fitCmp"); cmp.addEventListener("pointerdown", hold(true)); ["pointerup", "pointerleave", "pointercancel"].forEach(ev => cmp.addEventListener(ev, hold(false)));
   /* материалы */
+  const thumb = (tex) => { const k = document.createElement("canvas"); k.width = k.height = 44; const tmp = document.createElement("canvas"); tmp.width = tmp.height = tex.T;
+    tmp.getContext("2d").putImageData(tex.data, 0, 0); k.getContext("2d").drawImage(tmp, 0, 0, 44, 44); return k; };
   const drawSw = () => {
     const box = $("#fitSw"); box.innerHTML = "";
+    if (F.st.type === -1) {                                       // каталог мастерской
+      F.catalog.forEach(m => {
+        const b = document.createElement("button"); b.type = "button"; b.className = "fsw"; b.title = m.name; b.setAttribute("aria-label", m.name);
+        if (m.photo) { const im = document.createElement("img"); im.src = m.photo; im.alt = ""; im.style.cssText = "width:100%;height:100%;object-fit:cover;display:block"; b.appendChild(im); }
+        else b.appendChild(thumb(F.makeTexHex(["rog", "vel", "chen", "jac", "eco", "lea"].includes(m.kind) ? m.kind : "vel", m.color)));
+        b.setAttribute("aria-pressed", !!F.st.cat && F.st.cat.id === m.id);
+        b.onclick = async () => { try { await F.pickCat(m); } catch (x) { F.hint("Не удалось открыть фото материала."); return; } drawSw(); label(); F.draw(); }; box.appendChild(b);
+      });
+      return;
+    }
     F.colors.forEach((c, i) => {
       const b = document.createElement("button"); b.type = "button"; b.className = "fsw"; b.title = c[0]; b.setAttribute("aria-label", c[0]);
-      const t = F.makeTex(F.st.type, i), k = document.createElement("canvas"); k.width = k.height = 44;
-      const tmp = document.createElement("canvas"); tmp.width = tmp.height = 256; tmp.getContext("2d").putImageData(t.data, 0, 0); k.getContext("2d").drawImage(tmp, 0, 0, 44, 44);
-      b.appendChild(k); b.setAttribute("aria-pressed", !F.st.custom && F.st.color === i); b.onclick = () => { F.st.custom = null; F.st.color = i; drawSw(); label(); F.draw(); }; box.appendChild(b);
+      b.appendChild(thumb(F.makeTex(F.st.type, i))); b.setAttribute("aria-pressed", !F.st.custom && F.st.color === i);
+      b.onclick = () => { F.st.custom = null; F.st.cat = null; F.st.color = i; drawSw(); label(); F.draw(); }; box.appendChild(b);
     });
   };
-  const label = () => { $("#fitMat").textContent = "Материал: " + F.matName(); };
+  const label = () => { $("#fitMat").textContent = "Материал: " + F.matName() + (F.st.cat && F.st.cat.stock ? ". В наличии: " + F.st.cat.stock : ""); };
+  const selTypes = () => document.querySelectorAll("#fitTypes .chip").forEach(x => x.setAttribute("aria-pressed", +x.dataset.t === F.st.type));
   F.types.forEach((t, i) => { const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.t = i; b.textContent = t.n; b.setAttribute("aria-pressed", i === F.st.type);
-    b.onclick = () => { F.st.type = i; F.st.custom = null; document.querySelectorAll("#fitTypes .chip").forEach(x => x.setAttribute("aria-pressed", +x.dataset.t === i)); drawSw(); label(); F.draw(); }; $("#fitTypes").appendChild(b); });
+    b.onclick = () => { F.st.type = i; F.st.custom = null; F.st.cat = null; selTypes(); drawSw(); label(); F.draw(); }; $("#fitTypes").appendChild(b); });
+  /* каталог мастерской появляется, если владелец добавил материалы */
+  F.catalog = [];
+  rpc("kp_materials_list").then(list => {
+    if (!Array.isArray(list) || !list.length) return; F.catalog = list;
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.t = -1; b.id = "fitCatChip"; b.textContent = "Каталог мастерской"; b.setAttribute("aria-pressed", false);
+    b.onclick = () => { F.st.type = -1; F.st.custom = null; F.st.cat = null; selTypes(); drawSw(); label(); F.draw(); };
+    $("#fitTypes").appendChild(b);
+  }).catch(() => { /* каталога нет */ });
   $("#fitOwn").onclick = () => $("#fitFab").click();
   $("#fitFab").onchange = async e => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     try {
       let bmp; try { bmp = await createImageBitmap(f, { imageOrientation: "from-image" }); } catch (x) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(f); }); }
-      F.st.custom = F.customTex(bmp); drawSw(); label(); F.draw();
+      F.st.cat = null; F.st.custom = F.customTex(bmp); drawSw(); label(); F.draw();
     } catch (x) { F.hint("Не удалось открыть фото ткани."); }
   };
   [["fitScale", "scale"], ["fitRot", "rot"], ["fitInt", "inten"]].forEach(([id, k]) => { $("#" + id).oninput = e => { F.st[k] = +e.target.value; $("#" + id + "V").textContent = e.target.value + (k === "rot" ? "°" : "%"); F.draw(); }; });

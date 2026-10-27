@@ -21,6 +21,7 @@
 <main class="pager" id="pager">
 
 <div class="panel-v" id="v-home" role="region" aria-label="Главная"><div class="inner">
+  <div class="banner" id="banner" hidden role="status"></div>
   <div class="hero">
     <div>
       <span class="eyebrow">Перетяжка и обивка мягкой мебели</span>
@@ -268,7 +269,7 @@
               <label for="pPhone">Телефон<input id="pPhone" type="tel" maxlength="30"></label>
               <div class="full note" id="pMail"></div>
               <div class="err full" id="pErr" role="alert"></div>
-              <div class="full btns"><button class="btn small" type="submit">Сохранить</button><button class="btn ghost small" id="logout" type="button">Выйти</button></div>
+              <div class="full btns"><button class="btn small" type="submit">Сохранить</button><button class="btn ghost small" id="logout" type="button">Выйти</button><a class="btn small" id="adminBtn" href="admin.html" hidden>Панель мастера</a></div>
             </form>
           </div>
         </div>
@@ -281,6 +282,7 @@
   <section id="contacts">
     <div class="head"><span class="eyebrow">Связь</span><h2>Контакты и как добраться</h2>
     <p class="sub">Приезжайте в мастерскую или вызовите мастера на дом. Маршрут можно построить прямо здесь.</p></div>
+    <p class="sub" id="aboutTxt" hidden style="white-space:pre-line"></p>
     <div class="demo-note" id="demoNote" hidden>Адрес и точка на карте пока примерные. Владелец мастерской заменит их на настоящие.</div>
     <dl class="contacts panel" style="margin:0 0 20px">
       <div><dt>Почта для заказов</dt><dd id="shopMail"></dd></div>

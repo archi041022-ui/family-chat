@@ -27,7 +27,7 @@ function showReset(on) {
 }
 function drawCabinet() {
   const me = KP.me;
-  $("#devTag").hidden = !(me && me.email === DEV_MAIL);
+  $("#devTag").hidden = !(me && me.email === DEV_MAIL); $("#adminBtn").hidden = !(me && KP.admin);
   $("#cabOut").hidden = !!me; $("#cabIn").hidden = !me;
   $("#cabSub").textContent = me ? "Здравствуйте, " + me.name + ". Здесь ваши скидки, купоны и сертификаты." : "Войдите, чтобы видеть свои скидки, купоны и подарочные сертификаты.";
   if (!me) return;
@@ -55,7 +55,7 @@ function drawCabinet() {
   me.orders.forEach(o => {
     const li = document.createElement("li"), a = document.createElement("span"), s = document.createElement("span");
     a.textContent = "№" + o.num + " от " + dateRu(o.ts) + ", " + fmt(o.final);
-    s.className = "st" + (o.status === "done" ? " done" : ""); s.textContent = o.status === "done" ? "Выполнена" : "В работе"; li.append(a, s); h.appendChild(li);
+    s.className = "st" + (o.status === "done" ? " done" : ""); s.textContent = ({ new: "Принята", work: "В работе", done: "Выполнена", cancel: "Отменена" })[o.status] || "В работе"; li.append(a, s); h.appendChild(li);
   });
   if (document.activeElement !== $("#pName")) $("#pName").value = me.name || "";
   if (document.activeElement !== $("#pPhone")) $("#pPhone").value = me.phone || "";
@@ -70,7 +70,8 @@ async function refreshMe() {
       const dc = store("kp_devcode");
       if (dc) { try { const d = await rpc("kp_dev_login", { code: dc }); if (d && d.token) { setSession(d.token); r = await rpc("kp_me", { tok: d.token }); } } catch (e) { /* без связи */ } }
     }
-    if (!r) { KP.sess = ""; store("kp_sess", null); KP.me = null; } else { KP.me = r; try { KP.hasWord = !!(await rpc("kp_has_word", { tok: KP.sess })); } catch (e) { /* старая база */ } }
+    if (!r) { KP.sess = ""; store("kp_sess", null); KP.me = null; } else { KP.me = r; try { KP.hasWord = !!(await rpc("kp_has_word", { tok: KP.sess })); } catch (e) { /* старая база */ }
+      try { KP.admin = !!(await rpc("kp_admin_check", { tok: KP.sess })); } catch (e) { KP.admin = false; } }
   } catch (e) { /* нет связи: оставляем как было */ }
   drawCabinet(); drawCart(); prefillOrder(); return KP.me;
 }

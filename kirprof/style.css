@@ -324,3 +324,5 @@ html,body{margin:0;background:var(--bg)}header{padding-top:env(safe-area-inset-t
 .devbox .panel{width:min(360px,100%)}
 .devtag{font-size:10px;letter-spacing:.18em;color:var(--teal);border:1px solid var(--teal);padding:2px 6px;margin-left:auto;margin-right:10px}
 #forgotBtn{margin-left:auto}
+
+.banner{margin:14px 0 0;padding:12px 16px;background:var(--panel);border:1px solid var(--accent);color:var(--ink);white-space:pre-line}

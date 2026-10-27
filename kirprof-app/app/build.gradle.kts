@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Номер сборки приходит из CI (-PbuildNumber=N): по нему приложение узнаёт, что вышла новая версия
+val bn = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 1
+val siteUrl = (project.findProperty("siteUrl") as String?) ?: ""
+
 android {
     namespace = "ru.kirprof.app"
     compileSdk = 35
@@ -11,9 +15,13 @@ android {
         applicationId = "ru.kirprof.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = bn
+        versionName = "1.$bn"
+        buildConfigField("int", "BUILD_NUMBER", "$bn")
+        buildConfigField("String", "UPDATE_API", "\"https://api.github.com/repos/archi041022-ui/family-chat/releases?per_page=30\"")
+        buildConfigField("String", "SITE_URL", "\"$siteUrl\"")      // адрес сайта, например https://kirprof.ru/ ; пусто — сайт внутри приложения
     }
+    buildFeatures { buildConfig = true }
 
     // Постоянный ключ подписи: новые версии ставятся поверх старой
     signingConfigs {
