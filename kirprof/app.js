@@ -186,7 +186,7 @@ function prefillOrder() {
 }
 
 /* ───── разделы как в приложении: свайп между экранами и нижняя панель ───── */
-const TABS = ["home", "services", "reviews", "cart", "cabinet", "contacts"];
+const TABS = ["home", "services", "fit", "reviews", "cart", "cabinet", "contacts"];
 const pager = $("#pager"), tabs = [...document.querySelectorAll(".tb")];
 let cur = 0;
 function mark(i) {

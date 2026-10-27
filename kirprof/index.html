@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <div class="app">
@@ -78,6 +78,44 @@
       <div class="total"><span>Ориентировочно<br><span class="note" id="cNote"></span></span><b id="cSum">0 ₽</b></div>
       <div class="btns" style="grid-column:1/-1"><button class="btn" id="cAdd" type="button">Добавить расчёт в заявку</button></div>
     </div></div>
+  </section>
+</div></div>
+
+<div class="panel-v" id="v-fit" role="region" aria-label="Примерка материала"><div class="inner">
+  <section id="fit">
+    <div class="head"><span class="eyebrow">Примерка</span><h2>Примерьте ткань на свою мебель</h2>
+    <p class="sub">Сфотографируйте диван, кресло или стул, нажмите на обивку и выберите материал. Свет и складки сохранятся, ткань сменится.</p></div>
+    <div class="btns fit-src">
+      <button class="btn small" id="fitCam" type="button">Сфотографировать</button>
+      <button class="btn ghost small" id="fitGal" type="button">Из галереи</button>
+      <input id="fitFile" type="file" accept="image/*" hidden>
+    </div>
+    <div class="fit-samples"><span class="note">Или возьмите образец:</span><div class="filters" id="fitSamples"></div></div>
+    <div class="fit-wrap"><canvas id="fitCv" width="600" height="320" aria-label="Фото мебели с примеркой"></canvas>
+      <div class="fit-empty" id="fitEmpty">Загрузите фото мебели или выберите образец, чтобы начать примерку.</div></div>
+    <p class="note" id="fitHint" role="status"></p>
+    <div class="fit-grid">
+      <div class="fit-stage">
+        <p class="sub2">Выделение обивки</p>
+        <div class="fit-tools" id="fitTools">
+          <div class="filters" id="fitModes" role="group" aria-label="Инструмент выделения"></div>
+          <label class="fit-rng" id="fitRngL">Допуск цвета <input id="fitRng" type="range" min="5" max="80" value="24"></label>
+          <div class="btns"><button class="btn ghost small" id="fitUndo" type="button">Отменить</button><button class="btn ghost small" id="fitClear" type="button">Сбросить выделение</button><button class="btn ghost small" id="fitCmp" type="button">Удерживайте: оригинал</button></div>
+        </div>
+      </div>
+      <div class="fit-side" id="fitSide">
+        <p class="sub2">Материал</p>
+        <div class="filters" id="fitTypes" role="group" aria-label="Вид ткани"></div>
+        <div class="fsws" id="fitSw" role="group" aria-label="Цвет"></div>
+        <div class="btns"><button class="btn ghost small" id="fitOwn" type="button">Своя ткань: фото образца</button><input id="fitFab" type="file" accept="image/*" hidden></div>
+        <label class="fit-rng">Масштаб рисунка <b id="fitScaleV">100%</b><input id="fitScale" type="range" min="30" max="300" value="100"></label>
+        <label class="fit-rng">Поворот рисунка <b id="fitRotV">0°</b><input id="fitRot" type="range" min="-90" max="90" value="0"></label>
+        <label class="fit-rng">Насыщенность примерки <b id="fitIntV">100%</b><input id="fitInt" type="range" min="30" max="100" value="100"></label>
+        <p class="fit-mat" id="fitMat"></p>
+        <div class="btns"><button class="btn small" id="fitOrder" type="button">Заказать с этим материалом</button><button class="btn ghost small" id="fitSave" type="button">Сохранить картинку</button></div>
+        <p class="note">Примерка показывает цвет и фактуру ориентировочно. Точный образец ткани мастер покажет при встрече.</p>
+      </div>
+    </div>
   </section>
 </div></div>
 
@@ -248,6 +286,7 @@
 <nav class="tabbar" role="tablist" aria-label="Разделы">
   <button class="tb" role="tab" type="button" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11L12 4l8.5 7M6 9.5V20h12V9.5"/></svg>Главная</button>
   <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>Услуги</button>
+  <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l3-1 11-11-2-2L5 17zM14 6l2 2M4 20h16"/></svg>Примерка</button>
   <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8z"/></svg>Отзывы</button>
   <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 016 0v2"/></svg>Заявка<b id="cnt" data-n="0">0</b></button>
   <button class="tb" role="tab" type="button" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.6-3.6 3.6-5.5 7-5.5s6.4 1.9 7 5.5"/></svg>Кабинет</button>
@@ -284,12 +323,13 @@
 <div class="box" id="box" hidden><img id="boxImg" alt="Фото работы"><button id="boxClose" type="button" aria-label="Закрыть">×</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
-<script src="api.js?v=3"></script>
-<script src="app.js?v=3"></script>
-<script src="reviews.js?v=3"></script>
-<script src="cabinet.js?v=3"></script>
+<script src="api.js?v=4"></script>
+<script src="app.js?v=4"></script>
+<script src="reviews.js?v=4"></script>
+<script src="cabinet.js?v=4"></script>
 <script src="map.js?v=3"></script>
-<script src="assistant.js?v=3"></script>
-<script src="boot.js?v=3"></script>
+<script src="fit.js?v=4"></script>
+<script src="assistant.js?v=4"></script>
+<script src="boot.js?v=4"></script>
 </body>
 </html>

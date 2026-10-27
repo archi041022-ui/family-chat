@@ -4,3 +4,7 @@ android/app/build/
 android/app/src/main/assets/
 web/vendor/
 *.apk
+kirprof-app/.gradle/
+kirprof-app/build/
+kirprof-app/app/build/
+kirprof-app/app/src/main/assets/
