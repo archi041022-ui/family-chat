@@ -3,23 +3,31 @@
 const AUTH_ERR = {
   bad_email: "Проверьте адрес почты.", bad_password: "Пароль должен быть не короче 8 символов.", bad_name: "Укажите имя.",
   exists: "Эта почта уже зарегистрирована. Нажмите «Вход».", limit: "Сейчас слишком много регистраций. Попробуйте позже.",
+  wrong: "Неверная почта или кодовое слово.", no_word: "Для этой почты кодовое слово не задано. Напишите мастерской, поможем вернуть доступ.", locked_word: "Слишком много попыток. Подождите час.",
+  bad_word: "Кодовое слово не короче 3 символов.", off: "Вход разработчика пока не включён.", bad_code: "Неверный код.", locked_dev: "Слишком много попыток. Подождите 15 минут.",
   bad_login: "Неверная почта или пароль.", locked: "Слишком много неудачных попыток. Подождите 10 минут.", http: "Нет связи. Попробуйте ещё раз.",
 };
 const CODE_ERR = { not_found: "Такого кода нет. Проверьте написание.", not_yours: "Этот код привязан к другому клиенту.", public_code: "Это общий промокод: введите его в заявке.", auth: "Войдите в кабинет.", http: "Нет связи. Попробуйте ещё раз." };
 const LEVELS = { 1: "Постоянный клиент, скидка 3%", 3: "Серебро, скидка 5%", 5: "Золото, скидка 7%" };
+const DEV_MAIL = "developer@kirprof.local";
 let authMode = "in", certAmt = 5000;
 
 function dateRu(ts) { return ts ? new Date(ts).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" }) : ""; }
 function setMode(m) {
   authMode = m;
   $("#segIn").setAttribute("aria-selected", m === "in"); $("#segUp").setAttribute("aria-selected", m === "up");
-  $("#aNameL").hidden = m === "in"; $("#aSend").textContent = m === "in" ? "Войти" : "Зарегистрироваться";
+  $("#aNameL").hidden = m === "in"; $("#aWordL").hidden = m === "in"; $("#forgotBtn").hidden = m !== "in"; showReset(false); $("#aSend").textContent = m === "in" ? "Войти" : "Зарегистрироваться";
   $("#aPass").autocomplete = m === "in" ? "current-password" : "new-password";
   $("#aNote").textContent = m === "in" ? "Пароль хранится в зашифрованном виде и виден только вам." : "Пароль не короче 8 символов. После регистрации вы получите скидку 5% на первый заказ.";
   $("#aErr").textContent = "";
 }
+function showReset(on) {
+  $("#resetForm").hidden = !on; $("#authForm").hidden = on; $("#rErr").textContent = "";
+  if (on) { $("#rMail").value = $("#aMail").value; $("#rMail").focus(); }
+}
 function drawCabinet() {
   const me = KP.me;
+  $("#devTag").hidden = !(me && me.email === DEV_MAIL);
   $("#cabOut").hidden = !!me; $("#cabIn").hidden = !me;
   $("#cabSub").textContent = me ? "Здравствуйте, " + me.name + ". Здесь ваши скидки, купоны и сертификаты." : "Войдите, чтобы видеть свои скидки, купоны и подарочные сертификаты.";
   if (!me) return;
@@ -52,17 +60,23 @@ function drawCabinet() {
   if (document.activeElement !== $("#pName")) $("#pName").value = me.name || "";
   if (document.activeElement !== $("#pPhone")) $("#pPhone").value = me.phone || "";
   $("#pMail").textContent = "Почта для входа: " + me.email;
+  $("#wordNote").textContent = KP.hasWord ? "Кодовое слово задано. Им можно сменить забытый пароль. Новое слово заменит старое." : "Кодовое слово не задано. Задайте его сейчас: без него забытый пароль не вернуть самому.";
 }
 async function refreshMe() {
-  if (!KP.sess) { KP.me = null; drawCabinet(); drawCart(); return null; }
+  if (!KP.sess && !store("kp_devcode")) { KP.me = null; drawCabinet(); drawCart(); return null; }
   try {
-    const r = await rpc("kp_me", { tok: KP.sess });
-    if (!r) { KP.sess = ""; store("kp_sess", null); KP.me = null; } else KP.me = r;
+    let r = await rpc("kp_me", { tok: KP.sess });
+    if (!r) {                                            // вход истёк: разработчик заходит заново сам, по сохранённому коду
+      const dc = store("kp_devcode");
+      if (dc) { try { const d = await rpc("kp_dev_login", { code: dc }); if (d && d.token) { setSession(d.token); r = await rpc("kp_me", { tok: d.token }); } } catch (e) { /* без связи */ } }
+    }
+    if (!r) { KP.sess = ""; store("kp_sess", null); KP.me = null; } else { KP.me = r; try { KP.hasWord = !!(await rpc("kp_has_word", { tok: KP.sess })); } catch (e) { /* старая база */ } }
   } catch (e) { /* нет связи: оставляем как было */ }
   drawCabinet(); drawCart(); prefillOrder(); return KP.me;
 }
 function setSession(tok) { KP.sess = tok; store("kp_sess", tok); }
 async function logout() {
+  store("kp_devcode", null);
   const t = KP.sess; setSession(""); store("kp_sess", null); KP.me = null; KP.promo = null; $("#promo").value = ""; drawCabinet(); drawCart();
   if (t) { try { await rpc("kp_logout", { tok: t }); } catch (e) { /* сессия истечёт сама */ } }
 }
@@ -79,7 +93,10 @@ function initCabinet() {
     try {
       const r = authMode === "in" ? await rpc("kp_login", { em, pw }) : await rpc("kp_register", { em, pw, nm });
       if (r && r.error) throw Object.assign(new Error("x"), { code: r.error });
-      setSession(r.token); $("#aPass").value = ""; await refreshMe();
+      setSession(r.token); $("#aPass").value = "";
+      const wd = $("#aWord").value.trim();
+      if (authMode === "up" && wd) { try { await rpc("kp_set_word", { tok: r.token, word: wd }); } catch (e) { err.textContent = "Вы зарегистрированы, но кодовое слово не сохранилось. Задайте его в кабинете."; } }
+      $("#aWord").value = ""; await refreshMe();
     } catch (x) { err.textContent = AUTH_ERR[x.code] || "Не удалось выполнить. Попробуйте ещё раз."; }
     b.disabled = false;
   });
@@ -97,6 +114,53 @@ function initCabinet() {
     catch (x) { er.textContent = x.code === "bad_name" ? "Укажите имя." : "Не удалось сохранить."; }
   });
   $("#logout").onclick = logout;
+  $("#forgotBtn").onclick = () => showReset(true); $("#rBack").onclick = () => showReset(false);
+  $("#resetForm").addEventListener("submit", async e => {
+    e.preventDefault(); const er = $("#rErr"); er.textContent = "";
+    const em = $("#rMail").value.trim(), word = $("#rWord").value.trim(), pw = $("#rPass").value;
+    if (!/^\S+@\S+\.\S+$/.test(em)) { er.textContent = AUTH_ERR.bad_email; return; }
+    if (word.length < 3) { er.textContent = AUTH_ERR.bad_word; return; }
+    if (pw.length < 8) { er.textContent = AUTH_ERR.bad_password; return; }
+    const b = $("#rSend2"); b.disabled = true;
+    try {
+      const r = await rpc("kp_reset_password", { em, word, pw });
+      if (r && r.error) throw Object.assign(new Error("x"), { code: r.error });
+      setSession(r.token); $("#rWord").value = ""; $("#rPass").value = ""; showReset(false); await refreshMe();
+    } catch (x) { er.textContent = AUTH_ERR[x.code] || "Не удалось сменить пароль. Попробуйте ещё раз."; }
+    b.disabled = false;
+  });
+  $("#wordForm").addEventListener("submit", async e => {
+    e.preventDefault(); const er = $("#wErr"); er.textContent = "";
+    try { await rpc("kp_set_word", { tok: KP.sess, word: $("#pWord").value }); $("#pWord").value = ""; KP.hasWord = true; drawCabinet(); er.textContent = "Кодовое слово сохранено."; }
+    catch (x) { er.textContent = x.code === "bad_word" ? AUTH_ERR.bad_word : "Не удалось сохранить."; }
+  });
+  initDev();
   KP.onTab("cabinet", refreshMe);
   setMode("in"); drawCabinet();
+}
+
+/* Вход для разработчика: семь быстрых нажатий на логотип, секретный код. Код знает только владелец; без него войти нельзя.
+   После входа телефон запоминает код и при истечении входа заходит сам: паролей и регистрации не нужно. */
+function initDev() {
+  let n = 0, t0 = 0;
+  document.querySelector(".brand").addEventListener("click", () => {
+    const now = Date.now(); if (now - t0 > 4000) n = 0; t0 = now; n++;
+    if (n >= 7) { n = 0; openDev(); }
+  });
+}
+function openDev() {
+  if ($("#devBox")) return;
+  const box = document.createElement("div"); box.id = "devBox"; box.className = "devbox"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
+  box.innerHTML = '<form class="panel form" novalidate style="grid-template-columns:1fr"><p class="sub2" style="margin:0">Вход разработчика</p><label>Секретный код<input id="devCode" type="password" autocomplete="off"></label><div class="err" id="devErr" role="alert"></div><div class="btns"><button class="btn small" type="submit">Войти</button><button class="btn ghost small" type="button" id="devX">Отмена</button></div></form>';
+  document.body.appendChild(box); $("#devCode").focus();
+  $("#devX").onclick = () => box.remove();
+  box.querySelector("form").addEventListener("submit", async e => {
+    e.preventDefault(); const er = $("#devErr"); er.textContent = ""; const code = $("#devCode").value;
+    if (!code) return;
+    try {
+      const r = await rpc("kp_dev_login", { code });
+      if (r && r.error) throw Object.assign(new Error("x"), { code: r.error });
+      store("kp_devcode", code); setSession(r.token); box.remove(); await refreshMe(); go("cabinet");
+    } catch (x) { er.textContent = AUTH_ERR[x.code] || "Не удалось войти. Проверьте связь."; }
+  });
 }

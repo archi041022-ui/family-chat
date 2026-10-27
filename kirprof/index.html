@@ -9,13 +9,13 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <div class="app">
 <header>
   <a class="brand" href="#" data-go="home" aria-label="КИРПРОФ"><img src="logo.png" alt="КИРПРОФ" width="83" height="40"></a>
-  <span class="hdr-ph" id="hdrPh"></span>
+  <span class="devtag" id="devTag" hidden>РАЗРАБОТЧИК</span><span class="hdr-ph" id="hdrPh"></span>
 </header>
 
 <main class="pager" id="pager">
@@ -200,9 +200,19 @@
             <label for="aName" id="aNameL" hidden>Имя<input id="aName" maxlength="40" autocomplete="given-name"></label>
             <label for="aMail">Почта<input id="aMail" type="email" autocomplete="email" inputmode="email"></label>
             <label for="aPass">Пароль<input id="aPass" type="password" autocomplete="current-password" minlength="8"></label>
+            <label for="aWord" id="aWordL" hidden>Кодовое слово<input id="aWord" maxlength="60" autocomplete="off" placeholder="по нему восстановите пароль"></label>
             <div class="err" id="aErr" role="alert"></div>
-            <div class="btns"><button class="btn" id="aSend" type="submit">Войти</button></div>
+            <div class="btns"><button class="btn" id="aSend" type="submit">Войти</button><button class="btn ghost small" id="forgotBtn" type="button">Забыли пароль?</button></div>
             <span class="note" id="aNote">Пароль хранится в зашифрованном виде и виден только вам.</span>
+          </form>
+          <form class="form" id="resetForm" novalidate hidden style="grid-template-columns:1fr">
+            <p class="sub2" style="margin:0">Восстановление пароля</p>
+            <label for="rMail">Почта<input id="rMail" type="email" autocomplete="email" inputmode="email"></label>
+            <label for="rWord">Кодовое слово<input id="rWord" maxlength="60" autocomplete="off"></label>
+            <label for="rPass">Новый пароль<input id="rPass" type="password" autocomplete="new-password" minlength="8"></label>
+            <div class="err" id="rErr" role="alert"></div>
+            <div class="btns"><button class="btn" id="rSend2" type="submit">Сменить пароль</button><button class="btn ghost small" id="rBack" type="button">Назад ко входу</button></div>
+            <span class="note">Кодовое слово вы задавали при регистрации или в кабинете. Забыли и его — напишите мастерской, поможем вернуть доступ.</span>
           </form>
         </div>
         <div>
@@ -241,6 +251,15 @@
           <div class="panel">
             <p class="sub2">Мои заявки</p>
             <ul class="hist" id="hist"></ul>
+          </div>
+          <div class="panel">
+            <p class="sub2">Восстановление пароля</p>
+            <form class="form" id="wordForm" novalidate style="grid-template-columns:1fr">
+              <p class="note" id="wordNote" style="margin:0"></p>
+              <label for="pWord">Кодовое слово<input id="pWord" maxlength="60" autocomplete="off" placeholder="не короче 3 символов"></label>
+              <div class="err" id="wErr" role="alert"></div>
+              <div class="btns"><button class="btn small" type="submit">Сохранить кодовое слово</button></div>
+            </form>
           </div>
           <div class="panel">
             <p class="sub2">Профиль</p>
@@ -323,13 +342,13 @@
 <div class="box" id="box" hidden><img id="boxImg" alt="Фото работы"><button id="boxClose" type="button" aria-label="Закрыть">×</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous"></script>
-<script src="api.js?v=4"></script>
-<script src="app.js?v=4"></script>
-<script src="reviews.js?v=4"></script>
-<script src="cabinet.js?v=4"></script>
+<script src="api.js?v=5"></script>
+<script src="app.js?v=5"></script>
+<script src="reviews.js?v=5"></script>
+<script src="cabinet.js?v=5"></script>
 <script src="map.js?v=3"></script>
-<script src="fit.js?v=4"></script>
-<script src="assistant.js?v=4"></script>
-<script src="boot.js?v=4"></script>
+<script src="fit.js?v=5"></script>
+<script src="assistant.js?v=5"></script>
+<script src="boot.js?v=5"></script>
 </body>
 </html>
