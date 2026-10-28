@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор ИИ-агента с голосом</title>
+<style>
+  :root { color-scheme: light dark; --c: #4B7BEC; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px 16px 120px; max-width: 760px; margin-inline: auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; } p.lead { margin: 0 0 18px; opacity: .75; }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 14px; }
+  input, select, textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #8884; font: inherit; background: transparent; color: inherit; }
+  input[type=color] { padding: 2px; height: 42px; } input[type=range] { padding: 0; }
+  textarea { min-height: 70px; resize: vertical; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  pre { background: #1e2127; color: #e6e6e6; padding: 14px; border-radius: 12px; overflow: auto; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+  button.go { margin-top: 10px; padding: 10px 16px; border: 0; border-radius: 10px; background: var(--c); color: #fff; font: inherit; cursor: pointer; }
+  small { opacity: .7; }
+</style>
+</head>
+<body>
+<h1>🎙 Конструктор ИИ-агента</h1>
+<p class="lead">Настройте имя, характер, знания и голос — справа внизу сразу работает готовый агент. Ниже появится строка, которую нужно вставить на сайт.</p>
+
+<div class="grid">
+  <div><label for="name">Имя</label><input id="name" value="Анна"></div>
+  <div><label for="voice">Голос</label><select id="voice"></select></div>
+</div>
+<label for="persona">Роль и характер</label>
+<textarea id="persona">Ты вежливая консультантка интернет-магазина цветов. Помогаешь выбрать букет и отвечаешь на вопросы о доставке.</textarea>
+<label for="greeting">Первое сообщение</label>
+<input id="greeting" value="Здравствуйте! Подскажу с выбором букета.">
+<label for="knowledge">Что агент должен знать (цены, правила, адреса)</label>
+<textarea id="knowledge">Доставка по городу: 300 ₽, бесплатно от 3000 ₽. Работаем ежедневно с 9 до 21. Розы — от 150 ₽ за штуку, тюльпаны — от 90 ₽.</textarea>
+<div class="grid">
+  <div><label for="pitch">Тембр: <span id="pv">100%</span></label><input id="pitch" type="range" min="60" max="160" step="5" value="100"></div>
+  <div><label for="rate">Скорость: <span id="rv">100%</span></label><input id="rate" type="range" min="60" max="160" step="5" value="100"></div>
+</div>
+<div class="grid">
+  <div><label for="color">Цвет</label><input id="color" type="color" value="#7a5af8"></div>
+  <div><label for="position">Расположение</label><select id="position"><option value="right">Справа</option><option value="left">Слева</option></select></div>
+</div>
+<label for="endpoint">ИИ-сервер (необязательно)</label>
+<input id="endpoint" placeholder="Пусто — бесплатный по умолчанию. Или адрес вашего сервера / OpenAI-совместимого API">
+
+<label style="margin-top:22px">Вставьте перед &lt;/body&gt; на вашем сайте</label>
+<pre id="code"></pre>
+<button class="go" id="copy">Скопировать</button> <small id="hint"></small>
+
+<script src="agent.js" data-auto="false"></script>
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var V = window.AIAgent.VOICES;
+  for (var k in V) { var o = document.createElement("option"); o.value = k; o.textContent = V[k].label; $("voice").appendChild(o); }
+  var timer;
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+  function cfg() {
+    return { id: "demo", name: $("name").value.trim() || "Помощник", voice: $("voice").value, persona: $("persona").value.trim(), greeting: $("greeting").value.trim(),
+      knowledge: $("knowledge").value.trim(), pitch: $("pitch").value / 100, rate: $("rate").value / 100, color: $("color").value, position: $("position").value,
+      provider: $("endpoint").value.trim() ? "custom" : "pollinations", endpoint: $("endpoint").value.trim(), remember: false };
+  }
+  function snippet(c) {
+    var base = location.href.replace(/index\.html.*$/, "").replace(/[?#].*$/, "");
+    var a = ['src="' + base + 'agent.js"', 'data-name="' + esc(c.name) + '"', 'data-voice="' + c.voice + '"', 'data-color="' + c.color + '"'];
+    if (c.position !== "right") a.push('data-position="' + c.position + '"');
+    if (c.pitch !== 1) a.push('data-pitch="' + c.pitch + '"'); if (c.rate !== 1) a.push('data-rate="' + c.rate + '"');
+    a.push('data-persona="' + esc(c.persona) + '"', 'data-greeting="' + esc(c.greeting) + '"', 'data-knowledge="' + esc(c.knowledge) + '"');
+    if (c.endpoint) a.push('data-provider="custom"', 'data-endpoint="' + esc(c.endpoint) + '"');
+    return "<script " + a.join("\n        ") + "></" + "script>";
+  }
+  function apply() {
+    var c = cfg(); $("pv").textContent = $("pitch").value + "%"; $("rv").textContent = $("rate").value + "%";
+    $("code").textContent = snippet(c);
+    clearTimeout(timer); timer = setTimeout(function () { var a = window.AIAgent.init(Object.assign({}, c, { open: true })); window.__agent = a; }, 350);
+  }
+  ["name", "voice", "persona", "greeting", "knowledge", "pitch", "rate", "color", "position", "endpoint"].forEach(function (id) { $(id).addEventListener("input", apply); });
+  $("copy").onclick = function () { navigator.clipboard.writeText($("code").textContent).then(function () { $("hint").textContent = "Скопировано"; }, function () { $("hint").textContent = "Выделите текст и скопируйте вручную"; }); };
+  apply();
+</script>
+</body>
+</html>
