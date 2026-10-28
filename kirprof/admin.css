@@ -4,6 +4,7 @@ body{overflow:auto}
 .adm-h{position:sticky;top:0;z-index:5;background:var(--bg2);display:flex;align-items:center;gap:14px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));border-bottom:1px solid var(--line)}
 .adm-back{color:var(--mute);text-decoration:none;font-size:13px}
 .adm-title{font-weight:500;letter-spacing:.04em;margin-right:auto}
+.ptr{top:96px}
 .adm-nav{display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:2px;overflow-x:auto;background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:46px;z-index:4;scrollbar-width:none}
 .adm-nav::-webkit-scrollbar{display:none}
 .adm-nav button{flex:none;background:none;border:0;border-bottom:2px solid transparent;padding:12px 14px;color:var(--mute);font-size:13px;cursor:pointer;white-space:nowrap}

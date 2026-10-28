@@ -243,12 +243,19 @@ function initFit() {
     b.onclick = () => { F.st.type = i; F.st.custom = null; F.st.cat = null; selTypes(); drawSw(); label(); F.draw(); }; $("#fitTypes").appendChild(b); });
   /* каталог мастерской появляется, если владелец добавил материалы */
   F.catalog = [];
-  rpc("kp_materials_list").then(list => {
-    if (!Array.isArray(list) || !list.length) return; F.catalog = list;
-    const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.t = -1; b.id = "fitCatChip"; b.textContent = "Каталог мастерской"; b.setAttribute("aria-pressed", false);
-    b.onclick = () => { F.st.type = -1; F.st.custom = null; F.st.cat = null; selTypes(); drawSw(); label(); F.draw(); };
-    $("#fitTypes").appendChild(b);
+  F.refreshCat = () => rpc("kp_materials_list").then(list => {
+    if (!Array.isArray(list)) return; F.catalog = list;
+    let b = $("#fitCatChip");
+    if (!list.length) { if (b) { b.remove(); if (F.st.type === -1) { F.st.type = 0; F.st.cat = null; F.st.custom = null; selTypes(); } } }
+    else if (!b) {
+      b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.dataset.t = -1; b.id = "fitCatChip"; b.textContent = "Каталог мастерской"; b.setAttribute("aria-pressed", false);
+      b.onclick = () => { F.st.type = -1; F.st.custom = null; F.st.cat = null; selTypes(); drawSw(); label(); F.draw(); };
+      $("#fitTypes").appendChild(b);
+    }
+    if (F.st.cat && !list.some(m => m.id === F.st.cat.id)) { F.st.cat = null; F.st.custom = null; }
+    drawSw(); label(); F.draw();
   }).catch(() => { /* каталога нет */ });
+  F.refreshCat();
   $("#fitOwn").onclick = () => $("#fitFab").click();
   $("#fitFab").onchange = async e => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;

@@ -326,3 +326,10 @@ html,body{margin:0;background:var(--bg)}header{padding-top:env(safe-area-inset-t
 #forgotBtn{margin-left:auto}
 
 .banner{margin:14px 0 0;padding:12px 16px;background:var(--panel);border:1px solid var(--accent);color:var(--ink);white-space:pre-line}
+
+.ptr{position:fixed;left:50%;top:56px;width:36px;height:36px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;z-index:30;opacity:0;pointer-events:none;transform:translate(-50%,-40px);box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.ptr svg{width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ptr.spin{transition:transform .2s}
+.ptr.spin svg{animation:ptrspin .8s linear infinite}
+@keyframes ptrspin{to{transform:rotate(360deg)}}
+.appver{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:18px 0 6px;color:var(--mute);font-size:13px}

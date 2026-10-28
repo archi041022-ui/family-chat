@@ -23,7 +23,7 @@ import java.net.URL
  * сборка новее установленной. Если вышла, предлагаем обновиться: APK скачивается и открывается системная установка.
  */
 object Updater {
-    private const val EVERY_MS = 3 * 60 * 60 * 1000L
+    private const val EVERY_MS = 30 * 60 * 1000L
     private val ui = Handler(Looper.getMainLooper())
     private var downloadId = -1L
     @Volatile private var asking = false
@@ -35,12 +35,13 @@ object Updater {
         val sp = act.getSharedPreferences("kirprof", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         if (!force && now - sp.getLong("upd_at", 0) < EVERY_MS) return
-        if (asking) return
+        if (asking) { if (force) ui.post { toast(act, "Окно обновления уже открыто") }; return }
+        if (force) ui.post { toast(act, "Проверяю обновления…") }
         Thread {
             try {
                 val c = URL(BuildConfig.UPDATE_API).openConnection() as HttpURLConnection
                 c.connectTimeout = 8000; c.readTimeout = 8000; c.setRequestProperty("Accept", "application/vnd.github+json")
-                if (c.responseCode != 200) return@Thread
+                if (c.responseCode != 200) { if (force) ui.post { toast(act, "Не удалось проверить обновления") }; return@Thread }
                 val arr = JSONArray(c.inputStream.bufferedReader().readText())
                 sp.edit().putLong("upd_at", now).apply()
                 for (i in 0 until arr.length()) {
@@ -52,11 +53,14 @@ object Updater {
                     var url = ""
                     for (k in 0 until assets.length()) { val a = assets.getJSONObject(k); if (a.optString("name").endsWith(".apk")) { url = a.optString("browser_download_url"); break } }
                     if (n > BuildConfig.BUILD_NUMBER && url.startsWith("https://")) ui.post { ask(act, n, url) }
+                    else if (force) ui.post { toast(act, "У вас последняя версия (сборка ${BuildConfig.BUILD_NUMBER})") }
                     return@Thread                                   // нужна только самая свежая сборка КИРПРОФ
                 }
-            } catch (_: Throwable) { /* нет связи — проверим в следующий раз */ }
+            } catch (_: Throwable) { if (force) ui.post { toast(act, "Нет связи — не удалось проверить обновления") } }
         }.start()
     }
+
+    private fun toast(ctx: Context, s: String) { try { android.widget.Toast.makeText(ctx, s, android.widget.Toast.LENGTH_SHORT).show() } catch (_: Throwable) {} }
 
     private fun ask(act: Activity, build: Int, url: String) {
         if (act.isFinishing || asking) return

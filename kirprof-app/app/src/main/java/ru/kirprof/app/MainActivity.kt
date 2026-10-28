@@ -151,6 +151,12 @@ class MainActivity : Activity() {
     /** Методы для страницы: сохранить картинку примерки в галерею и таблицу заявок в «Загрузки». */
     inner class Bridge {
         @JavascriptInterface
+        fun appVersion(): String = "1.${BuildConfig.BUILD_NUMBER}"
+
+        @JavascriptInterface
+        fun checkUpdate(manual: Boolean) { runOnUiThread { Updater.check(this@MainActivity, manual) } }
+
+        @JavascriptInterface
         fun saveText(text: String, name: String, mime: String) {
             Thread {
                 try {

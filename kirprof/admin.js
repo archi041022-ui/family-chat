@@ -220,4 +220,5 @@ const VIEWS = {
     await load();
   },
 };
+ptrAttach(document.scrollingElement || document.documentElement, () => (AD.tab ? show(AD.tab) : null));
 start();
