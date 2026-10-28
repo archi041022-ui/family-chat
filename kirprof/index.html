@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <div class="hub-sheet" id="hubSheet" role="dialog" aria-modal="true" aria-labelledby="hubTitle" hidden>
@@ -292,6 +292,7 @@
     <p class="sub">Приезжайте в мастерскую или вызовите мастера на дом. Маршрут можно построить прямо здесь.</p></div>
     <p class="sub" id="aboutTxt" hidden style="white-space:pre-line"></p>
     <div class="demo-note" id="demoNote" hidden>Адрес и точка на карте пока примерные. Владелец мастерской заменит их на настоящие.</div>
+<div class="sharebox"><div><b>Поделиться приложением</b><span>Отправьте друзьям и знакомым: ссылка на приложение и сайт мастерской.</span></div><button class="btn small" type="button" data-share>Поделиться</button></div>
     <dl class="contacts panel" style="margin:0 0 20px">
       <div><dt>Почта для заказов</dt><dd id="shopMail"></dd></div>
       <div><dt>Телефон</dt><dd id="shopPhone"></dd></div>
@@ -306,6 +307,7 @@
       <div class="err" id="routeErr" role="alert"></div>
       <div class="links" id="extLinks"></div>
     </div>
+    <div class="sharebox"><div><b>Поделиться приложением</b><span>Отправьте друзьям и знакомым: ссылка на приложение и сайт мастерской.</span></div><button class="btn small" type="button" data-share>Поделиться</button></div>
     <div class="appver" id="appVer" hidden><span id="appVerTxt"></span><button class="btn ghost small" id="appUpd" type="button">Проверить обновления</button></div>
     <footer><span>КИРПРОФ. Перетяжка и обивка мягкой мебели.</span><span>Цены ориентировочные, не являются публичной офертой.</span></footer>
   </section>
@@ -360,7 +362,7 @@
 <script src="map.js?v=3"></script>
 <script src="fit.js?v=5"></script>
 <script src="assistant.js?v=5"></script>
-<script src="push.js?v=1"></script>
+<script src="push.js?v=2"></script>
 <script src="hub.js?v=2"></script>
 <script src="refresh.js?v=1"></script>
 <script src="boot.js?v=7"></script>

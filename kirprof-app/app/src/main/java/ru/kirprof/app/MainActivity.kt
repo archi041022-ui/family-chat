@@ -183,6 +183,34 @@ class MainActivity : Activity() {
             } catch (_: Throwable) { }
         }
 
+        /** Окно «Поделиться»: ссылка на последнюю сборку приложения и сайт */
+        @JavascriptInterface
+        fun shareApp() {
+            Thread {
+                var apk = ""
+                try {
+                    val c = java.net.URL(BuildConfig.UPDATE_API).openConnection() as java.net.HttpURLConnection
+                    c.connectTimeout = 6000; c.readTimeout = 6000
+                    if (c.responseCode == 200) {
+                        val arr = org.json.JSONArray(c.inputStream.bufferedReader().readText())
+                        for (i in 0 until arr.length()) {
+                            val r = arr.getJSONObject(i)
+                            if (!r.optString("tag_name").startsWith("kirprof-") || r.optBoolean("draft")) continue
+                            val a = r.optJSONArray("assets") ?: continue
+                            for (k in 0 until a.length()) { val o = a.getJSONObject(k); if (o.optString("name").endsWith(".apk")) { apk = o.optString("browser_download_url"); break } }
+                            break
+                        }
+                    }
+                } catch (_: Throwable) { }
+                val site = BuildConfig.SITE_URL.ifBlank { "https://kirprof.ru/" }
+                val text = "КИРПРОФ: перетяжка и обивка мягкой мебели. Примерка ткани на вашу мебель, расчёт цены и заявка в приложении.\n" +
+                    (if (apk.isNotBlank()) "Скачать приложение для Android: $apk\n" else "") + "Сайт: $site"
+                runOnUiThread {
+                    try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "КИРПРОФ").putExtra(Intent.EXTRA_TEXT, text), "Поделиться приложением")) } catch (_: Throwable) { }
+                }
+            }.start()
+        }
+
         @JavascriptInterface
         fun appVersion(): String = "1.${BuildConfig.BUILD_NUMBER}"
 

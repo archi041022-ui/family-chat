@@ -45,7 +45,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(viewport={"width": 390, "height": 800}, has_touch=True)
     ctx.route("https://roqpbkwpuvlavmiscoxs.supabase.co/rest/v1/rpc/*", handler)
     ctx.route("**/tile.openstreetmap.org/**", lambda r: r.abort()); ctx.route("**/unpkg.com/**", lambda r: r.abort()); ctx.route("**/cdnjs.cloudflare.com/**", lambda r: r.abort())
-    ctx.add_init_script("window.__push=[];window.KirprofBridge={setPush:function(j){window.__push.push(JSON.parse(j))}}")
+    ctx.add_init_script("window.__push=[];window.KirprofBridge={setPush:function(j){window.__push.push(JSON.parse(j))},shareApp:function(){window.__shared=(window.__shared||0)+1}}")
     pg = ctx.new_page(); pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.goto("http://127.0.0.1:8770/kirprof/index.html"); pg.wait_for_timeout(1000); pg.evaluate("go('services')"); pg.wait_for_timeout(500)
     assert pg.locator(".hub-tile").count() == 6, "плитки"
@@ -63,6 +63,8 @@ with sync_playwright() as p:
     assert "проверьте номер" in pg.inner_text("#hubBody").lower(); pg.fill("#hubBody input >> nth=1", "+7 900 123-45-67"); pg.click("#hubBody .btn"); pg.wait_for_timeout(400)
     assert "заявка принята" in pg.inner_text("#hubBody").lower() and calls_q[0]["name"] == "Иван"; print("обратный звонок: ok")
     pg.click("#hubBack")
+    pg.evaluate("go('contacts')"); pg.wait_for_timeout(400); pg.click("#v-contacts [data-share]"); pg.wait_for_timeout(200); assert pg.evaluate("window.__shared") == 1; print("поделиться приложением: ok")
+    pg.screenshot(path=f"{OUT}/kp-share.png")
     # ── кабинет
     A = ctx.new_page(); A.on("pageerror", lambda e: errors.append(str(e)))
     A.goto("http://127.0.0.1:8770/kirprof/admin.html"); A.evaluate("localStorage.setItem('kp_sess','" + "T" * 40 + "')"); A.reload(); A.wait_for_selector("#admNav:not([hidden])", timeout=6000)
