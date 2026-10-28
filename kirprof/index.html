@@ -9,9 +9,13 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
+<div class="hub-sheet" id="hubSheet" role="dialog" aria-modal="true" aria-labelledby="hubTitle" hidden>
+  <div class="hub-top"><button type="button" id="hubBack" aria-label="Назад">←</button><b id="hubTitle"></b></div>
+  <div class="hub-body" id="hubBody"></div>
+</div>
 <div class="app">
 <header>
   <a class="brand" href="#" data-go="home" aria-label="КИРПРОФ"><img src="logo.png" alt="КИРПРОФ" width="83" height="40"></a>
@@ -56,6 +60,10 @@
 </div></div>
 
 <div class="panel-v" id="v-services" role="region" aria-label="Услуги"><div class="inner">
+  <section class="hub" id="hub" aria-label="Разделы мастерской">
+    <div class="head"><span class="eyebrow">Мастерская</span><h2>Разделы</h2></div>
+    <div class="hub-grid" id="hubGrid"></div>
+  </section>
   <section id="catalog">
     <div class="head"><span class="eyebrow">Каталог</span><h2>Услуги</h2>
     <p class="sub">Цены ориентировочные и указаны за работу без ткани. Точную стоимость назовём после замера или по фото.</p></div>
@@ -352,7 +360,8 @@
 <script src="map.js?v=3"></script>
 <script src="fit.js?v=5"></script>
 <script src="assistant.js?v=5"></script>
+<script src="hub.js?v=1"></script>
 <script src="refresh.js?v=1"></script>
-<script src="boot.js?v=6"></script>
+<script src="boot.js?v=7"></script>
 </body>
 </html>

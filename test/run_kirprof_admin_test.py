@@ -94,7 +94,7 @@ try:
         A.click("#admNav [data-t=info]"); A.wait_for_selector("form.adm-form"); A.fill("form.adm-form input >> nth=0", "+7 900 000-00-01"); A.click("form.adm-form button[type=submit]"); A.wait_for_timeout(700)
         assert settings["shop"]["phone"] == "+7 900 000-00-01" and "banner" in settings
         print("информация о мастерской: ok")
-        A.click("#admNav [data-t=tools]"); A.wait_for_selector("form.adm-form"); A.fill("form.adm-form input >> nth=0", "zima15"); A.click("form.adm-form >> nth=0 >> button[type=submit]"); A.wait_for_timeout(600)
+        A.click("#admNav [data-t=codes]"); A.wait_for_selector("form.adm-form"); A.fill("form.adm-form input >> nth=0", "zima15"); A.click("form.adm-form >> nth=0 >> button[type=submit]"); A.wait_for_timeout(600)
         assert "ZIMA15" in A.inner_text("#admMain"); A.click("form.adm-form >> nth=1 >> button[type=submit]"); A.wait_for_timeout(500); assert "KP-TEST" in A.inner_text("#admMain")
         print("инструменты: промокод и сертификат: ok")
         # ── без прав

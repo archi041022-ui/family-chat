@@ -143,7 +143,7 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // страница сама решает, что закрыть (окно, раздел); иначе выходим
-        web.evaluateJavascript("(function(){try{if(document.body&&document.body.dataset.admin){location.href='index.html';return 1}if(typeof AS!=='undefined'&&AS.open){closeAsst();return 1}if(typeof go==='function'&&KP.tab&&KP.tab!=='home'){go('home');return 1}}catch(e){}return 0})()") { r ->
+        web.evaluateJavascript("(function(){try{if(typeof HUB!=='undefined'&&HUB.open){hubClose();return 1}if(document.body&&document.body.dataset.admin){location.href='index.html';return 1}if(typeof AS!=='undefined'&&AS.open){closeAsst();return 1}if(typeof go==='function'&&KP.tab&&KP.tab!=='home'){go('home');return 1}}catch(e){}return 0})()") { r ->
             if (r != "1") finish()
         }
     }
