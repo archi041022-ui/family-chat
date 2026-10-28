@@ -45,6 +45,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(viewport={"width": 390, "height": 800}, has_touch=True)
     ctx.route("https://roqpbkwpuvlavmiscoxs.supabase.co/rest/v1/rpc/*", handler)
     ctx.route("**/tile.openstreetmap.org/**", lambda r: r.abort()); ctx.route("**/unpkg.com/**", lambda r: r.abort()); ctx.route("**/cdnjs.cloudflare.com/**", lambda r: r.abort())
+    ctx.add_init_script("window.__push=[];window.KirprofBridge={setPush:function(j){window.__push.push(JSON.parse(j))}}")
     pg = ctx.new_page(); pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.goto("http://127.0.0.1:8770/kirprof/index.html"); pg.wait_for_timeout(1000); pg.evaluate("go('services')"); pg.wait_for_timeout(500)
     assert pg.locator(".hub-tile").count() == 6, "плитки"
@@ -57,6 +58,7 @@ with sync_playwright() as p:
     assert "Сколько стоит диван?" in pg.inner_text(".chat-log") and chat[0]["body"] == "Сколько стоит диван?"; print("чат: сообщение клиента: ok")
     pg.screenshot(path=f"{OUT}/kp-chat.png")
     chat.append({"id": 2, "staff": True, "who": "Оператор", "body": "От 9500 ₽", "ts": "2026-10-28T10:01:00Z"}); pg.wait_for_function("document.querySelector('.chat-log').innerText.includes('От 9500')", timeout=8000); print("чат: ответ оператора приходит сам: ok")
+    assert any(len(x["ck"]) >= 16 for x in pg.evaluate("__push")); print("приложению передан ключ чата для уведомлений: ok")
     pg.click("#hubBack"); pg.click(".hub-tile[data-k=call]"); pg.wait_for_selector("#hubBody select"); pg.fill("#hubBody input >> nth=0", "Иван"); pg.fill("#hubBody input >> nth=1", "123"); pg.click("#hubBody .btn"); pg.wait_for_timeout(400)
     assert "проверьте номер" in pg.inner_text("#hubBody").lower(); pg.fill("#hubBody input >> nth=1", "+7 900 123-45-67"); pg.click("#hubBody .btn"); pg.wait_for_timeout(400)
     assert "заявка принята" in pg.inner_text("#hubBody").lower() and calls_q[0]["name"] == "Иван"; print("обратный звонок: ok")
@@ -66,6 +68,7 @@ with sync_playwright() as p:
     A.goto("http://127.0.0.1:8770/kirprof/admin.html"); A.evaluate("localStorage.setItem('kp_sess','" + "T" * 40 + "')"); A.reload(); A.wait_for_selector("#admNav:not([hidden])", timeout=6000)
     tabs = A.eval_on_selector_all("#admNav button", "b=>b.map(x=>x.dataset.t)"); assert tabs == ["overview", "orders", "support", "reviews", "users", "materials", "product", "interior", "tool", "staff", "info", "codes"], tabs
     assert "Поддержка · 2" in A.inner_text("#admNav"); print("владелец видит все разделы, значок на «Поддержке»: ok")
+    pa = A.evaluate("__push"); assert pa and pa[-1]["tok"] and json.loads(pa[-1]["adm"]) == {"support": True, "orders": True}, pa; print("приложению передано, за чем следить сотруднику: ok")
     A.click("#admNav [data-t=interior]"); A.wait_for_selector("form.adm-form"); A.fill("form.adm-form input >> nth=0", "Гостиная лофт"); A.fill("form.adm-form textarea", "Диван и кресла"); A.click("form.adm-form button[type=submit]"); A.wait_for_timeout(500)
     assert items["interior"][0]["title"] == "Гостиная лофт" and "Гостиная лофт" in A.inner_text("#admMain"); print("загрузка интерьера: ok")
     A.click("#admNav [data-t=support]"); A.wait_for_selector(".card2.clk"); assert "Иван" in A.inner_text("#admMain"); A.click(".card2.clk"); A.wait_for_selector(".chat-log .msg"); A.fill("#admMain textarea", "Приезжайте на замер"); A.click("#admMain .btn"); A.wait_for_timeout(500)

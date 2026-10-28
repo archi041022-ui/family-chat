@@ -75,10 +75,10 @@ async function refreshMe() {
   } catch (e) { /* нет связи: оставляем как было */ }
   drawCabinet(); drawCart(); prefillOrder(); return KP.me;
 }
-function setSession(tok) { KP.sess = tok; store("kp_sess", tok); }
+function setSession(tok) { KP.sess = tok; store("kp_sess", tok); if (typeof pushSync === "function") pushSync(); }
 async function logout() {
   store("kp_devcode", null);
-  const t = KP.sess; setSession(""); store("kp_sess", null); KP.me = null; KP.promo = null; $("#promo").value = ""; drawCabinet(); drawCart();
+  const t = KP.sess; setSession(""); store("kp_adm", null); if (typeof pushSync === "function") pushSync(); store("kp_sess", null); KP.me = null; KP.promo = null; $("#promo").value = ""; drawCabinet(); drawCart();
   if (t) { try { await rpc("kp_logout", { tok: t }); } catch (e) { /* сессия истечёт сама */ } }
 }
 function initCabinet() {

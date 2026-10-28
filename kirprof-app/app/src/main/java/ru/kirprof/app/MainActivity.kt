@@ -62,6 +62,9 @@ class MainActivity : Activity() {
                     // сайт по адресу недоступен (нет связи, домен ещё не настроен): открываем копию из приложения
                     if (request.isForMainFrame && onSite) { onSite = false; view.loadUrl(ASSET_URL) }
                 }
+                override fun onPageFinished(view: WebView, url: String?) {
+                    pendingJs?.let { js -> pendingJs = null; view.evaluateJavascript("setTimeout(function(){try{$js}catch(e){}},700)", null) }
+                }
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     loader.shouldInterceptRequest(request.url)
 
@@ -108,7 +111,22 @@ class MainActivity : Activity() {
         }
         root.addView(web, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         if (savedInstanceState != null) web.restoreState(savedInstanceState)
-        else { onSite = siteHost != null; web.loadUrl(if (onSite) BuildConfig.SITE_URL else ASSET_URL) }
+        else { onSite = siteHost != null; web.loadUrl(if (onSite) BuildConfig.SITE_URL else ASSET_URL); handleOpen(intent) }
+    }
+
+    private var pendingJs: String? = null
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); handleOpen(intent) }
+
+    /** Нажали на уведомление: открываем нужное место */
+    private fun handleOpen(i: Intent?) {
+        val o = i?.getStringExtra("open") ?: return; i.removeExtra("open")
+        val base = if (onSite) BuildConfig.SITE_URL.trimEnd('/') + "/" else ASSET_URL.substringBeforeLast("/") + "/"
+        when (o) {
+            "support", "orders" -> web.loadUrl(base + "admin.html#" + o)
+            "chat" -> { pendingJs = "go('services');hubOpen('chat')"; web.loadUrl(base + "index.html") }
+            "myorders" -> { pendingJs = "go('cabinet')"; web.loadUrl(base + "index.html") }
+        }
     }
 
     override fun onResume() { super.onResume(); Updater.check(this) }
@@ -150,6 +168,21 @@ class MainActivity : Activity() {
 
     /** Методы для страницы: сохранить картинку примерки в галерею и таблицу заявок в «Загрузки». */
     inner class Bridge {
+        /** Страница сообщает, за чем следить в фоне (сессия, ключ чата, права сотрудника). Пусто — слежение выключено. */
+        @JavascriptInterface
+        fun setPush(json: String) {
+            try {
+                val o = org.json.JSONObject(json)
+                getSharedPreferences("kirprof_push", MODE_PRIVATE).edit().putString("cfg", json).apply()
+                if (o.optString("tok").isBlank() && o.optString("ck").isBlank()) { PushWorker.stop(this@MainActivity); return }
+                PushWorker.schedule(this@MainActivity)
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    val sp = getSharedPreferences("kirprof", MODE_PRIVATE)
+                    if (!sp.getBoolean("notif_asked", false)) { sp.edit().putBoolean("notif_asked", true).apply(); runOnUiThread { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 44) } }
+                }
+            } catch (_: Throwable) { }
+        }
+
         @JavascriptInterface
         fun appVersion(): String = "1.${BuildConfig.BUILD_NUMBER}"
 

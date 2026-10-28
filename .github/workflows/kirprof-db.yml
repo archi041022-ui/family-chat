@@ -1,0 +1,27 @@
+name: База КИРПРОФ (миграции)
+# Применяет SQL из supabase/ к базе КИРПРОФ. Нужен секрет SUPABASE_DB_URL (Settings → Secrets → Actions):
+# Supabase → Connect → «Session pooler» → скопировать строку postgresql://... и подставить пароль базы.
+# Запускается сам при изменении файлов миграций или вручную: Actions → «База КИРПРОФ» → Run workflow.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['supabase/02[0-9]_kirprof*.sql', '.github/workflows/kirprof-db.yml']
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверка секрета
+        run: |
+          if [ -z "$DB_URL" ]; then echo "::warning::Нет секрета SUPABASE_DB_URL: миграции не применены"; echo SKIP=1 >> "$GITHUB_ENV"; fi
+      - name: Применить миграции по порядку
+        if: env.SKIP != '1'
+        run: |
+          sudo apt-get install -y -qq postgresql-client >/dev/null
+          for f in supabase/020_kirprof_cabinet.sql supabase/023_kirprof_recovery.sql supabase/024_kirprof_admin.sql supabase/025_kirprof_staff_support.sql; do
+            echo "== $f"; psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+          psql "$DB_URL" -Atc "select 'ok: ' || count(*) || ' функций kp_*' from pg_proc where proname like 'kp\_%'"

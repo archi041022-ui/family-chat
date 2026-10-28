@@ -62,13 +62,13 @@ async function hubGallery(body, k) {
 }
 
 async function hubChat(body, pre) {
-  const ck = hubKey(); let nm = ""; try { nm = (KP.me && KP.me.name) || ""; } catch (e) { /* гость */ }
+  const ck = hubKey(); pushSync(); let nm = ""; try { nm = (KP.me && KP.me.name) || ""; } catch (e) { /* гость */ }
   const log = h("div", "chat-log", ""), err = h("div", "err"), ta = h("textarea"); ta.maxLength = 1000; ta.rows = 2; ta.placeholder = "Напишите сообщение"; ta.setAttribute("aria-label", "Сообщение оператору"); if (pre) ta.value = pre;
   const send = h("button", "btn small", "Отправить"); send.type = "button";
   const nameIn = h("input"); nameIn.placeholder = "Ваше имя"; nameIn.maxLength = 40; nameIn.value = nm || store("kp_ck_name") || ""; nameIn.setAttribute("aria-label", "Ваше имя");
   body.replaceChildren(h("p", "note", "Оператор отвечает в рабочее время. Можно закрыть чат: ответ дождётся вас здесь."), log, err, nameIn, ta, send);
   const shown = new Set();
-  const add = m => { if (shown.has(m.id)) return; shown.add(m.id); const d = h("div", "msg" + (m.staff ? " staff" : "")); d.append(h("span", null, m.body), h("small", null, (m.staff ? (m.who || "Оператор") + " · " : "") + new Date(m.ts).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }))); log.append(d); log.scrollTop = log.scrollHeight; HUB.last = Math.max(HUB.last, m.id); if (m.staff) store("kp_ck_seen", String(Math.max(+store("kp_ck_seen") || 0, m.id))); };
+  const add = m => { if (shown.has(m.id)) return; shown.add(m.id); const d = h("div", "msg" + (m.staff ? " staff" : "")); d.append(h("span", null, m.body), h("small", null, (m.staff ? (m.who || "Оператор") + " · " : "") + new Date(m.ts).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }))); log.append(d); log.scrollTop = log.scrollHeight; HUB.last = Math.max(HUB.last, m.id); if (m.staff) { store("kp_ck_seen", String(Math.max(+store("kp_ck_seen") || 0, m.id))); pushSync(); } };
   const pull = async () => { const r = await rpc("kp_chat_get", { ck, after: HUB.last }); (r.items || []).forEach(add); };
   HUB.last = 0; await pull();
   if (!shown.size) log.append(h("div", "msg staff", "Здравствуйте! Чем помочь? Напишите вопрос про материалы, цену или сроки."));

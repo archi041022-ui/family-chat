@@ -67,6 +67,7 @@ async function start() {
   TABS = ALLTABS.filter(([, , p]) => p === "*" || (p === "owner" ? AD.me.owner : AD.me.owner || (AD.me.perms || []).includes(p)));
   const nav = $("#admNav"); nav.hidden = false; nav.replaceChildren(...TABS.map(([id, n]) => el("button", { type: "button", role: "tab", "data-t": id, "aria-selected": id === AD.tab, text: n, onclick: () => show(id) })));
   const w = $("#admWho"); if (w) { w.hidden = false; w.textContent = AD.me.dev ? "РАЗРАБОТЧИК" : AD.me.owner ? "ВЛАДЕЛЕЦ" : (AD.me.name || "СОТРУДНИК"); }
+  store("kp_adm", JSON.stringify({ support: AD.me.owner || (AD.me.perms || []).includes("support"), orders: AD.me.owner || (AD.me.perms || []).includes("orders") })); pushSync();
   badges(); clearInterval(AD.badgeT); AD.badgeT = setInterval(badges, 20000);
   let h = location.hash.slice(1); if (h === "tools") h = "codes";
   if (!TABS.some(t => t[0] === h)) h = "overview"; AD.tab = h;
